@@ -4,6 +4,7 @@ _.file = '.env'
 [tools]
 go = "1.27.1"
 "go:github.com/pressly/goose/v3/cmd/goose" = "3.28.0"
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.13.2"
 
 # DEVELOPMENT TASKS
 
@@ -23,6 +24,13 @@ run = "go vet ./..."
 description = "Run Go tests"
 run = "go test -v -race ./..."
 
+[tasks.lint]
+description = "Fast cached linting"
+run = "golangci-lint run ./..."
+
+[tasks."lint:fix"]
+description = "Auto-fix lint and formatting issues"
+run = "golangci-lint run --fix ./..."
 
 # DOCKER / INFRASTRUCTURE TASKS
 
@@ -37,6 +45,10 @@ run = "docker compose down"
 [tasks."db:logs"]
 description = "Follow PostgreSQL container logs"
 run = "docker compose logs -f postgres"
+
+[tasks.setup]
+description = "Setup dev environment and git hooks"
+run = "git config core.hooksPath .githooks"
 
 # DATABASE MIGRATION TASKS
 [tasks."migrate:status"]

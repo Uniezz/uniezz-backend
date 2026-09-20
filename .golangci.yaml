@@ -1,0 +1,15 @@
+version: "2"
+
+run:
+  timeout: 2m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - ineffassign
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true

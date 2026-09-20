@@ -24,18 +24,23 @@ Go HTTP API for [Uniezz](docs/product-description/PRODUCT_DESCRIPTION.en.md), a 
 # 1. Install the pinned toolchain
 mise install
 
-# 2. Create your local environment file
+# 2. Set up the dev environment and git hooks (required, once per clone)
+mise run setup
+
+# 3. Create your local environment file
 cp .env.example .env
 
-# 3. Start PostgreSQL and wait for its healthcheck
+# 4. Start PostgreSQL and wait for its healthcheck
 mise run db:up
 
-# 4. Apply migrations
+# 5. Apply migrations
 mise run migrate:up
 
-# 5. Run the API
+# 6. Run the API
 mise run dev
 ```
+
+> **Every new developer must run `mise run setup` after cloning the repository.** It points `core.hooksPath` at `.githooks`, so the shared git hooks are active for your clone. Git does not share hooks automatically — skip this step and the hooks will never run for you.
 
 The server listens on `PORT` (default `8080`). Check it:
 
@@ -61,6 +66,7 @@ All tasks are defined in `mise.toml`; run them with `mise run <task>`.
 
 | Task | Description |
 |------|-------------|
+| `setup` | Point git at `.githooks` — required once per clone |
 | `dev` | Run the API from source (`go run ./cmd/api`) |
 | `fmt` | Format Go code |
 | `vet` | Run `go vet` |
@@ -122,8 +128,6 @@ On `SIGINT` or `SIGTERM` the server:
 ## CI
 
 `.github/workflows/ci.yaml` runs on pushes and pull requests against `main`: format check, `go vet`, unit tests with the race detector (`-short`), and a build of `./cmd/api`.
-
-> **Note:** the workflow currently lives at `cmd/.github/workflows/ci.yaml`. GitHub Actions only picks up workflows from the repository root, so it must be moved to `.github/workflows/ci.yaml` to run.
 
 ## Documentation
 

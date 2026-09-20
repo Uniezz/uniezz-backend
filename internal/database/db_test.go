@@ -13,7 +13,7 @@ func TestNewPool_InvalidURL(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	invalidURL := "postgres://invalid-url"
+	invalidURL := "postgres://user:pass:extra_colon@localhost/db"
 
 	pool, err := database.NewPool(ctx, invalidURL)
 	if err == nil {

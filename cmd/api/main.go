@@ -47,7 +47,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	health.Register(r, &isShuttingDown)
+	health.Register(r, &isShuttingDown, dbPool)
 
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	server := &http.Server{
@@ -60,16 +60,24 @@ func main() {
 		},
 	}
 
+	serverErrors := make(chan error, 1)
+
 	go func() {
 		log.Printf("Starting server on %s", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Could not listen on %s: %v\n", server.Addr, err)
+			serverErrors <- err
 		}
 	}()
 
-	<-rootCtx.Done()
-	stop()
+	select {
+	case err := <-serverErrors:
+		log.Fatalf("Server error: %v", err)
+		return
+	case <-rootCtx.Done():
+		log.Println("Shutdown signal received, initiating graceful shutdown...")
+	}
 
+	stop()
 	isShuttingDown.Store(true)
 	log.Println("Shutdown signal received, waiting for ongoing requests to finish...")
 
@@ -82,7 +90,7 @@ func main() {
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Graceful shutdown timed out or failed: %v", err)
-		server.Close()
+		_ = server.Close()
 	}
 
 	stopOngoingGracefully()
