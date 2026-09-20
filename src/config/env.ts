@@ -14,7 +14,7 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     const problems = result.error.issues
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
       .join('\n  ');
-    throw new Error(`Invalid environment:\n  ${problems}\n\nSee apps/backend/.env.example.`);
+    throw new Error(`Invalid environment:\n  ${problems}\n\nSee .env.example.`);
   }
   return Object.freeze(result.data);
 }
