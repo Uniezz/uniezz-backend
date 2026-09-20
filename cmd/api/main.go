@@ -4,38 +4,44 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+const (
+	_shutdownPeriod      = 15 * time.Second
+	_readinessDrainDelay = 5 * time.Second
+)
+
+var isShuttingDown atomic.Bool
+
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("OK")); err != nil {
-			log.Printf("Error writing response: %v", err)
-		}
-	})
+	health.Register(r, &isShuttingDown)
 
+	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      r,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		BaseContext: func(_ net.Listener) context.Context {
+			return ongoingCtx
+		},
 	}
 
 	go func() {
@@ -45,15 +51,24 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
-	log.Println("Shutting down server...")
+	<-rootCtx.Done()
+	stop()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	isShuttingDown.Store(true)
+	log.Println("Shutdown signal received, waiting for ongoing requests to finish...")
+
+	log.Printf("Waiting for %s before starting shutdown...", _readinessDrainDelay)
+	time.Sleep(_readinessDrainDelay)
+
+	log.Println("Now waiting for ongoing requests to finish...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), _shutdownPeriod)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		log.Printf("Graceful shutdown timed out or failed: %v", err)
+		server.Close()
 	}
 
-	log.Println("Server exiting")
+	stopOngoingGracefully()
+	log.Println("Server gracefully stopped")
 }
