@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -24,6 +26,20 @@ const (
 var isShuttingDown atomic.Bool
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Error loading configuration: %v", err)
+	}
+
+	initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer initCancel()
+
+	dbPool, err := database.NewPool(initCtx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Error connecting to the database: %v", err)
+	}
+	defer dbPool.Close()
+
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -35,7 +51,7 @@ func main() {
 
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         net.JoinHostPort("", cfg.Port),
 		Handler:      r,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
