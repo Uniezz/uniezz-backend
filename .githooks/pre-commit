@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+
+echo "Running pre-commit checks (fmt & fast lint)..."
+
+mise run fmt
+mise run lint
+
+echo "All checks passed!" 

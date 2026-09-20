@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Lint, Unit Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install mise and tools
+        uses: jdx/mise-action@v2
+        with:
+          install_args: "--locked"
+
+      - name: Check code formatting
+        run: |
+          mise run fmt
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Code is not formatted. Run 'mise run fmt' locally and commit changes."
+            git diff
+            exit 1
+          fi
+
+      - name: Run static analysis (vet)
+        run: mise run vet
+
+      - name: Run unit tests
+        run: go test -v -race -short ./...
+
+      - name: Verify build
+        run: go build -v -o /dev/null ./cmd/api
