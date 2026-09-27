@@ -5,7 +5,7 @@ Go HTTP API for [Uniezz](docs/product-description/PRODUCT_DESCRIPTION.en.md), a 
 ## Stack
 
 | Concern | Choice |
-|---------|--------|
+| --------- | -------- |
 | Language | Go 1.27.1 (pinned by mise) |
 | Router | [chi](https://github.com/go-chi/chi) v5 |
 | Database | PostgreSQL 17 via [pgx](https://github.com/jackc/pgx) v5 (`pgxpool`) |
@@ -27,17 +27,17 @@ mise install
 # 2. Set up the dev environment and git hooks (required, once per clone)
 mise run setup
 
-# 3. Create your local environment file
-cp .env.example .env
+doppler login
+doppler setup
 
 # 4. Start PostgreSQL and wait for its healthcheck
-mise run db:up
+doppler run -c dev -- mise run db:up
 
 # 5. Apply migrations
-mise run migrate:up
+doppler run -c dev -- mise run migrate:up
 
 # 6. Run the API
-mise run dev
+doppler run -c dev -- mise run dev
 ```
 
 > **Every new developer must run `mise run setup` after cloning the repository.** It points `core.hooksPath` at `.githooks`, so the shared git hooks are active for your clone. Git does not share hooks automatically — skip this step and the hooks will never run for you.
@@ -53,7 +53,7 @@ curl -i http://localhost:8080/health
 Environment variables are loaded from `.env` by mise (`[env] _.file = '.env'`).
 
 | Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
+| ---------- | ---------- | --------- | ------------- |
 | `DATABASE_URL` | yes | — | PostgreSQL connection string. Startup fails if unset. |
 | `PORT` | no | `8080` | HTTP listen port. |
 | `ENV` | no | `development` | Environment name. |
@@ -65,7 +65,7 @@ All tasks are defined in `mise.toml`; run them with `mise run <task>`.
 ### Development
 
 | Task | Description |
-|------|-------------|
+| ------ | ------------- |
 | `setup` | Point git at `.githooks` — required once per clone |
 | `dev` | Run the API from source (`go run ./cmd/api`) |
 | `fmt` | Format Go code |
@@ -75,7 +75,7 @@ All tasks are defined in `mise.toml`; run them with `mise run <task>`.
 ### Database
 
 | Task | Description |
-|------|-------------|
+| ------ | ------------- |
 | `db:up` | Start the PostgreSQL container and wait for its healthcheck |
 | `db:down` | Stop the container |
 | `db:logs` | Follow the container logs |
@@ -83,7 +83,7 @@ All tasks are defined in `mise.toml`; run them with `mise run <task>`.
 ### Migrations
 
 | Task | Description |
-|------|-------------|
+| ------ | ------------- |
 | `migrate:status` | Show the status of all migrations |
 | `migrate:up` | Apply all pending migrations |
 | `migrate:down` | Roll back the most recent migration |
