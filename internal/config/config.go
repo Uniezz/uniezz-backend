@@ -6,16 +6,20 @@ import (
 )
 
 type Config struct {
-	Port        string
-	Env         string
-	DatabaseURL string
+	Port               string
+	Env                string
+	DatabaseURL        string
+	UmcsConsumerKey    string
+	UmcsConsumerSecret string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:        getEnv("PORT", "8080"),
-		Env:         getEnv("ENV", "development"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		Port:               getEnv("PORT", "8080"),
+		Env:                getEnv("ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		UmcsConsumerKey:    os.Getenv("UMCS_USOS_CONSUMER_KEY"),
+		UmcsConsumerSecret: os.Getenv("UMCS_USOS_CONSUMER_SECRET"),
 	}
 
 	if cfg.DatabaseURL == "" {
