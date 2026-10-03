@@ -12,7 +12,7 @@ CREATE TABLE oauth_states (
   expiresAt TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '5 minutes')
 );
 
-CREATE INDEX idx_oauth_states_lookup 
+CREATE INDEX idx_oauth_states_lookup
 ON oauth_states (requestToken, expiresAt DESC);
 
 -- +goose Down
