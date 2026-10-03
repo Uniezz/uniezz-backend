@@ -10,7 +10,7 @@ go = "1.27.1"
 
 [tasks.dev]
 description = "Run Go API in local development mode"
-run = "go run ./cmd/api"
+run = "doppler run -c dev -- go run ./cmd/api"
 
 [tasks.fmt]
 description = "Format Go code"
@@ -36,7 +36,7 @@ run = "golangci-lint run --fix ./..."
 
 [tasks."db:up"]
 description = "Start PostgreSQL container and wait for healthcheck"
-run = "docker compose up -d --wait"
+run = "doppler run -c dev -- docker compose up -d --wait"
 
 [tasks."db:down"]
 description = "Stop PostgreSQL container"
@@ -51,19 +51,25 @@ description = "Setup dev environment and git hooks"
 run = "git config core.hooksPath .githooks"
 
 # DATABASE MIGRATION TASKS
+# goose reads GOOSE_DBSTRING from Doppler (a reference to DATABASE_URL), so no
+# shell variable expansion is needed — works under cmd.exe on Windows too.
 [tasks."migrate:status"]
 description = "Show status of all migrations"
-run = "goose -dir migrations postgres \"$DATABASE_URL\" status"
+env = { GOOSE_DRIVER = "postgres", GOOSE_MIGRATION_DIR = "migrations" }
+run = "doppler run -c dev -- goose status"
 
 [tasks."migrate:up"]
 description = "Apply all pending migrations"
-run = "goose -dir migrations postgres \"$DATABASE_URL\" up"
+env = { GOOSE_DRIVER = "postgres", GOOSE_MIGRATION_DIR = "migrations" }
+run = "doppler run -c dev -- goose up"
 
 [tasks."migrate:down"]
 description = "Roll back the most recent migration"
-run = "goose -dir migrations postgres \"$DATABASE_URL\" down"
+env = { GOOSE_DRIVER = "postgres", GOOSE_MIGRATION_DIR = "migrations" }
+run = "doppler run -c dev -- goose down"
 
 [tasks."migrate:create"]
 description = "Create a new SQL migration file (usage: mise run migrate:create <name>)"
 usage = 'arg "<name>"'
-run = 'goose -dir migrations create "$usage_name" sql'
+env = { GOOSE_MIGRATION_DIR = "migrations" }
+run = 'goose create {{usage.name}} sql'

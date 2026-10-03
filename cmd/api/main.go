@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/health"
@@ -48,6 +49,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	health.Register(r, &isShuttingDown, dbPool)
+	auth.Register(r, dbPool, cfg)
 
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	server := &http.Server{

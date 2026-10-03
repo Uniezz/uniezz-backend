@@ -1,6 +1,6 @@
 -- +goose Up
 
-CREATE TABLE IF NOT EXISTS otp_requests (
+CREATE TABLE otp_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     university_id VARCHAR(32) NOT NULL,
     email VARCHAR(255) NOT NULL,
@@ -14,16 +14,16 @@ CREATE TABLE IF NOT EXISTS otp_requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_otp_requests_lookup 
+CREATE INDEX idx_otp_requests_lookup 
 ON otp_requests (university_id, LOWER(email), created_at DESC)
 WHERE consumed_at IS NULL AND cancelled_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_otp_requests_email_rate_limit 
+CREATE INDEX idx_otp_requests_email_rate_limit 
 ON otp_requests (university_id, LOWER(email), created_at);
 
-CREATE INDEX IF NOT EXISTS idx_otp_requests_ip_rate_limit 
+CREATE INDEX idx_otp_requests_ip_rate_limit 
 ON otp_requests (ip, created_at);
 
 
 -- +goose Down
-DROP TABLE IF EXISTS otp_requests;
+DROP TABLE otp_requests;
