@@ -17,6 +17,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 const (
@@ -25,6 +26,15 @@ const (
 )
 
 var isShuttingDown atomic.Bool
+
+func corsMiddleware(webAppURL string) func(http.Handler) http.Handler {
+	return cors.Handler(cors.Options{
+		AllowedOrigins: []string{webAppURL},
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
+		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		MaxAge:         300,
+	})
+}
 
 func main() {
 	cfg, err := config.Load()
@@ -47,6 +57,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(corsMiddleware(cfg.AppWebURL))
 
 	health.Register(r, &isShuttingDown, dbPool)
 
