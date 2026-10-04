@@ -49,7 +49,10 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	health.Register(r, &isShuttingDown, dbPool)
-	auth.Register(r, dbPool, cfg)
+
+	if err := auth.Register(r, dbPool, cfg); err != nil {
+		log.Fatalf("Error setting up auth: %v", err)
+	}
 
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	server := &http.Server{
