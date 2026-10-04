@@ -30,6 +30,7 @@ var errorResponses = []struct {
 	code   string
 }{
 	{ErrInvalidIdentity, http.StatusInternalServerError, "internal_error"},
+	{httpjson.ErrInvalidBody, http.StatusBadRequest, "invalid_input"},
 	{ErrUnknownUniversity, http.StatusBadRequest, "unknown_university"},
 	{ErrWrongAuthMethod, http.StatusBadRequest, "wrong_auth_method"},
 	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},

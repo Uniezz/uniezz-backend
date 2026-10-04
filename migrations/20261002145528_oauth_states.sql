@@ -1,7 +1,7 @@
 -- +goose Up
 
 CREATE TYPE PLATFORM AS ENUM ('mobile', 'web');
-CREATE TYPE PROVIDER AS ENUM ('umcs', 'um');
+CREATE TYPE PROVIDER AS ENUM ('umcs', 'umlub');
 
 CREATE TABLE oauth_states (
   ID UUID PRIMARY KEY DEFAULT gen_random_uuid(),
