@@ -1,22 +1,13 @@
 -- +goose Up
 
-CREATE TYPE PLATFORM AS ENUM ('mobile', 'web');
-CREATE TYPE PROVIDER AS ENUM ('umcs', 'umlub');
-
 CREATE TABLE oauth_states (
-  ID UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  requestToken TEXT NOT NULL,
-  requestSecret Text NOT NULL,
-  platform PLATFORM NOT NULL,
-  provider PROVIDER NOT NULL,
-  expiresAt TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '5 minutes')
+    request_token  TEXT PRIMARY KEY,
+    request_secret TEXT NOT NULL,
+    university_id  VARCHAR(32) NOT NULL,
+    platform       VARCHAR(16) NOT NULL CHECK (platform IN ('web', 'mobile')),
+    expires_at     TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes'
 );
 
-CREATE INDEX idx_oauth_states_lookup
-ON oauth_states (requestToken, expiresAt DESC);
 
 -- +goose Down
 DROP TABLE oauth_states;
-DROP TYPE PLATFORM;
-DROP TYPE PROVIDER;
-DROP INDEX idx_oauth_states_lookup;

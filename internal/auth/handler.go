@@ -19,12 +19,6 @@ func newHandler(db *pgxpool.Pool) *Handler {
 func (h *Handler) registerRoutes(r chi.Router, cfg *config.Config) {
 	r.Get("/auth/login", func(w http.ResponseWriter, r *http.Request) {
 
-		// _,_ = h.db.Exec(r.Context(), "INSERT INTO oauth_states (requestToken, requestSecret) VALUES ($1, $2)", requestToken, requestSecret)
-		// if err != nil {
-		// 	http.Error(w, "Failed to store request token and secret", http.StatusInternalServerError)
-		// 	return
-		// }
-
 		// http.Redirect(w, r, authorizationURL.String(), http.StatusFound)
 	})
 

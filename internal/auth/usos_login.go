@@ -36,6 +36,8 @@ type usosState struct {
 	Platform     Platform
 }
 
+var _ usosStateStore = (*usosStateRepository)(nil)
+
 type usosStateStore interface {
 	save(ctx context.Context, s usosState) error
 	take(ctx context.Context, requestToken string) (usosState, error)
