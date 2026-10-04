@@ -3,6 +3,8 @@ package auth
 import (
 	"errors"
 	"net/http"
+
+	"github.com/Uniezz/uniezz-backend/internal/httpjson"
 )
 
 var (
@@ -22,25 +24,34 @@ var (
 	ErrSessionNotFound = errors.New("session not found")
 )
 
-func httpStatus(err error) int {
-	switch {
-	case errors.Is(err, ErrUnknownUniversity),
-		errors.Is(err, ErrInvalidIdentity),
-		errors.Is(err, ErrWrongAuthMethod),
-		errors.Is(err, ErrInvalidInput),
-		errors.Is(err, ErrStateNotFound):
-		return http.StatusBadRequest
-	case errors.Is(err, ErrInvalidCode),
-		errors.Is(err, ErrInvalidTokenString),
-		errors.Is(err, ErrSessionNotFound):
-		return http.StatusUnauthorized
-	case errors.Is(err, ErrNotStudent):
-		return http.StatusForbidden
-	case errors.Is(err, ErrRateLimited):
-		return http.StatusTooManyRequests
-	case errors.Is(err, ErrUpstream):
-		return http.StatusBadGateway
-	default:
-		return http.StatusInternalServerError
+var errorResponses = []struct {
+	err    error
+	status int
+	code   string
+}{
+	{ErrInvalidIdentity, http.StatusInternalServerError, "internal_error"},
+	{ErrUnknownUniversity, http.StatusBadRequest, "unknown_university"},
+	{ErrWrongAuthMethod, http.StatusBadRequest, "wrong_auth_method"},
+	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
+	{ErrStateNotFound, http.StatusBadRequest, "login_expired"},
+	{ErrInvalidCode, http.StatusUnauthorized, "invalid_code"},
+	{ErrInvalidTokenString, http.StatusUnauthorized, "unauthorized"},
+	{ErrSessionNotFound, http.StatusUnauthorized, "unauthorized"},
+	{ErrNotStudent, http.StatusForbidden, "not_student"},
+	{ErrRateLimited, http.StatusTooManyRequests, "rate_limited"},
+	{ErrUpstream, http.StatusBadGateway, "provider_unavailable"},
+}
+
+func errorResponse(err error) (status int, code string) {
+	for _, e := range errorResponses {
+		if errors.Is(err, e.err) {
+			return e.status, e.code
+		}
 	}
+	return http.StatusInternalServerError, "internal_error"
+}
+
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
+	status, code := errorResponse(err)
+	httpjson.Error(w, r, status, code, err)
 }
