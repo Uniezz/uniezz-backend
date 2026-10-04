@@ -13,11 +13,40 @@ const defaultSessionTTL = 30 * 24 * time.Hour
 type logins struct {
 	users      *UserRepository
 	sessions   *SessionRepository
+	loginCodes *loginCodeRepository
 	sessionTTL time.Duration
 }
 
-func newLogins(users *UserRepository, sessions *SessionRepository, sessionTTL time.Duration) *logins {
-	return &logins{users: users, sessions: sessions, sessionTTL: sessionTTL}
+func newLogins(users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
+	return &logins{
+		users:      users,
+		sessions:   sessions,
+		loginCodes: loginCodes,
+		sessionTTL: sessionTTL,
+	}
+}
+
+func (l *logins) issueLoginCode(ctx context.Context, userID uuid.UUID) (string, error) {
+	code := GenerateSessionToken()
+	hash := code.Hash()
+
+	if err := l.loginCodes.create(ctx, userID, hash[:]); err != nil {
+		return "", err
+	}
+	return code.String(), nil
+}
+
+func (l *logins) exchange(ctx context.Context, code string) (IssuedSession, error) {
+	hash, err := HashTokenString(code)
+	if err != nil {
+		return IssuedSession{}, fmt.Errorf("%w: %w", ErrInvalidCode, err)
+	}
+
+	userID, err := l.loginCodes.consume(ctx, hash[:])
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	return l.issueSession(ctx, userID)
 }
 
 func requireUniversity(id UniversityID, method AuthType) (University, error) {

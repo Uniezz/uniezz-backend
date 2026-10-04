@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -48,8 +49,92 @@ func TestLogins_Integration(t *testing.T) {
 	pool := setupTestDB(t)
 	users := NewUserRepository(pool)
 	sessions := NewSessionRepository(pool)
-	l := newLogins(users, sessions, time.Hour)
+	l := newLogins(users, sessions, newLoginCodeRepository(pool), time.Hour)
 	ctx := context.Background()
+
+	signInTestUser := func(t *testing.T) *User {
+		t.Helper()
+		u, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+		if err != nil {
+			t.Fatalf("signIn failed: %v", err)
+		}
+		deleteUserOnCleanup(t, pool, u.ID)
+		return u
+	}
+
+	t.Run("a login code exchanges for a session of its user", func(t *testing.T) {
+		u := signInTestUser(t)
+
+		code, err := l.issueLoginCode(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("issueLoginCode failed: %v", err)
+		}
+
+		issued, err := l.exchange(ctx, code)
+		if err != nil {
+			t.Fatalf("exchange failed: %v", err)
+		}
+
+		hash, err := HashTokenString(issued.Token)
+		if err != nil {
+			t.Fatalf("exchanged token is not a valid session token: %v", err)
+		}
+		s, err := sessions.GetActiveSessionByHash(ctx, hash[:])
+		if err != nil {
+			t.Fatalf("expected the exchanged token to resolve to an active session: %v", err)
+		}
+		if s.UserID != u.ID {
+			t.Errorf("expected session for user %v, got %v", u.ID, s.UserID)
+		}
+		if issued.Token == code {
+			t.Error("the session token must differ from the login code")
+		}
+	})
+
+	t.Run("a login code exchanges only once", func(t *testing.T) {
+		u := signInTestUser(t)
+
+		code, err := l.issueLoginCode(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("issueLoginCode failed: %v", err)
+		}
+		if _, err := l.exchange(ctx, code); err != nil {
+			t.Fatalf("first exchange failed: %v", err)
+		}
+
+		_, err = l.exchange(ctx, code)
+		if !errors.Is(err, ErrInvalidCode) {
+			t.Fatalf("expected ErrInvalidCode on replay, got: %v", err)
+		}
+	})
+
+	t.Run("a session token is not accepted as a login code", func(t *testing.T) {
+		u := signInTestUser(t)
+
+		issued, err := l.issueSession(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("issueSession failed: %v", err)
+		}
+
+		_, err = l.exchange(ctx, issued.Token)
+		if !errors.Is(err, ErrInvalidCode) {
+			t.Fatalf("expected ErrInvalidCode, got: %v", err)
+		}
+	})
+
+	t.Run("a malformed code is ErrInvalidCode and maps to 401 invalid_code", func(t *testing.T) {
+		for _, code := range []string{"", "not-a-code!!", "dGVzdA"} {
+			_, err := l.exchange(ctx, code)
+			if !errors.Is(err, ErrInvalidCode) {
+				t.Fatalf("exchange(%q): expected ErrInvalidCode, got: %v", code, err)
+			}
+
+			status, errCode := errorResponse(err)
+			if status != http.StatusUnauthorized || errCode != "invalid_code" {
+				t.Errorf("exchange(%q): expected 401 invalid_code, got %d %q", code, status, errCode)
+			}
+		}
+	})
 
 	t.Run("signIn normalizes the identity before storing it", func(t *testing.T) {
 		email := testEmail()
