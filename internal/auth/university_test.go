@@ -55,12 +55,7 @@ func TestGetUniversityByID_NotFound(t *testing.T) {
 		t.Fatal("expected error for non-existent university ID, got nil")
 	}
 
-	var notFoundErr *UniversityNotFoundError
-	if !errors.As(err, &notFoundErr) {
-		t.Fatalf("expected error to be of type *UniversityNotFoundError, got %T", err)
-	}
-
-	if notFoundErr.ID != invalidID {
-		t.Errorf("expected error ID %q, got %q", invalidID, notFoundErr.ID)
+	if !errors.Is(err, ErrUnknownUniversity) {
+		t.Errorf("expected error to be ErrUnknownUniversity, got %v", err)
 	}
 }

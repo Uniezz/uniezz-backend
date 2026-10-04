@@ -54,17 +54,6 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID uuid.UUID,
 	return &s, nil
 }
 
-type SessionNotFoundError struct{}
-
-func (e *SessionNotFoundError) Error() string {
-	return "session not found"
-}
-
-func (e *SessionNotFoundError) Is(target error) bool {
-	_, ok := target.(*SessionNotFoundError)
-	return ok
-}
-
 func (r *SessionRepository) GetActiveSessionByHash(
 	ctx context.Context,
 	tokenHash []byte,
@@ -85,7 +74,7 @@ func (r *SessionRepository) GetActiveSessionByHash(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, &SessionNotFoundError{}
+			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to query active session: %w", err)
 	}

@@ -1,11 +1,9 @@
 package auth
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 )
-
-var ErrInvalidIdentity = errors.New("invalid identity")
 
 type Identity struct {
 	UniversityID UniversityID
@@ -15,12 +13,28 @@ type Identity struct {
 	LastName     string
 }
 
+func (i Identity) normalized() Identity {
+	i.Email = normalizeEmail(i.Email)
+	i.FirstName = strings.TrimSpace(i.FirstName)
+	i.LastName = strings.TrimSpace(i.LastName)
+	return i
+}
+
 func (i Identity) validate() error {
-	if i.UniversityID == "" {
-		return errors.Join(ErrInvalidIdentity, errors.New("university is required"))
+	u, err := GetUniversityByID(i.UniversityID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidIdentity, err)
 	}
-	if i.UsosUserID == "" && i.Email == "" {
-		return errors.Join(ErrInvalidIdentity, errors.New("usos user id or email is required"))
+
+	switch u.AuthType {
+	case AuthTypeUSOS:
+		if i.UsosUserID == "" {
+			return fmt.Errorf("%w: usos user id is required for %s", ErrInvalidIdentity, u.ID)
+		}
+	case AuthTypeOTP:
+		if i.Email == "" {
+			return fmt.Errorf("%w: email is required for %s", ErrInvalidIdentity, u.ID)
+		}
 	}
 	return nil
 }

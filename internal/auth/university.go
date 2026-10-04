@@ -93,18 +93,10 @@ func GetUniversities() []University {
 	return list
 }
 
-type UniversityNotFoundError struct {
-	ID UniversityID
-}
-
-func (e *UniversityNotFoundError) Error() string {
-	return fmt.Sprintf("university with ID %q not found", e.ID)
-}
-
 func GetUniversityByID(id UniversityID) (University, error) {
 	u, exists := universities[id]
 	if !exists {
-		return University{}, &UniversityNotFoundError{ID: id}
+		return University{}, fmt.Errorf("%w: %q", ErrUnknownUniversity, id)
 	}
 	return u, nil
 }
