@@ -112,7 +112,7 @@ func TestSessionRepository_Integration(t *testing.T) {
 		}
 
 		_, err = repo.GetActiveSessionByHash(ctx, hash[:])
-		if !errors.Is(err, &SessionNotFoundError{}) {
+		if !errors.Is(err, ErrSessionNotFound) {
 			t.Fatalf("Expected ErrSessionNotFound for expired session, got: %v", err)
 		}
 	})
@@ -121,7 +121,7 @@ func TestSessionRepository_Integration(t *testing.T) {
 		unknownHash := make([]byte, 32)
 
 		_, err := repo.GetActiveSessionByHash(ctx, unknownHash)
-		if !errors.Is(err, &SessionNotFoundError{}) {
+		if !errors.Is(err, ErrSessionNotFound) {
 			t.Fatalf("Expected ErrSessionNotFound for unknown hash, got: %v", err)
 		}
 	})

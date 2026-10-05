@@ -4,13 +4,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
-	"fmt"
 )
 
 const tokenByteLength = 32
-
-var ErrInvalidTokenString = errors.New("invalid session token string")
 
 type SessionToken struct {
 	token []byte
@@ -33,11 +29,11 @@ func (t *SessionToken) Hash() [32]byte {
 func ParseSessionToken(raw string) (*SessionToken, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%w: base64 decode error: %v", ErrInvalidTokenString, err)
+		return nil, ErrInvalidTokenString
 	}
 
 	if len(decoded) != tokenByteLength {
-		return nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidTokenString, tokenByteLength, len(decoded))
+		return nil, ErrInvalidTokenString
 	}
 
 	return &SessionToken{token: decoded}, nil
