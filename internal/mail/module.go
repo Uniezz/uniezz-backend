@@ -9,7 +9,7 @@ import (
 
 type Config struct {
 	apiKey string
-	from string
+	from   string
 }
 
 func LoadConfig() (Config, error) {
@@ -25,7 +25,7 @@ func LoadConfig() (Config, error) {
 
 	return Config{
 		apiKey: apiKey,
-		from: from,
+		from:   from,
 	}, nil
 }
 
