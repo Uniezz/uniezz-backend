@@ -97,39 +97,6 @@ func newTestUsosLogin() (*usosLogin, *fakeUSOS, *fakeStateStore) {
 	return login, client, states
 }
 
-func TestParsePlatform(t *testing.T) {
-	testCases := []struct {
-		input   string
-		want    Platform
-		wantErr bool
-	}{
-		{input: "web", want: PlatformWeb},
-		{input: "mobile", want: PlatformMobile},
-		{input: "", wantErr: true},
-		{input: "Web", wantErr: true},
-		{input: "desktop", wantErr: true},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.input, func(t *testing.T) {
-			got, err := parsePlatform(tc.input)
-
-			if tc.wantErr {
-				if !errors.Is(err, ErrInvalidInput) {
-					t.Fatalf("expected ErrInvalidInput, got: %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("expected %q, got %q", tc.want, got)
-			}
-		})
-	}
-}
-
 func TestUsosLogin_Start(t *testing.T) {
 	ctx := context.Background()
 

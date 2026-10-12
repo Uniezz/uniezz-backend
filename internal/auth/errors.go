@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/Uniezz/uniezz-backend/internal/httpjson"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 )
 
 var (
@@ -30,7 +30,6 @@ var errorResponses = []struct {
 	code   string
 }{
 	{ErrInvalidIdentity, http.StatusInternalServerError, "internal_error"},
-	{httpjson.ErrInvalidBody, http.StatusBadRequest, "invalid_input"},
 	{ErrUnknownUniversity, http.StatusBadRequest, "unknown_university"},
 	{ErrWrongAuthMethod, http.StatusBadRequest, "wrong_auth_method"},
 	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
@@ -52,7 +51,7 @@ func errorResponse(err error) (status int, code string) {
 	return http.StatusInternalServerError, "internal_error"
 }
 
-func writeError(w http.ResponseWriter, r *http.Request, err error) {
+func apiError(err error) error {
 	status, code := errorResponse(err)
-	httpjson.Error(w, r, status, code, err)
+	return httpapi.Error(status, code, err)
 }

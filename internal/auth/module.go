@@ -1,3 +1,4 @@
+// Package auth provides authentication and session management for the application. It supports multiple login methods, including USOS login for universities. The module handles user authentication, session creation, and token exchange.
 package auth
 
 import (
@@ -6,11 +7,11 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Register(r chi.Router, db *pgxpool.Pool, cfg *config.Config) error {
+func Register(api huma.API, db *pgxpool.Pool, cfg *config.Config) error {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
 		return err
@@ -26,13 +27,14 @@ func Register(r chi.Router, db *pgxpool.Pool, cfg *config.Config) error {
 	}
 	sessionH := &sessionHandler{logins: logins}
 
-	r.Route("/auth", func(r chi.Router) {
-		r.Get("/usos/start", usosH.start)
-		r.Get("/usos/callback", usosH.callback)
-		r.Post("/exchange", sessionH.exchange)
-	})
-
+	registerOperations(api, usosH, sessionH)
 	return nil
+}
+
+func registerOperations(api huma.API, usosH *usosHandler, sessionH *sessionHandler) {
+	huma.Register(api, usosStartOperation, usosH.start)
+	huma.Register(api, usosCallbackOperation, usosH.callback)
+	huma.Register(api, exchangeOperation, sessionH.exchange)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {

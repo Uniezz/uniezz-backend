@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 )
 
@@ -26,7 +28,7 @@ const (
 // authTestServer runs the USOS and session handlers against the real
 // database, with a fake USOS installation for UMCS.
 type authTestServer struct {
-	router   *chi.Mux
+	api      humatest.TestAPI
 	usos     *fakeUSOS
 	sessions *SessionRepository
 	pool     *pgxpool.Pool
@@ -65,31 +67,19 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	}
 	sessionH := &sessionHandler{logins: logins}
 
-	// Same routes as Register.
-	r := chi.NewRouter()
-	r.Route("/auth", func(r chi.Router) {
-		r.Get("/usos/start", usosH.start)
-		r.Get("/usos/callback", usosH.callback)
-		r.Post("/exchange", sessionH.exchange)
-	})
+	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
+	registerOperations(api, usosH, sessionH)
 
-	return &authTestServer{router: r, usos: client, sessions: sessions, pool: pool}
+	return &authTestServer{api: api, usos: client, sessions: sessions, pool: pool}
 }
 
 func (s *authTestServer) do(t *testing.T, method, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	var req *http.Request
 	if body == "" {
-		req = httptest.NewRequest(method, target, nil)
-	} else {
-		req = httptest.NewRequest(method, target, strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		return s.api.Do(method, target)
 	}
-
-	rec := httptest.NewRecorder()
-	s.router.ServeHTTP(rec, req)
-	return rec
+	return s.api.Do(method, target, strings.NewReader(body), "Content-Type: application/json")
 }
 
 func (s *authTestServer) start(t *testing.T, platform Platform) {
@@ -229,10 +219,12 @@ func TestUsosLogin_EndToEnd(t *testing.T) {
 }
 
 func TestUsosHandler_Start(t *testing.T) {
-	t.Run("missing or unknown platform is a JSON 400", func(t *testing.T) {
+	t.Run("missing or unknown parameters are a JSON 400", func(t *testing.T) {
 		s := newAuthTestServer(t)
 
 		for _, target := range []string{
+			"/auth/usos/start",
+			"/auth/usos/start?platform=web",
 			"/auth/usos/start?university=umcs",
 			"/auth/usos/start?university=umcs&platform=desktop",
 		} {
@@ -336,6 +328,7 @@ func TestUsosHandler_Callback(t *testing.T) {
 			"/auth/usos/callback",
 			"/auth/usos/callback?oauth_token=abc",
 			"/auth/usos/callback?oauth_verifier=abc",
+			"/auth/usos/callback?oauth_token=&oauth_verifier=abc",
 		} {
 			expectJSONError(t, s.do(t, http.MethodGet, target, ""), http.StatusBadRequest, "invalid_input")
 		}
@@ -368,8 +361,11 @@ func TestSessionHandler_Exchange(t *testing.T) {
 		wantCode   string
 	}{
 		{name: "malformed JSON", body: `{"code":`, wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
+		{name: "no body", body: "", wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
+		{name: "missing code", body: `{}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
 		{name: "unknown field", body: `{"code":"x","token":"y"}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
-		{name: "empty code", body: `{"code":""}`, wantStatus: http.StatusUnauthorized, wantCode: "invalid_code"},
+		{name: "empty code", body: `{"code":""}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
+		{name: "code too long", body: `{"code":"` + strings.Repeat("a", 65) + `"}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
 		{name: "garbage code", body: `{"code":"not-a-code"}`, wantStatus: http.StatusUnauthorized, wantCode: "invalid_code"},
 		{name: "well-formed unknown code", body: `{"code":"` + GenerateSessionToken().String() + `"}`, wantStatus: http.StatusUnauthorized, wantCode: "invalid_code"},
 	}

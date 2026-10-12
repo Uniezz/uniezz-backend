@@ -15,6 +15,9 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/health"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -36,6 +39,15 @@ func corsMiddleware(webAppURL string) func(http.Handler) http.Handler {
 	})
 }
 
+func newRouter(cfg *config.Config) (*chi.Mux, huma.API) {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(corsMiddleware(cfg.AppWebURL))
+
+	return r, humachi.New(r, httpapi.NewConfig(cfg))
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -54,14 +66,11 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(corsMiddleware(cfg.AppWebURL))
+	r, api := newRouter(cfg)
 
 	health.Register(r, &isShuttingDown, dbPool)
 
-	if err := auth.Register(r, dbPool, cfg); err != nil {
+	if err := auth.Register(api, dbPool, cfg); err != nil {
 		log.Fatalf("Error setting up auth: %v", err)
 	}
 

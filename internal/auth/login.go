@@ -69,8 +69,8 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 }
 
 type IssuedSession struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	Token     string    `json:"token" doc:"token to be used in Authorization header for subsequent requests"`
+	ExpiresAt time.Time `json:"expiresAt" doc:"timestamp when the session expires"`
 }
 
 func (l *logins) issueSession(ctx context.Context, userID uuid.UUID) (IssuedSession, error) {
