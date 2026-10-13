@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   check:
@@ -37,3 +38,23 @@ jobs:
 
       - name: Verify build
         run: go build -v -o /dev/null ./cmd/api
+
+      - name: Check OpenAPI spec is up to date
+        run: |
+          mise run openapi
+          if [ -n "$(git status --porcelain api/openapi.yaml)" ]; then
+            echo "::error file=api/openapi.yaml::Spec is out of date. Run 'mise run openapi' and commit the result."
+            git diff api/openapi.yaml
+            exit 1
+          fi
+
+      - name: Check for breaking API changes
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'breaking-change')
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          if ! git cat-file -e FETCH_HEAD:api/openapi.yaml 2>/dev/null; then
+            echo "No api/openapi.yaml on $GITHUB_BASE_REF yet, skipping."
+            exit 0
+          fi
+          git show FETCH_HEAD:api/openapi.yaml > "$RUNNER_TEMP/base-openapi.yaml"
+          oasdiff breaking "$RUNNER_TEMP/base-openapi.yaml" api/openapi.yaml --fail-on ERR
