@@ -1,31 +1,39 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/Uniezz/uniezz-backend/internal/httpjson"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type sessionHandler struct {
 	logins *logins
 }
 
-type exchangeRequest struct {
-	Code string `json:"code"`
+type exchangeInput struct {
+	Body struct {
+		Code string `json:"code" minLength:"1" maxLength:"64" doc:"One-time login code from the auth redirect"`
+	}
 }
 
-func (h *sessionHandler) exchange(w http.ResponseWriter, r *http.Request) {
-	var req exchangeRequest
-	if err := httpjson.Decode(w, r, &req); err != nil {
-		writeError(w, r, err)
-		return
-	}
+type exchangeOutput struct {
+	Body IssuedSession
+}
 
-	session, err := h.logins.exchange(r.Context(), req.Code)
+var exchangeOperation = huma.Operation{
+	OperationID: "exchangeLoginCode",
+	Method:      http.MethodPost,
+	Path:        "/auth/exchange",
+	Summary:     "Exchange a one-time login code for a session",
+	Tags:        []string{"auth"},
+	Errors:      []int{http.StatusBadRequest, http.StatusUnauthorized},
+}
+
+func (h *sessionHandler) exchange(ctx context.Context, in *exchangeInput) (*exchangeOutput, error) {
+	session, err := h.logins.exchange(ctx, in.Body.Code)
 	if err != nil {
-		writeError(w, r, err)
-		return
+		return nil, apiError(err)
 	}
-
-	httpjson.Write(w, http.StatusOK, session)
+	return &exchangeOutput{Body: session}, nil
 }

@@ -1,10 +1,12 @@
 package auth
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type usosHandler struct {
@@ -15,69 +17,92 @@ type usosHandler struct {
 	mobileRedirectURL string // e.g. uniezz://auth/callback
 }
 
-func (h *usosHandler) start(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-
-	platform, err := parsePlatform(q.Get("platform"))
-	if err != nil {
-		writeError(w, r, err)
-		return
-	}
-
-	authorizeURL, err := h.usos.start(r.Context(), UniversityID(q.Get("university")), platform)
-	if err != nil {
-		h.redirectWithError(w, r, platform, err)
-		return
-	}
-
-	http.Redirect(w, r, authorizeURL, http.StatusFound)
+type redirectOutput struct {
+	Status   int
+	Location string `header:"Location"`
 }
 
-func (h *usosHandler) callback(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	requestToken, verifier := q.Get("oauth_token"), q.Get("oauth_verifier")
-	if requestToken == "" || verifier == "" {
-		writeError(w, r, fmt.Errorf("%w: missing oauth_token or oauth_verifier", ErrInvalidInput))
-		return
-	}
+func found(location string) *redirectOutput {
+	return &redirectOutput{Status: http.StatusFound, Location: location}
+}
 
-	id, platform, err := h.usos.finish(r.Context(), requestToken, verifier)
+type usosStartInput struct {
+	University UniversityID `query:"university" required:"true" doc:"University to log in to" example:"umcs"`
+	Platform   Platform     `query:"platform" required:"true" enum:"web,mobile" doc:"App to send the browser back to when the login is done"`
+}
+
+var usosStartOperation = huma.Operation{
+	OperationID: "startUsosLogin",
+	Method:      http.MethodGet,
+	Path:        "/auth/usos/start",
+	Summary:     "Start a USOS login",
+	Description: "Redirects to the university's USOS authorization page. " +
+		"Errors after the platform is known are sent to the app as a redirect with ?error=<code>.",
+	Tags:          []string{"auth"},
+	DefaultStatus: http.StatusFound,
+	Errors:        []int{http.StatusBadRequest},
+}
+
+func (h *usosHandler) start(ctx context.Context, in *usosStartInput) (*redirectOutput, error) {
+	authorizeURL, err := h.usos.start(ctx, in.University, in.Platform)
+	if err != nil {
+		return h.redirectWithError(in.Platform, err), nil
+	}
+	return found(authorizeURL), nil
+}
+
+type usosCallbackInput struct {
+	OAuthToken    string `query:"oauth_token" required:"true" minLength:"1" doc:"Request token, set by USOS"`
+	OAuthVerifier string `query:"oauth_verifier" required:"true" minLength:"1" doc:"Verifier, set by USOS"`
+}
+
+var usosCallbackOperation = huma.Operation{
+	OperationID: "finishUsosLogin",
+	Method:      http.MethodGet,
+	Path:        "/auth/usos/callback",
+	Summary:     "Finish a USOS login",
+	Description: "Called by USOS, not by the apps. Redirects to the app with ?code=<login code> " +
+		"to pass to exchangeLoginCode, or with ?error=<code>. " +
+		"Answers with a JSON error only when the login state is unknown, as there is no app to return to.",
+	Tags:          []string{"auth"},
+	DefaultStatus: http.StatusFound,
+	Errors:        []int{http.StatusBadRequest},
+}
+
+func (h *usosHandler) callback(ctx context.Context, in *usosCallbackInput) (*redirectOutput, error) {
+	id, platform, err := h.usos.finish(ctx, in.OAuthToken, in.OAuthVerifier)
 	if err != nil {
 		if platform == "" {
-			writeError(w, r, err)
-			return
+			return nil, apiError(err)
 		}
-		h.redirectWithError(w, r, platform, err)
-		return
+		return h.redirectWithError(platform, err), nil
 	}
 
-	user, err := h.logins.signIn(r.Context(), id)
+	user, err := h.logins.signIn(ctx, id)
 	if err != nil {
-		h.redirectWithError(w, r, platform, err)
-		return
+		return h.redirectWithError(platform, err), nil
 	}
 
-	code, err := h.logins.issueLoginCode(r.Context(), user.ID)
+	code, err := h.logins.issueLoginCode(ctx, user.ID)
 	if err != nil {
-		h.redirectWithError(w, r, platform, err)
-		return
+		return h.redirectWithError(platform, err), nil
 	}
 
-	h.redirectToApp(w, r, platform, url.Values{"code": {code}})
+	return h.redirectToApp(platform, url.Values{"code": {code}}), nil
 }
 
-func (h *usosHandler) redirectWithError(w http.ResponseWriter, r *http.Request, platform Platform, err error) {
+func (h *usosHandler) redirectWithError(platform Platform, err error) *redirectOutput {
 	status, code := errorResponse(err)
 	if status >= http.StatusInternalServerError {
-		log.Printf("%s %s: %v", r.Method, r.URL.Path, err)
+		log.Printf("auth: usos login: %v", err)
 	}
-	h.redirectToApp(w, r, platform, url.Values{"error": {code}})
+	return h.redirectToApp(platform, url.Values{"error": {code}})
 }
 
-func (h *usosHandler) redirectToApp(w http.ResponseWriter, r *http.Request, platform Platform, params url.Values) {
+func (h *usosHandler) redirectToApp(platform Platform, params url.Values) *redirectOutput {
 	target := h.webRedirectURL
 	if platform == PlatformMobile {
 		target = h.mobileRedirectURL
 	}
-	http.Redirect(w, r, target+"?"+params.Encode(), http.StatusFound)
+	return found(target + "?" + params.Encode())
 }

@@ -14,15 +14,6 @@ const (
 	PlatformMobile Platform = "mobile"
 )
 
-func parsePlatform(s string) (Platform, error) {
-	switch p := Platform(s); p {
-	case PlatformWeb, PlatformMobile:
-		return p, nil
-	default:
-		return "", fmt.Errorf("%w: unknown platform %q", ErrInvalidInput, s)
-	}
-}
-
 var _ usosClient = (*usos.Client)(nil) // compile-time check that the real USOS client satisfies the interface usosLogin needs
 
 type usosClient interface {

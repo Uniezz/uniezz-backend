@@ -13,3 +13,5 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
+      exclude-functions:
+        - (io.ReadCloser).Close

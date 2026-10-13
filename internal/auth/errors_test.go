@@ -1,15 +1,12 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
-	"github.com/Uniezz/uniezz-backend/internal/httpjson"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 func TestErrorResponse(t *testing.T) {
@@ -21,7 +18,6 @@ func TestErrorResponse(t *testing.T) {
 		{ErrUnknownUniversity, http.StatusBadRequest, "unknown_university"},
 		{ErrWrongAuthMethod, http.StatusBadRequest, "wrong_auth_method"},
 		{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
-		{httpjson.ErrInvalidBody, http.StatusBadRequest, "invalid_input"},
 		{ErrStateNotFound, http.StatusBadRequest, "login_expired"},
 		{ErrInvalidCode, http.StatusUnauthorized, "invalid_code"},
 		{ErrInvalidTokenString, http.StatusUnauthorized, "unauthorized"},
@@ -81,24 +77,17 @@ func TestErrorResponses_EveryAuthErrorIsMapped(t *testing.T) {
 	}
 }
 
-func TestWriteError(t *testing.T) {
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/auth/usos/callback", nil)
+func TestAPIError(t *testing.T) {
+	err := apiError(fmt.Errorf("student_status=1 for usos user 123456: %w", ErrNotStudent))
 
-	writeError(rec, req, fmt.Errorf("student_status=1 for usos user 123456: %w", ErrNotStudent))
-
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected status %d, got %d", http.StatusForbidden, rec.Code)
+	var se huma.StatusError
+	if !errors.As(err, &se) {
+		t.Fatalf("expected a huma.StatusError, got %T", err)
 	}
-
-	var body map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("response is not valid JSON: %v", err)
+	if se.GetStatus() != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, se.GetStatus())
 	}
-	if body["error"] != "not_student" {
-		t.Errorf(`expected {"error":"not_student"}, got %s`, rec.Body.String())
-	}
-	if strings.Contains(rec.Body.String(), "123456") {
-		t.Errorf("error detail leaked to the client: %s", rec.Body.String())
+	if se.Error() != "not_student" {
+		t.Errorf("expected code not_student, got %q", se.Error())
 	}
 }

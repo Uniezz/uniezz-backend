@@ -1,3 +1,4 @@
+// Package usos is a GO client for the USOS API, which is used for authentication and user information retrieval in the University Study-Oriented System (USOS).
 package usos
 
 import (
