@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/health"
+	"github.com/Uniezz/uniezz-backend/internal/server"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -130,11 +130,7 @@ func newSpecTestRouter(t *testing.T, env string) *chi.Mux {
 	cfg := &config.Config{Env: env, BackendPublicURL: "https://api.test", AppWebURL: testWebAppURL}
 	r, api := newRouter(cfg)
 	health.Register(r, &atomic.Bool{}, nil)
-	// No USOS credentials are needed in development; outside it Register would fail.
-	cfg.Env = "development"
-	if err := auth.Register(api, nil, cfg); err != nil {
-		t.Fatalf("failed to register auth: %v", err)
-	}
+	server.Register(api, server.Modules{})
 	return r
 }
 

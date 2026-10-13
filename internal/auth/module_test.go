@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/danielgtaylor/huma/v2/humatest"
 )
 
 func testConfig(env string, usosConfigs map[string]config.UsosCredentials) *config.Config {
@@ -83,4 +86,40 @@ func TestNewUsosClients(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestModule_ZeroValueDescribesOperations(t *testing.T) {
+	// cmd/openapi registers a zero Module: no database, no USOS credentials.
+	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
+	Module{}.Register(api)
+
+	for _, want := range []struct{ path, method string }{
+		{"/auth/usos/start", http.MethodGet},
+		{"/auth/usos/callback", http.MethodGet},
+		{"/auth/exchange", http.MethodPost},
+	} {
+		item := api.OpenAPI().Paths[want.path]
+		if item == nil {
+			t.Errorf("%s is missing from the spec", want.path)
+			continue
+		}
+		if op := item.Get; want.method == http.MethodGet && op == nil {
+			t.Errorf("GET %s is missing from the spec", want.path)
+		}
+		if op := item.Post; want.method == http.MethodPost && op == nil {
+			t.Errorf("POST %s is missing from the spec", want.path)
+		}
+	}
+}
+
+func TestNew(t *testing.T) {
+	if _, err := New(nil, testConfig("production", fullUsosCredentials())); err != nil {
+		t.Fatalf("expected no error with full credentials, got: %v", err)
+	}
+
+	creds := fullUsosCredentials()
+	delete(creds, "umcs")
+	if _, err := New(nil, testConfig("production", creds)); err == nil {
+		t.Error("expected an error for missing umcs credentials outside development, got nil")
+	}
 }

@@ -68,7 +68,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	sessionH := &sessionHandler{logins: logins}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	registerOperations(api, usosH, sessionH)
+	Module{usos: usosH, session: sessionH}.Register(api)
 
 	return &authTestServer{api: api, usos: client, sessions: sessions, pool: pool}
 }
