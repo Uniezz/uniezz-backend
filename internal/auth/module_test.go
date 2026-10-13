@@ -39,53 +39,29 @@ func TestNewUsosClients(t *testing.T) {
 		}
 	})
 
-	t.Run("development disables a university without credentials", func(t *testing.T) {
-		creds := fullUsosCredentials()
-		delete(creds, "umlub")
-
-		clients, err := newUsosClients(testConfig("development", creds))
-		if err != nil {
-			t.Fatalf("expected no error in development, got: %v", err)
-		}
-		if _, ok := clients[UniversityUMLub]; ok {
-			t.Error("expected umlub to be disabled")
-		}
-		if _, ok := clients[UniversityUMCS]; !ok {
-			t.Error("expected umcs to stay enabled")
-		}
-	})
-
 	for _, tc := range []struct {
 		name  string
-		creds config.UsosCredentials
+		creds func(map[string]config.UsosCredentials)
 	}{
-		{name: "empty key", creds: config.UsosCredentials{BaseURL: "https://usosapps.umlub.pl", ConsumerSecret: "secret"}},
-		{name: "empty secret", creds: config.UsosCredentials{BaseURL: "https://usosapps.umlub.pl", ConsumerKey: "key"}},
+		{name: "missing", creds: func(c map[string]config.UsosCredentials) { delete(c, "umlub") }},
+		{name: "empty key", creds: func(c map[string]config.UsosCredentials) {
+			c["umlub"] = config.UsosCredentials{BaseURL: "https://usosapps.umlub.pl", ConsumerSecret: "secret"}
+		}},
+		{name: "empty secret", creds: func(c map[string]config.UsosCredentials) {
+			c["umlub"] = config.UsosCredentials{BaseURL: "https://usosapps.umlub.pl", ConsumerKey: "key"}
+		}},
 	} {
-		t.Run("development also disables a university with "+tc.name, func(t *testing.T) {
+		t.Run(tc.name+" credentials fail startup in every environment", func(t *testing.T) {
 			creds := fullUsosCredentials()
-			creds["umlub"] = tc.creds
+			tc.creds(creds)
 
-			clients, err := newUsosClients(testConfig("development", creds))
-			if err != nil {
-				t.Fatalf("expected no error in development, got: %v", err)
-			}
-			if _, ok := clients[UniversityUMLub]; ok {
-				t.Error("expected umlub to be disabled")
+			for _, env := range []string{"development", "staging", "production"} {
+				if _, err := newUsosClients(testConfig(env, creds)); err == nil {
+					t.Errorf("%s: expected an error for %s umlub credentials, got nil", env, tc.name)
+				}
 			}
 		})
 	}
-
-	t.Run("outside development missing credentials fail startup", func(t *testing.T) {
-		creds := fullUsosCredentials()
-		delete(creds, "umcs")
-
-		for _, env := range []string{"production", "staging"} {
-			if _, err := newUsosClients(testConfig(env, creds)); err == nil {
-				t.Errorf("%s: expected an error for missing umcs credentials, got nil", env)
-			}
-		}
-	})
 }
 
 func TestModule_ZeroValueDescribesOperations(t *testing.T) {

@@ -3,7 +3,6 @@ package auth
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
@@ -52,10 +51,6 @@ func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {
 
 		creds, ok := cfg.UsosConfigs[string(u.ID)]
 		if !ok || creds.ConsumerKey == "" || creds.ConsumerSecret == "" {
-			if cfg.Env == "development" {
-				log.Printf("auth: USOS login for %s is disabled: no credentials", u.ID)
-				continue
-			}
 			return nil, fmt.Errorf("auth: missing USOS credentials for %s", u.ID)
 		}
 
