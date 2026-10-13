@@ -9,7 +9,10 @@ require (
 
 require github.com/dghubble/oauth1 v0.7.3
 
-require github.com/go-chi/cors v1.2.2
+require (
+	github.com/go-chi/cors v1.2.2
+	github.com/resend/resend-go/v2 v2.28.0
+)
 
 require github.com/danielgtaylor/huma/v2 v2.39.1
 
