@@ -1,0 +1,195 @@
+components:
+  schemas:
+    ErrorBody:
+      additionalProperties: false
+      properties:
+        error:
+          description: Machine-readable error code
+          examples:
+            - invalid_input
+          type: string
+      required:
+        - error
+      type: object
+    ExchangeInputBody:
+      additionalProperties: false
+      properties:
+        code:
+          description: One-time login code from the auth redirect
+          maxLength: 64
+          minLength: 1
+          type: string
+      required:
+        - code
+      type: object
+    IssuedSession:
+      additionalProperties: false
+      properties:
+        expiresAt:
+          description: timestamp when the session expires
+          format: date-time
+          type: string
+        token:
+          description: token to be used in Authorization header for subsequent requests
+          type: string
+      required:
+        - token
+        - expiresAt
+      type: object
+  securitySchemes:
+    bearer:
+      scheme: bearer
+      type: http
+info:
+  title: Uniezz API
+  version: dev
+openapi: 3.1.0
+paths:
+  /auth/exchange:
+    post:
+      operationId: exchangeLoginCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExchangeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuedSession"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      summary: Exchange a one-time login code for a session
+      tags:
+        - auth
+  /auth/usos/callback:
+    get:
+      description: Called by USOS, not by the apps. Redirects to the app with ?code=<login code> to pass to exchangeLoginCode, or with ?error=<code>. Answers with a JSON error only when the login state is unknown, as there is no app to return to.
+      operationId: finishUsosLogin
+      parameters:
+        - description: Request token, set by USOS
+          explode: false
+          in: query
+          name: oauth_token
+          required: true
+          schema:
+            description: Request token, set by USOS
+            minLength: 1
+            type: string
+        - description: Verifier, set by USOS
+          explode: false
+          in: query
+          name: oauth_verifier
+          required: true
+          schema:
+            description: Verifier, set by USOS
+            minLength: 1
+            type: string
+      responses:
+        "302":
+          description: Found
+          headers:
+            Location:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      summary: Finish a USOS login
+      tags:
+        - auth
+  /auth/usos/start:
+    get:
+      description: Redirects to the university's USOS authorization page. Errors after the platform is known are sent to the app as a redirect with ?error=<code>.
+      operationId: startUsosLogin
+      parameters:
+        - description: University to log in to
+          explode: false
+          in: query
+          name: university
+          required: true
+          schema:
+            description: University to log in to
+            examples:
+              - umcs
+            type: string
+        - description: App to send the browser back to when the login is done
+          explode: false
+          in: query
+          name: platform
+          required: true
+          schema:
+            description: App to send the browser back to when the login is done
+            enum:
+              - web
+              - mobile
+            type: string
+      responses:
+        "302":
+          description: Found
+          headers:
+            Location:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      summary: Start a USOS login
+      tags:
+        - auth
