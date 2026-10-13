@@ -1,0 +1,75 @@
+name: OpenAPI sync
+
+on:
+  push:
+    branches: [main]
+    paths: [api/openapi.yaml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openapi-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync spec to ${{ matrix.repo }}
+    # Skip until the GitHub App is set up, instead of failing every push to main.
+    if: vars.SYNC_APP_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: [uniezz-web, uniezz-mobile]
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: jdx/mise-action@v2
+        with:
+          install_args: "--locked go"
+
+      - name: Mint a token for ${{ matrix.repo }}
+        id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SYNC_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.repo }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout ${{ matrix.repo }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ matrix.repo }}
+          token: ${{ steps.token.outputs.token }}
+          path: client
+
+      - name: Write the spec with the backend version
+        id: spec
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          mkdir -p client/api
+          go run ./cmd/openapi -version "$short_sha" -o client/api/openapi.yaml
+
+      - name: Open or update the sync PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.token.outputs.token }}
+          path: client
+          add-paths: api/openapi.yaml
+          branch: chore/openapi-sync
+          delete-branch: true
+          commit-message: "chore(api): sync OpenAPI spec from backend ${{ steps.spec.outputs.short_sha }}"
+          title: "chore(api): sync OpenAPI spec from backend ${{ steps.spec.outputs.short_sha }}"
+          body: |
+            Spec generated from ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}.
+
+            CI regenerates the types from `api/openapi.yaml` and type-checks against them. A failing typecheck means the backend changed the API in a way this client must adapt to.
