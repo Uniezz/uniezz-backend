@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/server"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
@@ -70,9 +70,11 @@ func main() {
 
 	health.Register(r, &isShuttingDown, dbPool)
 
-	if err := auth.Register(api, dbPool, cfg); err != nil {
-		log.Fatalf("Error setting up auth: %v", err)
+	modules, err := server.New(dbPool, cfg)
+	if err != nil {
+		log.Fatalf("Error setting up modules: %v", err)
 	}
+	modules.Register(api)
 
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	server := &http.Server{
