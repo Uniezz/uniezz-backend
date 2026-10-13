@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
-echo "Running pre-commit checks (fmt & fast lint)..."
+echo "Running pre-commit checks (fmt, fast lint & OpenAPI spec)..."
 
 mise run fmt
 mise run lint
+mise run openapi
 
-echo "All checks passed!" 
+if ! git diff --quiet -- api/openapi.yaml; then
+  echo "api/openapi.yaml was regenerated. Review it, 'git add api/openapi.yaml' and commit again."
+  exit 1
+fi
+
+echo "All checks passed!"
