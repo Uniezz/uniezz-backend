@@ -14,11 +14,14 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const testWebAppURL = "http://localhost:3000"
+const (
+	testWebAppURL   = "https://stg.example.com"
+	testLocalWebURL = "http://localhost:3000"
+)
 
 func newCORSTestRouter() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(corsMiddleware(testWebAppURL))
+	r.Use(corsMiddleware([]string{testWebAppURL, testLocalWebURL}))
 	r.Post("/auth/exchange", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -65,6 +68,7 @@ func TestCORS_RejectsOtherOrigins(t *testing.T) {
 		"https://evil.example",
 		"http://localhost:3001",
 		"https://localhost:3000",
+		"https://stg.example.com.evil.example",
 		testWebAppURL + "/",
 	} {
 		t.Run(origin, func(t *testing.T) {
@@ -72,6 +76,18 @@ func TestCORS_RejectsOtherOrigins(t *testing.T) {
 
 			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
 				t.Errorf("expected no Access-Control-Allow-Origin for %q, got %q", origin, got)
+			}
+		})
+	}
+}
+
+func TestCORS_AllowsEveryListedOrigin(t *testing.T) {
+	for _, origin := range []string{testWebAppURL, testLocalWebURL} {
+		t.Run(origin, func(t *testing.T) {
+			rec := preflight(newCORSTestRouter(), origin, "content-type")
+
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != origin {
+				t.Errorf("expected Access-Control-Allow-Origin %q, got %q", origin, got)
 			}
 		})
 	}
@@ -205,5 +221,66 @@ func TestOpenAPISpec_NoDocsInProduction(t *testing.T) {
 	}
 	if rec := get(r, "/openapi.json"); rec.Code != http.StatusOK {
 		t.Errorf("GET /openapi.json: expected 200 in production, got %d", rec.Code)
+	}
+}
+
+func remoteAddrSeenBy(headers map[string]string) string {
+	var seen string
+	h := realIP(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen = r.RemoteAddr
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "172.18.0.2:41234" // Traefik's address on the Docker network
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	return seen
+}
+
+func TestRealIP(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{
+			name:    "uses X-Real-IP set by Traefik",
+			headers: map[string]string{"X-Real-IP": "203.0.113.7"},
+			want:    "203.0.113.7",
+		},
+		{
+			name:    "accepts IPv6",
+			headers: map[string]string{"X-Real-IP": "2001:db8::1"},
+			want:    "2001:db8::1",
+		},
+		{
+			name:    "keeps the peer address without X-Real-IP",
+			headers: nil,
+			want:    "172.18.0.2:41234",
+		},
+		{
+			name:    "ignores an X-Real-IP that is not an IP",
+			headers: map[string]string{"X-Real-IP": "not-an-ip"},
+			want:    "172.18.0.2:41234",
+		},
+		{
+			// Traefik passes True-Client-IP through from the client, so trusting it would let anyone pick their IP.
+			name:    "ignores True-Client-IP",
+			headers: map[string]string{"True-Client-IP": "198.51.100.1", "X-Real-IP": "203.0.113.7"},
+			want:    "203.0.113.7",
+		},
+		{
+			name:    "ignores X-Forwarded-For",
+			headers: map[string]string{"X-Forwarded-For": "198.51.100.1, 203.0.113.7"},
+			want:    "172.18.0.2:41234",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := remoteAddrSeenBy(tc.headers); got != tc.want {
+				t.Errorf("expected RemoteAddr %q, got %q", tc.want, got)
+			}
+		})
 	}
 }
