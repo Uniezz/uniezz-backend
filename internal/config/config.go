@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 type UsosCredentials struct {
@@ -12,13 +13,14 @@ type UsosCredentials struct {
 }
 
 type Config struct {
-	Port             string
-	Env              string
-	DatabaseURL      string
-	BackendPublicURL string
-	AppWebURL        string
-	AppMobileScheme  string
-	UsosConfigs      map[string]UsosCredentials
+	Port               string
+	Env                string
+	DatabaseURL        string
+	BackendPublicURL   string
+	AppWebURL          string
+	AppMobileScheme    string
+	UsosConfigs        map[string]UsosCredentials
+	CORSAllowedOrigins []string
 }
 
 func Load() (*Config, error) {
@@ -47,6 +49,8 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
 	}
 
+	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
+
 	return cfg, nil
 }
 
@@ -56,4 +60,15 @@ func getEnv(key, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func splitOrigins(s string) []string {
+	var origins []string
+	for origin := range strings.SplitSeq(s, ",") {
+		origin = strings.TrimSuffix(strings.TrimSpace(origin), "/")
+		if origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
 }

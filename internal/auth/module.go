@@ -3,7 +3,6 @@ package auth
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
@@ -11,30 +10,34 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Register(api huma.API, db *pgxpool.Pool, cfg *config.Config) error {
+type Module struct {
+	usos    *usosHandler
+	session *sessionHandler
+}
+
+func New(db *pgxpool.Pool, cfg *config.Config) (Module, error) {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
-		return err
+		return Module{}, err
 	}
 
 	logins := newLogins(NewUserRepository(db), NewSessionRepository(db), newLoginCodeRepository(db), defaultSessionTTL)
 
-	usosH := &usosHandler{
-		usos:              newUsosLogin(clients, newUsosStateRepository(db)),
-		logins:            logins,
-		webRedirectURL:    cfg.AppWebURL + "/auth/done",
-		mobileRedirectURL: cfg.AppMobileScheme,
-	}
-	sessionH := &sessionHandler{logins: logins}
-
-	registerOperations(api, usosH, sessionH)
-	return nil
+	return Module{
+		usos: &usosHandler{
+			usos:              newUsosLogin(clients, newUsosStateRepository(db)),
+			logins:            logins,
+			webRedirectURL:    cfg.AppWebURL + "/auth/done",
+			mobileRedirectURL: cfg.AppMobileScheme,
+		},
+		session: &sessionHandler{logins: logins},
+	}, nil
 }
 
-func registerOperations(api huma.API, usosH *usosHandler, sessionH *sessionHandler) {
-	huma.Register(api, usosStartOperation, usosH.start)
-	huma.Register(api, usosCallbackOperation, usosH.callback)
-	huma.Register(api, exchangeOperation, sessionH.exchange)
+func (m Module) Register(api huma.API) {
+	huma.Register(api, usosStartOperation, m.usos.start)
+	huma.Register(api, usosCallbackOperation, m.usos.callback)
+	huma.Register(api, exchangeOperation, m.session.exchange)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {
@@ -48,10 +51,6 @@ func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {
 
 		creds, ok := cfg.UsosConfigs[string(u.ID)]
 		if !ok || creds.ConsumerKey == "" || creds.ConsumerSecret == "" {
-			if cfg.Env == "development" {
-				log.Printf("auth: USOS login for %s is disabled: no credentials", u.ID)
-				continue
-			}
 			return nil, fmt.Errorf("auth: missing USOS credentials for %s", u.ID)
 		}
 

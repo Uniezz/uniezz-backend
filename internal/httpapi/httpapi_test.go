@@ -104,6 +104,27 @@ func TestNewConfig(t *testing.T) {
 	}
 }
 
+func TestNewConfig_Version(t *testing.T) {
+	prev := Version
+	t.Cleanup(func() { Version = prev })
+
+	if c := NewConfig(&config.Config{}); c.Info.Version != "dev" {
+		t.Errorf("expected info.version %q by default, got %q", "dev", c.Info.Version)
+	}
+
+	Version = "6c4e8a0"
+	if c := NewConfig(&config.Config{}); c.Info.Version != "6c4e8a0" {
+		t.Errorf("expected info.version from Version, got %q", c.Info.Version)
+	}
+}
+
+func TestNewConfig_NoServersWithoutPublicURL(t *testing.T) {
+	// The committed spec is built without config, so it must not carry a bogus server.
+	if c := NewConfig(&config.Config{}); len(c.Servers) != 0 {
+		t.Errorf("expected no servers without BACKEND_PUBLIC_URL, got %+v", c.Servers)
+	}
+}
+
 func TestSuccessHasNoSchemaLinks(t *testing.T) {
 	rec := newTestAPI(t, nil).Post("/echo?kind=a", map[string]any{"name": "jan"})
 

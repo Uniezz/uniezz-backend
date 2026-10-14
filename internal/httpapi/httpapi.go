@@ -13,9 +13,13 @@ import (
 
 const BearerAuth = "bearer"
 
+var Version = "dev"
+
 func NewConfig(cfg *config.Config) huma.Config {
-	c := huma.DefaultConfig("Uniezz API", "1.0.0")
-	c.Servers = []*huma.Server{{URL: cfg.BackendPublicURL}}
+	c := huma.DefaultConfig("Uniezz API", Version)
+	if cfg.BackendPublicURL != "" {
+		c.Servers = []*huma.Server{{URL: cfg.BackendPublicURL}}
+	}
 	c.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
 		BearerAuth: {Type: "http", Scheme: "bearer"},
 	}

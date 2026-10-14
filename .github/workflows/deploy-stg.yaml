@@ -1,0 +1,95 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: ["release/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-stg
+  cancel-in-progress: false
+
+env:
+  API_URL: https://api.stg.uniezz.pl
+  DEPLOY_DIR: uniezz-stg
+
+jobs:
+  test:
+    name: Test
+    uses: ./.github/workflows/ci.yaml
+
+  image:
+    name: Image
+    needs: test
+    uses: ./.github/workflows/image.yaml
+    permissions:
+      contents: read
+      packages: write
+
+  deploy:
+    name: Migrate and deploy
+    needs: image
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://api.stg.uniezz.pl/docs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Go and goose
+        uses: jdx/mise-action@v2
+        with:
+          install_args: "--locked go go:github.com/pressly/goose/v3/cmd/goose"
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
+      - name: Run migrations
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
+          GOOSE_MIGRATION_DIR: migrations
+        run: doppler run -- goose up
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          echo "SSH_TARGET=${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" >> "$GITHUB_ENV"
+
+      - name: Upload compose file and env
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
+        run: |
+          ssh "$SSH_TARGET" "mkdir -p $DEPLOY_DIR"
+          scp deploy/stg/compose.yaml "$SSH_TARGET:$DEPLOY_DIR/compose.yaml"
+          doppler secrets download --no-file --format env \
+            | ssh "$SSH_TARGET" "umask 077 && cat > $DEPLOY_DIR/.env"
+
+      - name: Start the new version
+        run: |
+          ssh "$SSH_TARGET" bash -s -- "$DEPLOY_DIR" "$GITHUB_SHA" <<'EOF'
+          set -euo pipefail
+          cd "$1"
+          export IMAGE_TAG="$2"
+          export DOCKER_GID="$(getent group docker | cut -d: -f3)"
+          docker compose pull
+          docker compose up -d --wait --wait-timeout 120 --remove-orphans
+          EOF
+
+      - name: Smoke test
+        run: |
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_URL/healthz/ready"
+          version="$(curl -fsS "$API_URL/openapi.json" | jq -r .info.version)"
+          if [ "$version" != "${GITHUB_SHA::7}" ]; then
+            echo "::error::Expected API version ${GITHUB_SHA::7}, got $version"
+            exit 1
+          fi

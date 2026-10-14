@@ -7,18 +7,22 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/health"
+	"github.com/Uniezz/uniezz-backend/internal/server"
 	"github.com/go-chi/chi/v5"
 )
 
-const testWebAppURL = "http://localhost:3000"
+const (
+	testWebAppURL   = "https://stg.example.com"
+	testLocalWebURL = "http://localhost:3000"
+)
 
 func newCORSTestRouter() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(corsMiddleware(testWebAppURL))
+	r.Use(corsMiddleware([]string{testWebAppURL, testLocalWebURL}))
 	r.Post("/auth/exchange", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -65,6 +69,7 @@ func TestCORS_RejectsOtherOrigins(t *testing.T) {
 		"https://evil.example",
 		"http://localhost:3001",
 		"https://localhost:3000",
+		"https://stg.example.com.evil.example",
 		testWebAppURL + "/",
 	} {
 		t.Run(origin, func(t *testing.T) {
@@ -72,6 +77,18 @@ func TestCORS_RejectsOtherOrigins(t *testing.T) {
 
 			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
 				t.Errorf("expected no Access-Control-Allow-Origin for %q, got %q", origin, got)
+			}
+		})
+	}
+}
+
+func TestCORS_AllowsEveryListedOrigin(t *testing.T) {
+	for _, origin := range []string{testWebAppURL, testLocalWebURL} {
+		t.Run(origin, func(t *testing.T) {
+			rec := preflight(newCORSTestRouter(), origin, "content-type")
+
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != origin {
+				t.Errorf("expected Access-Control-Allow-Origin %q, got %q", origin, got)
 			}
 		})
 	}
@@ -130,11 +147,8 @@ func newSpecTestRouter(t *testing.T, env string) *chi.Mux {
 	cfg := &config.Config{Env: env, BackendPublicURL: "https://api.test", AppWebURL: testWebAppURL}
 	r, api := newRouter(cfg)
 	health.Register(r, &atomic.Bool{}, nil)
-	// No USOS credentials are needed in development; outside it Register would fail.
-	cfg.Env = "development"
-	if err := auth.Register(api, nil, cfg); err != nil {
-		t.Fatalf("failed to register auth: %v", err)
-	}
+	server := server.Modules{}
+	server.Register(api)
 	return r
 }
 
@@ -209,4 +223,128 @@ func TestOpenAPISpec_NoDocsInProduction(t *testing.T) {
 	if rec := get(r, "/openapi.json"); rec.Code != http.StatusOK {
 		t.Errorf("GET /openapi.json: expected 200 in production, got %d", rec.Code)
 	}
+}
+
+func remoteAddrSeenBy(headers map[string]string) string {
+	var seen string
+	h := realIP(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen = r.RemoteAddr
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "172.18.0.2:41234" // Traefik's address on the Docker network
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	return seen
+}
+
+func TestRealIP(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{
+			name:    "uses X-Real-IP set by Traefik",
+			headers: map[string]string{"X-Real-IP": "203.0.113.7"},
+			want:    "203.0.113.7",
+		},
+		{
+			name:    "accepts IPv6",
+			headers: map[string]string{"X-Real-IP": "2001:db8::1"},
+			want:    "2001:db8::1",
+		},
+		{
+			name:    "keeps the peer address without X-Real-IP",
+			headers: nil,
+			want:    "172.18.0.2:41234",
+		},
+		{
+			name:    "ignores an X-Real-IP that is not an IP",
+			headers: map[string]string{"X-Real-IP": "not-an-ip"},
+			want:    "172.18.0.2:41234",
+		},
+		{
+			// Traefik passes True-Client-IP through from the client, so trusting it would let anyone pick their IP.
+			name:    "ignores True-Client-IP",
+			headers: map[string]string{"True-Client-IP": "198.51.100.1", "X-Real-IP": "203.0.113.7"},
+			want:    "203.0.113.7",
+		},
+		{
+			name:    "ignores X-Forwarded-For",
+			headers: map[string]string{"X-Forwarded-For": "198.51.100.1, 203.0.113.7"},
+			want:    "172.18.0.2:41234",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := remoteAddrSeenBy(tc.headers); got != tc.want {
+				t.Errorf("expected RemoteAddr %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestReadyURL(t *testing.T) {
+	for _, tc := range []struct{ port, want string }{
+		{"", "http://127.0.0.1:8080/healthz/ready"},
+		{"9090", "http://127.0.0.1:9090/healthz/ready"},
+	} {
+		if got := readyURL(tc.port); got != tc.want {
+			t.Errorf("readyURL(%q): expected %q, got %q", tc.port, tc.want, got)
+		}
+	}
+}
+
+func TestCheckHealth(t *testing.T) {
+	serve := func(status int) string {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+
+	t.Run("passes on 200", func(t *testing.T) {
+		if err := checkHealth(serve(http.StatusOK)); err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("fails on 503 while shutting down or without a database", func(t *testing.T) {
+		if err := checkHealth(serve(http.StatusServiceUnavailable)); err == nil {
+			t.Error("expected an error for 503, got nil")
+		}
+	})
+
+	t.Run("fails when nothing listens", func(t *testing.T) {
+		// Start and close a server so its port is known to refuse connections.
+		srv := httptest.NewServer(http.NotFoundHandler())
+		url := srv.URL
+		srv.Close()
+
+		if err := checkHealth(url); err == nil {
+			t.Error("expected an error when the server is down, got nil")
+		}
+	})
+
+	t.Run("fails on a hanging server instead of waiting forever", func(t *testing.T) {
+		release := make(chan struct{})
+		srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+		}))
+		t.Cleanup(func() { close(release); srv.Close() })
+
+		start := time.Now()
+		if err := checkHealth(srv.URL); err == nil {
+			t.Error("expected a timeout error, got nil")
+		}
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Errorf("expected checkHealth to time out quickly, took %s", elapsed)
+		}
+	})
 }
