@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/health"
@@ -283,4 +284,67 @@ func TestRealIP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReadyURL(t *testing.T) {
+	for _, tc := range []struct{ port, want string }{
+		{"", "http://127.0.0.1:8080/healthz/ready"},
+		{"9090", "http://127.0.0.1:9090/healthz/ready"},
+	} {
+		if got := readyURL(tc.port); got != tc.want {
+			t.Errorf("readyURL(%q): expected %q, got %q", tc.port, tc.want, got)
+		}
+	}
+}
+
+func TestCheckHealth(t *testing.T) {
+	serve := func(status int) string {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+
+	t.Run("passes on 200", func(t *testing.T) {
+		if err := checkHealth(serve(http.StatusOK)); err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("fails on 503 while shutting down or without a database", func(t *testing.T) {
+		if err := checkHealth(serve(http.StatusServiceUnavailable)); err == nil {
+			t.Error("expected an error for 503, got nil")
+		}
+	})
+
+	t.Run("fails when nothing listens", func(t *testing.T) {
+		// Start and close a server so its port is known to refuse connections.
+		srv := httptest.NewServer(http.NotFoundHandler())
+		url := srv.URL
+		srv.Close()
+
+		if err := checkHealth(url); err == nil {
+			t.Error("expected an error when the server is down, got nil")
+		}
+	})
+
+	t.Run("fails on a hanging server instead of waiting forever", func(t *testing.T) {
+		release := make(chan struct{})
+		srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+		}))
+		t.Cleanup(func() { close(release); srv.Close() })
+
+		start := time.Now()
+		if err := checkHealth(srv.URL); err == nil {
+			t.Error("expected a timeout error, got nil")
+		}
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Errorf("expected checkHealth to time out quickly, took %s", elapsed)
+		}
+	})
 }

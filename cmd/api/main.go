@@ -1,11 +1,15 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync/atomic"
 	"syscall"
@@ -48,6 +52,24 @@ func realIP(next http.Handler) http.Handler {
 	})
 }
 
+func readyURL(port string) string {
+	return "http://" + net.JoinHostPort("127.0.0.1", cmp.Or(port, "8080")) + "/healthz/ready"
+}
+
+func checkHealth(url string) error {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", url, resp.Status)
+	}
+	return nil
+}
+
 func newRouter(cfg *config.Config) (*chi.Mux, huma.API) {
 	r := chi.NewRouter()
 	r.Use(realIP)
@@ -59,6 +81,16 @@ func newRouter(cfg *config.Config) (*chi.Mux, huma.API) {
 }
 
 func main() {
+	healthcheck := flag.Bool("healthcheck", false, "check that the running server is ready and exit")
+	flag.Parse()
+
+	if *healthcheck {
+		if err := checkHealth(readyURL(os.Getenv("PORT"))); err != nil {
+			log.Fatalf("healthcheck: %v", err)
+		}
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Error loading configuration: %v", err)
