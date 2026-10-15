@@ -12,7 +12,7 @@ x-logging: &logging
 
 services:
   socket-proxy:
-    image: wollomatic/socket-proxy:1.13
+    image: wollomatic/socket-proxy:1.13.1
     restart: unless-stopped
     logging: *logging
     command:
