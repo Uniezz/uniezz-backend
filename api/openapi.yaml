@@ -36,6 +36,20 @@ components:
         - token
         - expiresAt
       type: object
+    UniversityDTO:
+      additionalProperties: false
+      properties:
+        authMethod:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - id
+        - name
+        - authMethod
+      type: object
   securitySchemes:
     bearer:
       scheme: bearer
@@ -88,6 +102,27 @@ paths:
       summary: Exchange a one-time login code for a session
       tags:
         - auth
+  /auth/universities:
+    get:
+      operationId: get-universities
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/UniversityDTO"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Error
+      summary: Get the list of supported universities
   /auth/usos/callback:
     get:
       description: Called by USOS, not by the apps. Redirects to the app with ?code=<login code> to pass to exchangeLoginCode, or with ?error=<code>. Answers with a JSON error only when the login state is unknown, as there is no app to return to.

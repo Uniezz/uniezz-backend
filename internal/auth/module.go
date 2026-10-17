@@ -38,6 +38,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, usosStartOperation, m.usos.start)
 	huma.Register(api, usosCallbackOperation, m.usos.callback)
 	huma.Register(api, exchangeOperation, m.session.exchange)
+	huma.Register(api, universitiesOperation, m.getUniversities)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {
