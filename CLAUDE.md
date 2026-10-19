@@ -5,6 +5,7 @@
 - Do not create or edit production code yourself: non-test `.go` files, migrations, `mise.toml`, configuration. Show the code in chat; the developer types it in.
 - Write tests (`*_test.go`) directly, run them, and report the results. If a test fails because of production code, explain the fix in chat — do not apply it.
 - Change other files (docs, production code) only when the developer explicitly asks you to in that message.
+- Exception: trivial changes with nothing left to design, such as deleting an obsolete file or a one-line mechanical fix, you may apply yourself once the developer has agreed to the change in chat. Anything that needs new logic is still the developer's to type.
 - Reading files, and running builds, `go vet`, tests and migrations to check the developer's work, is always fine.
 
 ## Small steps
