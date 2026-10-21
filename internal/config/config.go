@@ -19,6 +19,8 @@ type Config struct {
 	AppWebURL        string
 	AppMobileScheme  string
 	UsosConfigs      map[string]UsosCredentials
+	ResendAPIKey     string
+	MailFrom         string
 }
 
 func Load() (*Config, error) {
@@ -29,6 +31,8 @@ func Load() (*Config, error) {
 		BackendPublicURL: getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
 		AppWebURL:        getEnv("APP_WEB_URL", "http://localhost:3000"),
 		AppMobileScheme:  getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
+		ResendAPIKey:     os.Getenv("RESEND_API_KEY"),
+        MailFrom:         getEnv("MAIL_FROM", "no-reply@uniezz.pl")
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -46,6 +50,10 @@ func Load() (*Config, error) {
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
 	}
+
+    if cfg.ResendAPIKey == "" {
+        return nil, fmt.Errorf("RESEND_API_KEY environment variable is required")
+    }
 
 	return cfg, nil
 }

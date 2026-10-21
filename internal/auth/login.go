@@ -17,6 +17,12 @@ type logins struct {
 	sessionTTL time.Duration
 }
 
+type otpSender interface {
+    SendOTP(ctx context.Context, to, code string) error
+}
+
+var _ otpSender = (*mail.Sender)(nil)
+
 func newLogins(users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
 	return &logins{
 		users:      users,

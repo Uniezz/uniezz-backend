@@ -78,6 +78,8 @@ func main() {
 
 	serverErrors := make(chan error, 1)
 
+	mailSender := mail.NewResendSender(cfg.ResendAPIKey, cfg.MailFrom)
+
 	go func() {
 		log.Printf("Starting server on %s", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
