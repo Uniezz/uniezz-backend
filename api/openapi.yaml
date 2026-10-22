@@ -36,6 +36,38 @@ components:
         - token
         - expiresAt
       type: object
+    UniversityDTO:
+      additionalProperties: false
+      properties:
+        authMethod:
+          description: Authentication method used by the university
+          examples:
+            - USOS
+          type: string
+        domains:
+          description: Allowed student email domains for OTP authentication
+          examples:
+            - - student.kul.pl
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        id:
+          description: Unique identifier of the university
+          examples:
+            - umcs
+          type: string
+        name:
+          description: Display name of the university
+          examples:
+            - Uniwersytet Marii Curie-Skłodowskiej
+          type: string
+      required:
+        - id
+        - name
+        - authMethod
+      type: object
   securitySchemes:
     bearer:
       scheme: bearer
@@ -86,6 +118,30 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
           description: Internal Server Error
       summary: Exchange a one-time login code for a session
+      tags:
+        - auth
+  /auth/universities:
+    get:
+      description: Lists every university the app supports, in display order, with how its students log in.
+      operationId: getUniversities
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/UniversityDTO"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Error
+      summary: Get the list of supported universities
       tags:
         - auth
   /auth/usos/callback:
