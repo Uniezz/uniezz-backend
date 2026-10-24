@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1
+
+# Local development image used by compose.yaml: the Go toolchain plus goose.
+# The source is bind-mounted at /src, not copied, so code edits need no rebuild.
+# Keep the versions in sync with mise.toml.
+FROM golang:1.27.1-alpine
+
+ARG GOOSE_VERSION=v3.28.0
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
+
+WORKDIR /src

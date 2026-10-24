@@ -1,3 +1,16 @@
+# Local development stack, started by `mise run dev`. Staging uses deploy/stg/compose.yaml.
+#
+# Order: postgres (healthy) -> migrate (goose up, must exit 0) -> api.
+# Secrets come from the shell environment (Doppler) or from .env, which Compose reads itself.
+
+x-dev-image: &dev-image
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+
+# The containers reach PostgreSQL by its service name, not localhost.
+x-database-url: &database-url postgres://postgres:postgrespassword@postgres:5432/app_dev?sslmode=disable
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -18,6 +31,63 @@ services:
       retries: 5
       start_period: 5s
 
+  migrate:
+    <<: *dev-image
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: *database-url
+      GOOSE_MIGRATION_DIR: /src/migrations
+    volumes:
+      - ./migrations:/src/migrations:ro
+    command: ["goose", "up"]
+
+  api:
+    <<: *dev-image
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Build to a binary and exec it, so the API is PID 1 and receives SIGTERM for its graceful shutdown.
+    # -buildvcs=false: the image has no git to stamp VCS info from the mounted .git.
+    command: ["sh", "-c", "go build -buildvcs=false -o /tmp/api ./cmd/api && exec /tmp/api"]
+    environment:
+      DATABASE_URL: *database-url
+      PORT: "8080"
+      ENV: development
+      # Empty values fall back to the defaults in internal/config.
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      APP_WEB_URL: ${APP_WEB_URL:-}
+      APP_MOBILE_SCHEME: ${APP_MOBILE_SCHEME:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      UMCS_USOS_CONSUMER_KEY: ${UMCS_USOS_CONSUMER_KEY:-}
+      UMCS_USOS_CONSUMER_SECRET: ${UMCS_USOS_CONSUMER_SECRET:-}
+      UMLUB_USOS_CONSUMER_KEY: ${UMLUB_USOS_CONSUMER_KEY:-}
+      UMLUB_USOS_CONSUMER_SECRET: ${UMLUB_USOS_CONSUMER_SECRET:-}
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/src:ro
+      - gomod:/go/pkg/mod
+      - gobuild:/root/.cache/go-build
+    # The app drains for 5s, then waits up to 15s for requests; Docker's default 10s would cut it off.
+    stop_grace_period: 30s
+    # `docker compose up --watch` restarts the container on source changes; the command rebuilds from the cache.
+    develop:
+      watch:
+        - action: restart
+          path: ./cmd
+          ignore: ["**/*_test.go"]
+        - action: restart
+          path: ./internal
+          ignore: ["**/*_test.go"]
+        - action: restart
+          path: ./go.mod
+        - action: restart
+          path: ./go.sum
+
 volumes:
   pgdata:
-
+  gomod:
+  gobuild:
