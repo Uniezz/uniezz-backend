@@ -66,6 +66,16 @@ func TestLoad_CORSAllowedOrigins(t *testing.T) {
 	}
 }
 
+func TestLoad_AWSPublicEndpoint(t *testing.T) {
+	cfg := loadWith(t, map[string]string{
+		"AWS_PUBLIC_ENDPOINT": "http://localhost:9000",
+	})
+
+	if cfg.AWSPublicEndpoint != "http://localhost:9000" {
+		t.Errorf("expected public endpoint %q, got %q", "http://localhost:9000", cfg.AWSPublicEndpoint)
+	}
+}
+
 func TestLoad_APPWebURLStaysSingle(t *testing.T) {
 	// APP_WEB_URL is also the post-login redirect target, so a CORS list must not leak into it.
 	cfg := loadWith(t, map[string]string{

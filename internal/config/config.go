@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -18,42 +19,63 @@ type UsosCredentials struct {
 }
 
 type Config struct {
-	Port               string
-	Env                string
-	DatabaseURL        string
-	BackendPublicURL   string
-	AppWebURL          string
-	AppMobileScheme    string
-	UsosConfigs        map[string]UsosCredentials
-	CORSAllowedOrigins []string
-	ResendAPIKey       string
-	MailFrom           string
-	OTPEmailTemplateID string
-	OTPHashKey         string
-	OTPTestEmails      []string
-
-	ServiceName       string
-	SentryDSN         string
-	SentryEnvironment string
-	SentryRelease     string
+	Port                string
+	Env                 string
+	DatabaseURL         string
+	BackendPublicURL    string
+	AppWebURL           string
+	AppMobileScheme     string
+	UsosConfigs         map[string]UsosCredentials
+	CORSAllowedOrigins  []string
+	ResendAPIKey        string
+	MailFrom            string
+	OTPEmailTemplateID  string
+	OTPHashKey          string
+	OTPTestEmails       []string
+	ServiceName         string
+	SentryDSN           string
+	SentryEnvironment   string
+	SentryRelease       string
+	AWSRegion           string
+	AWSS3Bucket         string
+	AWSAccessKeyID      string
+	AWSSecretAccessKey  string
+	AWSEndpoint         string
+	AWSPublicEndpoint   string
+	AWSS3ForcePathStyle bool
 }
 
 func Load() (*Config, error) {
+	forcePathStyle, err := strconv.ParseBool(
+		getEnv("AWS_S3_FORCE_PATH_STYLE", "false"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"invalid AWS_S3_FORCE_PATH_STYLE: %w", err,
+		)
+	}
 	cfg := &Config{
-		Port:               getEnv("PORT", "8080"),
-		Env:                getEnv("ENV", "development"),
-		DatabaseURL:        os.Getenv("DATABASE_URL"),
-		BackendPublicURL:   getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
-		AppWebURL:          getEnv("APP_WEB_URL", "http://localhost:3000"),
-		AppMobileScheme:    getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
-		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
-		MailFrom:           getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
-		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
-		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
-		ServiceName:        getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
-		SentryDSN:          os.Getenv("SENTRY_DSN"),
-		SentryEnvironment:  os.Getenv("SENTRY_ENVIRONMENT"),
-		SentryRelease:      os.Getenv("SENTRY_RELEASE"),
+		Port:                getEnv("PORT", "8080"),
+		Env:                 getEnv("ENV", "development"),
+		DatabaseURL:         os.Getenv("DATABASE_URL"),
+		BackendPublicURL:    getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
+		AppWebURL:           getEnv("APP_WEB_URL", "http://localhost:3000"),
+		AppMobileScheme:     getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
+		ResendAPIKey:        os.Getenv("RESEND_API_KEY"),
+		MailFrom:            getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
+		OTPEmailTemplateID:  os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
+		OTPHashKey:          os.Getenv("OTP_HASH_KEY"),
+		ServiceName:         getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
+		SentryDSN:           os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:   os.Getenv("SENTRY_ENVIRONMENT"),
+		SentryRelease:       os.Getenv("SENTRY_RELEASE"),
+		AWSRegion:           getEnv("AWS_REGION", "us-east-1"),
+		AWSS3Bucket:         getEnv("AWS_S3_BUCKET", "uniezz-media"),
+		AWSAccessKeyID:      os.Getenv("AWS_ACCESS_KEY_ID"),
+		AWSSecretAccessKey:  os.Getenv("AWS_SECRET_ACCESS_KEY"),
+		AWSEndpoint:         os.Getenv("AWS_ENDPOINT"),
+		AWSPublicEndpoint:   os.Getenv("AWS_PUBLIC_ENDPOINT"),
+		AWSS3ForcePathStyle: forcePathStyle,
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",

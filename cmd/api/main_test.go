@@ -146,7 +146,7 @@ func newSpecTestRouter(t *testing.T, env string) *chi.Mux {
 
 	cfg := &config.Config{Env: env, BackendPublicURL: "https://api.test", AppWebURL: testWebAppURL}
 	r, api := newRouter(cfg)
-	health.Register(r, &atomic.Bool{}, nil)
+	health.Register(r, &atomic.Bool{}, nil, nil)
 	server := server.Modules{}
 	server.Register(api)
 	return r

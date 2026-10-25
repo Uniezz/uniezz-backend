@@ -19,6 +19,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/server"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/danielgtaylor/huma/v2"
@@ -143,12 +144,17 @@ func run(cfg *config.Config) error {
 	}
 	defer dbPool.Close()
 
+	mediaStorage, err := media.New(initCtx, cfg)
+	if err != nil {
+		return fmt.Errorf("connect to media storage: %w", err)
+	}
+
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	r, api := newRouter(cfg)
 
-	health.Register(r, &isShuttingDown, dbPool)
+	health.Register(r, &isShuttingDown, dbPool, mediaStorage)
 
 	modules, err := server.New(dbPool, cfg)
 	if err != nil {

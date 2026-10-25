@@ -13,10 +13,19 @@ import (
 type Handler struct {
 	isShuttingDown *atomic.Bool
 	db             *pgxpool.Pool
+	media          interface {
+		CheckBucket(context.Context) error
+	}
 }
 
-func newHandler(isShuttingDown *atomic.Bool, db *pgxpool.Pool) *Handler {
-	return &Handler{isShuttingDown: isShuttingDown, db: db}
+func newHandler(isShuttingDown *atomic.Bool, db *pgxpool.Pool,
+	media interface {
+		CheckBucket(context.Context) error
+	},
+) *Handler {
+	return &Handler{
+		isShuttingDown: isShuttingDown, db: db, media: media,
+	}
 }
 
 func (h *Handler) registerRoutes(r chi.Router) {
@@ -40,6 +49,11 @@ func (h *Handler) healthReadyCheck(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.db.Ping(ctx); err != nil {
 		http.Error(w, "Database connection failed", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.media.CheckBucket(ctx); err != nil {
+		http.Error(w, "Media storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
