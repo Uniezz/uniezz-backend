@@ -2,8 +2,10 @@
 DROP INDEX idx_otp_requests_lookup;
 ALTER TABLE otp_requests DROP COLUMN ip;
 ALTER TABLE otp_requests DROP COLUMN cancelled_at;
+ALTER INDEX idx_otp_requests_email_rate_limit RENAME TO idx_otp_requests_lookup;
 
 -- +goose Down
+ALTER INDEX idx_otp_requests_lookup RENAME TO idx_otp_requests_email_rate_limit;
 ALTER TABLE otp_requests ADD COLUMN cancelled_at TIMESTAMPTZ;
 ALTER TABLE otp_requests ADD COLUMN ip INET;
 
