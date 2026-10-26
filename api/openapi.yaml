@@ -36,6 +36,53 @@ components:
         - token
         - expiresAt
       type: object
+    OtpRequestInputBody:
+      additionalProperties: false
+      properties:
+        email:
+          description: University email address
+          examples:
+            - jan.kowalski@student.kul.pl
+          maxLength: 255
+          minLength: 3
+          type: string
+        university:
+          description: University to log in to
+          examples:
+            - kul
+          minLength: 1
+          type: string
+      required:
+        - university
+        - email
+      type: object
+    OtpVerifyInputBody:
+      additionalProperties: false
+      properties:
+        code:
+          description: Code from the email
+          examples:
+            - "123456"
+          pattern: ^[0-9]{6}$
+          type: string
+        email:
+          description: Email the code was sent to
+          examples:
+            - jan.kowalski@student.kul.pl
+          maxLength: 255
+          minLength: 3
+          type: string
+        university:
+          description: University to log in to
+          examples:
+            - kul
+          minLength: 1
+          type: string
+      required:
+        - university
+        - email
+        - code
+      type: object
     UniversityDTO:
       additionalProperties: false
       properties:
@@ -118,6 +165,96 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
           description: Internal Server Error
       summary: Exchange a one-time login code for a session
+      tags:
+        - auth
+  /auth/otp/request:
+    post:
+      description: Sends a 6-digit code to the university email. The code is valid for 10 minutes and a new request replaces the previous code.
+      operationId: requestOtpCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpRequestInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Gateway
+      summary: Email a one-time login code
+      tags:
+        - auth
+  /auth/otp/verify:
+    post:
+      description: Returns a session. A code allows 5 attempts; after that, or after it expires, request a new one.
+      operationId: verifyOtpCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpVerifyInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuedSession"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      summary: Log in with an emailed code
       tags:
         - auth
   /auth/universities:

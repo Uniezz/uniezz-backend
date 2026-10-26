@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,6 +15,7 @@ type Module struct {
 	usos         *usosHandler
 	session      *sessionHandler
 	universities *universitiesHandler
+	otp          *otpHandler
 }
 
 func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error) {
@@ -33,6 +35,15 @@ func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error)
 		},
 		session:      &sessionHandler{logins: logins},
 		universities: &universitiesHandler{},
+		otp: &otpHandler{
+			otp: newOTPLogin(
+				newOTPRequestRepository(db),
+				sender,
+				ratelimit.New(db, "otp-send", otpSendLimit, otpSendWindow),
+				newOTPHasher([]byte(cfg.OTPHashKey)),
+			),
+			logins: logins,
+		},
 	}, nil
 }
 
@@ -41,6 +52,8 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, usosCallbackOperation, m.usos.callback)
 	huma.Register(api, exchangeOperation, m.session.exchange)
 	huma.Register(api, universitiesOperation, m.universities.list)
+	huma.Register(api, otpRequestOperation, m.otp.request)
+	huma.Register(api, otpVerifyOperation, m.otp.verify)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {
