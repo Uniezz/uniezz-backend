@@ -1,0 +1,94 @@
+package mail
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/resend/resend-go/v2"
+)
+
+type fakeClient struct {
+	calls int
+	ctx   context.Context
+	got   *resend.SendEmailRequest
+	err   error
+}
+
+func (f *fakeClient) SendWithContext(ctx context.Context, p *resend.SendEmailRequest) (*resend.SendEmailResponse, error) {
+	f.calls++
+	f.ctx, f.got = ctx, p
+	return &resend.SendEmailResponse{}, f.err
+}
+
+func TestSendOTP_BuildsRequest(t *testing.T) {
+	fc := &fakeClient{}
+	s := NewSender(fc, "from@gmail.com")
+
+	if err := s.SendOTP(context.Background(), "u@gmail.com", "123456"); err != nil {
+		t.Fatal(err)
+	}
+	if fc.calls != 1 {
+		t.Fatalf("want 1 attempt, got %d", fc.calls)
+	}
+	if fc.got.From != "from@gmail.com" || len(fc.got.To) != 1 || fc.got.To[0] != "u@gmail.com" {
+		t.Fatalf("bad addresses: %+v", fc.got)
+	}
+	if fc.got.Subject == "" || !strings.Contains(fc.got.Html, "123456") {
+		t.Fatalf("bad subject/body: %+v", fc.got)
+	}
+}
+
+func TestSendOTP_EscapesHTML(t *testing.T) {
+	fc := &fakeClient{}
+	s := NewSender(fc, "from@gmail.com")
+
+	_ = s.SendOTP(context.Background(), "u@gmail.com", "<b>&")
+
+	if strings.Contains(fc.got.Html, "<b>&") || !strings.Contains(fc.got.Html, "&lt;b&gt;&amp;") {
+		t.Fatalf("code not escaped: %s", fc.got.Html)
+	}
+}
+
+type ctxKey struct{}
+
+func TestSendOTP_ForwardsContext(t *testing.T) {
+	fc := &fakeClient{}
+	s := NewSender(fc, "from@gmail.com")
+	ctx := context.WithValue(context.Background(), ctxKey{}, "marker")
+
+	_ = s.SendOTP(ctx, "u@gmail.com", "123456")
+
+	if fc.ctx != ctx {
+		t.Fatal("context was not forwarded as is")
+	}
+}
+
+func TestSendOTP_ContextErrorsStayInspectable(t *testing.T) {
+	for _, want := range []error{context.Canceled, context.DeadlineExceeded} {
+		s := NewSender(&fakeClient{err: want}, "from@gmail.com")
+		err := s.SendOTP(context.Background(), "u@gmail.com", "123456")
+		if !errors.Is(err, want) {
+			t.Fatalf("want errors.Is(%v), got %v", want, err)
+		}
+	}
+}
+
+func TestSendOTP_WrapsProviderError(t *testing.T) {
+	boom := errors.New("boom")
+	fc := &fakeClient{err: boom}
+	s := NewSender(fc, "from@gmail.com")
+
+	err := s.SendOTP(context.Background(), "u@gmail.com", "123456")
+
+	if !errors.Is(err, boom) {
+		t.Fatalf("error not wrapped: %v", err)
+	}
+	if strings.Contains(err.Error(), "u@gmail.com") {
+		t.Fatal("recipient leaked into error")
+	}
+	if fc.calls != 1 {
+		t.Fatalf("no retries expected, got %d calls", fc.calls)
+	}
+}
