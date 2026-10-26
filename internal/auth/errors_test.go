@@ -18,6 +18,7 @@ func TestErrorResponse(t *testing.T) {
 		{ErrUnknownUniversity, http.StatusBadRequest, "unknown_university"},
 		{ErrWrongAuthMethod, http.StatusBadRequest, "wrong_auth_method"},
 		{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
+		{ErrEmailNotAllowed, http.StatusBadRequest, "email_not_allowed"},
 		{ErrStateNotFound, http.StatusBadRequest, "login_expired"},
 		{ErrInvalidCode, http.StatusUnauthorized, "invalid_code"},
 		{ErrInvalidTokenString, http.StatusUnauthorized, "unauthorized"},

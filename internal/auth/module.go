@@ -2,11 +2,9 @@
 package auth
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
-	"github.com/Uniezz/uniezz-backend/internal/mail"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,12 +14,6 @@ type Module struct {
 	usos         *usosHandler
 	session      *sessionHandler
 	universities *universitiesHandler
-}
-
-var _ otpSender = (*mail.Sender)(nil)
-
-type otpSender interface {
-	SendOTP(ctx context.Context, to, code string) error
 }
 
 func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error) {

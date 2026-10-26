@@ -11,6 +11,7 @@ var (
 	ErrUnknownUniversity = errors.New("unknown university")
 	ErrWrongAuthMethod   = errors.New("university does not support this authentication method")
 	ErrInvalidInput      = errors.New("invalid input")
+	ErrEmailNotAllowed   = errors.New("email domain not allowed for this university")
 	ErrStateNotFound     = errors.New("login state not found or expired")
 	ErrInvalidCode       = errors.New("invalid or expired code")
 	ErrNotStudent        = errors.New("not an active student")
@@ -33,6 +34,7 @@ var errorResponses = []struct {
 	{ErrUnknownUniversity, http.StatusBadRequest, "unknown_university"},
 	{ErrWrongAuthMethod, http.StatusBadRequest, "wrong_auth_method"},
 	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
+	{ErrEmailNotAllowed, http.StatusBadRequest, "email_not_allowed"},
 	{ErrStateNotFound, http.StatusBadRequest, "login_expired"},
 	{ErrInvalidCode, http.StatusUnauthorized, "invalid_code"},
 	{ErrInvalidTokenString, http.StatusUnauthorized, "unauthorized"},
