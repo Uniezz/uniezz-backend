@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -57,5 +58,58 @@ func TestGetUniversityByID_NotFound(t *testing.T) {
 
 	if !errors.Is(err, ErrUnknownUniversity) {
 		t.Errorf("expected error to be ErrUnknownUniversity, got %v", err)
+	}
+}
+
+func TestUniversity_AcceptsEmail(t *testing.T) {
+	kul, err := GetUniversityByID(UniversityKUL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		email string
+		want  bool
+	}{
+		{"jan@student.kul.pl", true},
+		{"  Jan.Kowalski@Student.KUL.pl ", true},
+		{"jan@kul.pl", false},
+		{"jan@x.student.kul.pl", false},
+		{"jan@student.kul.pl.evil.com", false},
+		{"jan@evilstudent.kul.pl", false},
+		{"@student.kul.pl", false},
+		{"student.kul.pl", false},
+		{"a@b@student.kul.pl", false},
+		{"", false},
+	} {
+		if got := kul.acceptsEmail(tc.email); got != tc.want {
+			t.Errorf("acceptsEmail(%q) = %v, want %v", tc.email, got, tc.want)
+		}
+	}
+}
+
+func TestUniversity_USOSAcceptsNoEmail(t *testing.T) {
+	umcs, err := GetUniversityByID(UniversityUMCS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if umcs.acceptsEmail("jan@umcs.pl") {
+		t.Error("expected a USOS university without domains to accept no email")
+	}
+}
+
+func TestUniversities_OTPHaveLowercaseDomains(t *testing.T) {
+	for _, u := range GetUniversities() {
+		if u.AuthType != AuthTypeOTP {
+			continue
+		}
+		if len(u.Domains) == 0 {
+			t.Errorf("%s uses OTP but has no domains", u.ID)
+		}
+		for _, d := range u.Domains {
+			if d != strings.ToLower(strings.TrimSpace(d)) {
+				t.Errorf("%s: domain %q must be lowercase and trimmed to match normalized emails", u.ID, d)
+			}
+		}
 	}
 }
