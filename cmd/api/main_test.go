@@ -348,3 +348,25 @@ func TestCheckHealth(t *testing.T) {
 		}
 	})
 }
+
+func TestRouter_RequestIDOnEveryResponse(t *testing.T) {
+	r := newSpecTestRouter(t, "development")
+
+	for _, target := range []string{"/healthz/live", "/openapi.json", "/no-such-route"} {
+		if got := get(r, target).Header().Get("X-Request-ID"); got == "" {
+			t.Errorf("GET %s: expected an X-Request-ID header", target)
+		}
+	}
+}
+
+func TestCORS_ExposesRequestID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/auth/exchange", strings.NewReader(`{}`))
+	req.Header.Set("Origin", testWebAppURL)
+
+	rec := httptest.NewRecorder()
+	newCORSTestRouter().ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "X-Request-Id") && !strings.Contains(got, "X-Request-ID") {
+		t.Errorf("expected X-Request-ID in Access-Control-Expose-Headers, got %q", got)
+	}
+}

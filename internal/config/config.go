@@ -9,6 +9,9 @@ import (
 // minOTPHashKeyLength keeps the HMAC key at least as long as the SHA-256 output.
 const minOTPHashKeyLength = 32
 
+// DefaultServiceName names the API in logs, traces and Sentry when OTEL_SERVICE_NAME is unset.
+const DefaultServiceName = "uniezz-api"
+
 type UsosCredentials struct {
 	BaseURL        string
 	ConsumerKey    string
@@ -29,6 +32,11 @@ type Config struct {
 	OTPEmailTemplateID string
 	OTPHashKey         string
 	OTPTestEmails      []string
+
+	ServiceName       string
+	SentryDSN         string
+	SentryEnvironment string
+	SentryRelease     string
 }
 
 func Load() (*Config, error) {
@@ -43,6 +51,10 @@ func Load() (*Config, error) {
 		MailFrom:           getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
 		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
 		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
+		ServiceName:        getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
+		SentryDSN:          os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:  os.Getenv("SENTRY_ENVIRONMENT"),
+		SentryRelease:      os.Getenv("SENTRY_RELEASE"),
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",

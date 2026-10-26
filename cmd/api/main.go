@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -20,16 +20,17 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/server"
+	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 )
 
 const (
-	_shutdownPeriod      = 15 * time.Second
-	_readinessDrainDelay = 5 * time.Second
+	_shutdownPeriod       = 15 * time.Second
+	_readinessDrainDelay  = 5 * time.Second
+	_telemetryFlushPeriod = 5 * time.Second
 )
 
 var isShuttingDown atomic.Bool
@@ -39,10 +40,10 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
 		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		ExposedHeaders: []string{telemetry.RequestIDHeader},
 		MaxAge:         300,
 	})
 }
-
 func realIP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if ip := r.Header.Get("X-Real-IP"); net.ParseIP(ip) != nil {
@@ -73,8 +74,7 @@ func checkHealth(url string) error {
 func newRouter(cfg *config.Config) (*chi.Mux, huma.API) {
 	r := chi.NewRouter()
 	r.Use(realIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(telemetry.Middleware)
 	r.Use(corsMiddleware(cfg.CORSAllowedOrigins))
 
 	return r, humachi.New(r, httpapi.NewConfig(cfg))
@@ -86,22 +86,63 @@ func main() {
 
 	if *healthcheck {
 		if err := checkHealth(readyURL(os.Getenv("PORT"))); err != nil {
-			log.Fatalf("healthcheck: %v", err)
+			fmt.Fprintf(os.Stderr, "healthcheck: %v\n", err)
+			os.Exit(1)
 		}
 		return
 	}
 
+	// Until the configuration is loaded, log to stdout only.
+	slog.SetDefault(telemetry.NewLogger(os.Stdout, telemetry.Resource{
+		Service: config.DefaultServiceName,
+		Env:     cmp.Or(os.Getenv("ENV"), "development"),
+		Version: httpapi.Version,
+	}))
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Error loading configuration: %v", err)
+		slog.Error("load configuration", "error", err)
+		os.Exit(1)
 	}
 
+	tel, err := telemetry.Setup(context.Background(), telemetry.Options{
+		Resource:          telemetry.Resource{Service: cfg.ServiceName, Env: cfg.Env, Version: httpapi.Version},
+		SentryDSN:         cfg.SentryDSN,
+		SentryEnvironment: cfg.SentryEnvironment,
+		SentryRelease:     cfg.SentryRelease,
+		Stdout:            os.Stdout,
+	})
+	if err != nil {
+		slog.Error("set up telemetry", "error", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(tel.Logger)
+
+	runErr := run(cfg)
+	if runErr != nil {
+		slog.Error("server stopped", "error", runErr)
+	}
+
+	flushCtx, cancel := context.WithTimeout(context.Background(), _telemetryFlushPeriod)
+	defer cancel()
+	if err := tel.Shutdown(flushCtx); err != nil {
+		slog.Warn("flush telemetry", "error", err)
+	}
+
+	if runErr != nil {
+		os.Exit(1)
+	}
+}
+
+// run serves until SIGINT or SIGTERM and shuts down gracefully. It returns,
+// rather than exits, on errors, so main can flush telemetry first.
+func run(cfg *config.Config) error {
 	initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer initCancel()
 
 	dbPool, err := database.NewPool(initCtx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Error connecting to the database: %v", err)
+		return fmt.Errorf("connect to the database: %w", err)
 	}
 	defer dbPool.Close()
 
@@ -114,11 +155,12 @@ func main() {
 
 	modules, err := server.New(dbPool, cfg)
 	if err != nil {
-		log.Fatalf("Error setting up modules: %v", err)
+		return fmt.Errorf("set up modules: %w", err)
 	}
 	modules.Register(api)
 
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
+	defer stopOngoingGracefully()
 	server := &http.Server{
 		Addr:         net.JoinHostPort("", cfg.Port),
 		Handler:      r,
@@ -127,12 +169,13 @@ func main() {
 		BaseContext: func(_ net.Listener) context.Context {
 			return ongoingCtx
 		},
+		ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn),
 	}
 
 	serverErrors := make(chan error, 1)
 
 	go func() {
-		log.Printf("Starting server on %s", server.Addr)
+		slog.Info("starting server", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErrors <- err
 		}
@@ -140,28 +183,25 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		log.Fatalf("Server error: %v", err)
-		return
+		return fmt.Errorf("serve: %w", err)
 	case <-rootCtx.Done():
-		log.Println("Shutdown signal received, initiating graceful shutdown...")
 	}
 
 	stop()
 	isShuttingDown.Store(true)
-	log.Println("Shutdown signal received, waiting for ongoing requests to finish...")
-
-	log.Printf("Waiting for %s before starting shutdown...", _readinessDrainDelay)
+	slog.Info("shutdown signal received, draining", "delay", _readinessDrainDelay.String())
 	time.Sleep(_readinessDrainDelay)
 
-	log.Println("Now waiting for ongoing requests to finish...")
+	slog.Info("waiting for ongoing requests to finish")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), _shutdownPeriod)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Graceful shutdown timed out or failed: %v", err)
+		slog.Warn("graceful shutdown timed out or failed", "error", err)
 		_ = server.Close()
 	}
 
 	stopOngoingGracefully()
-	log.Println("Server gracefully stopped")
+	slog.Info("server gracefully stopped")
+	return nil
 }

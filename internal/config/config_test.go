@@ -142,3 +142,30 @@ func TestLoad_OTPTestEmailsAllowedOutsideProduction(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_Telemetry(t *testing.T) {
+	t.Run("off by default", func(t *testing.T) {
+		cfg := loadWith(t, map[string]string{"OTEL_SERVICE_NAME": "", "SENTRY_DSN": "", "SENTRY_ENVIRONMENT": "", "SENTRY_RELEASE": ""})
+
+		if cfg.ServiceName != DefaultServiceName {
+			t.Errorf("expected service name %q, got %q", DefaultServiceName, cfg.ServiceName)
+		}
+		if cfg.SentryDSN != "" || cfg.SentryEnvironment != "" || cfg.SentryRelease != "" {
+			t.Errorf("expected no Sentry settings, got %q %q %q", cfg.SentryDSN, cfg.SentryEnvironment, cfg.SentryRelease)
+		}
+	})
+
+	t.Run("reads the variables", func(t *testing.T) {
+		cfg := loadWith(t, map[string]string{
+			"OTEL_SERVICE_NAME":  "uniezz-worker",
+			"SENTRY_DSN":         "https://public@o1.ingest.sentry.io/1",
+			"SENTRY_ENVIRONMENT": "staging",
+			"SENTRY_RELEASE":     "abc1234",
+		})
+
+		if cfg.ServiceName != "uniezz-worker" || cfg.SentryDSN != "https://public@o1.ingest.sentry.io/1" ||
+			cfg.SentryEnvironment != "staging" || cfg.SentryRelease != "abc1234" {
+			t.Errorf("unexpected telemetry config: %+v", cfg)
+		}
+	})
+}

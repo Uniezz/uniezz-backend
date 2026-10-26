@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,22 +14,32 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/humatest"
+	"github.com/getsentry/sentry-go"
 )
 
-// captureLog redirects the standard logger into a buffer for the duration of the test.
+// captureLog redirects the default slog logger into a buffer for the duration of the test.
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
 	var buf bytes.Buffer
-	prevOutput, prevFlags := log.Writer(), log.Flags()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	t.Cleanup(func() {
-		log.SetOutput(prevOutput)
-		log.SetFlags(prevFlags)
-	})
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	return &buf
+}
+
+// captureSentry sends Sentry events to a mock transport for the duration of the test.
+func captureSentry(t *testing.T) *sentry.MockTransport {
+	t.Helper()
+
+	transport := &sentry.MockTransport{}
+	if err := sentry.Init(sentry.ClientOptions{Dsn: "https://public@o1.ingest.sentry.io/1", Transport: transport}); err != nil {
+		t.Fatalf("init sentry: %v", err)
+	}
+	t.Cleanup(func() { sentry.CurrentHub().BindClient(nil) })
+
+	return transport
 }
 
 func expectErrorBody(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
@@ -184,6 +194,7 @@ func TestHandlerError(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			logs := captureLog(t)
+			events := captureSentry(t)
 			api := newTestAPI(t, Error(tc.status, tc.code, errors.New("pq: connection to 10.0.0.5 refused")))
 
 			rec := api.Post("/echo?kind=a", map[string]any{"name": "jan"})
@@ -200,7 +211,32 @@ func TestHandlerError(t *testing.T) {
 			if !tc.wantLog && logged != "" {
 				t.Errorf("expected no log for a client error, got %q", logged)
 			}
+
+			wantEvents := 0
+			if tc.wantLog {
+				wantEvents = 1
+			}
+			if got := len(events.Events()); got != wantEvents {
+				t.Errorf("expected %d Sentry events, got %d", wantEvents, got)
+			}
 		})
+	}
+}
+
+func TestUnexpectedHandlerError(t *testing.T) {
+	// A plain error, not built with Error, still becomes one internal_error report.
+	logs := captureLog(t)
+	events := captureSentry(t)
+	api := newTestAPI(t, errors.New("pq: connection to 10.0.0.5 refused"))
+
+	rec := api.Post("/echo?kind=a", map[string]any{"name": "jan"})
+
+	expectErrorBody(t, rec, http.StatusInternalServerError, "internal_error")
+	if !strings.Contains(logs.String(), "10.0.0.5") {
+		t.Errorf("expected the error detail to be logged, got %q", logs.String())
+	}
+	if got := len(events.Events()); got != 1 {
+		t.Errorf("expected one Sentry event, got %d", got)
 	}
 }
 

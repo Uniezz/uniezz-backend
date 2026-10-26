@@ -129,6 +129,13 @@ In the development stack, `compose.yaml` sets `DATABASE_URL`, `PORT` and `ENV` f
 | `PORT`                                                  | no         | `8080`                   | HTTP listen port.                                                    |
 | `ENV`                                                   | no         | `development`            | Environment name.                                                    |
 | `GOOSE_DBSTRING`                                        | staging CI | —                        | Connection string for goose in the staging deploy. Not used locally. |
+| `SENTRY_DSN`                                            | no         | —                        | Sentry project DSN. Without it, Sentry error reporting is off.       |
+| `SENTRY_ENVIRONMENT`                                    | no         | `ENV`                    | Environment shown in Sentry.                                         |
+| `SENTRY_RELEASE`                                        | no         | build SHA                | Release shown in Sentry. Leave unset, so it matches `service.version` on traces and logs. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_HEADERS` | no | — | Full OTLP/HTTP traces URL and auth header. Without the endpoint, traces are not exported. See [docs/observability.md](docs/observability.md). |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_HEADERS`     | no | — | Full OTLP/HTTP logs URL and auth header. Without the endpoint, logs go to stdout only. |
+| `OTEL_SERVICE_NAME`                                     | no         | `uniezz-api`             | `service` on logs, `service.name` on traces.                         |
+| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`        | no         | `parentbased_always_on`  | Trace sampling, e.g. `parentbased_traceidratio` and `0.1`. Request logs are never sampled. |
 
 To add a variable to a config: `doppler secrets set NAME=value -p uniezz-backend -c dev`.
 
@@ -178,7 +185,7 @@ internal/config/      Environment configuration
 internal/database/    pgxpool setup (25 max conns, 2 min, 5m idle, 1h lifetime)
 internal/health/      /healthz/live and /healthz/ready endpoints
 migrations/           goose SQL migrations
-docs/                 Product description, authentication plan, sprint tasks (en/uk/ru/pl)
+docs/                 Product description, authentication plan, sprint tasks (en/uk/ru/pl), observability setup
 compose.yaml          Local development stack: PostgreSQL 17, migrations, API
 Dockerfile.dev        Development image: Go toolchain and goose
 Dockerfile            Production image
