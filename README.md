@@ -125,6 +125,7 @@ In the development stack, `compose.yaml` sets `DATABASE_URL`, `PORT` and `ENV` f
 | `APP_MOBILE_SCHEME`                                     | no         | `uniezz://auth/callback` | Mobile app callback URL.                                             |
 | `CORS_ALLOWED_ORIGINS`                                  | no         | `APP_WEB_URL`            | Comma-separated allowed origins.                                     |
 | `MAIL_FROM`                                             | no         | `Uniezz <no-reply@mail.uniezz.pl>` | Sender of OTP emails; the domain must be verified in Resend. |
+| `OTP_TEST_EMAILS`                                       | no         | —                        | Comma-separated emails accepted for OTP login at any OTP university, for testing. Startup fails if set when `ENV=production`. |
 | `PORT`                                                  | no         | `8080`                   | HTTP listen port.                                                    |
 | `ENV`                                                   | no         | `development`            | Environment name.                                                    |
 | `GOOSE_DBSTRING`                                        | staging CI | —                        | Connection string for goose in the staging deploy. Not used locally. |

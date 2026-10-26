@@ -49,6 +49,7 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 			sender,
 			ratelimit.New(pool, "otp-send-test", otpSendLimit, otpSendWindow),
 			newOTPHasher([]byte("test-key")),
+			nil,
 		),
 		logins: logins,
 	}

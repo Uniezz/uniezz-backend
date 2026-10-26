@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/mail"
@@ -36,14 +37,15 @@ type sendLimiter interface {
 }
 
 type otpLogin struct {
-	store   otpStore
-	sender  otpSender
-	limiter sendLimiter
-	hasher  otpHasher
+	store      otpStore
+	sender     otpSender
+	limiter    sendLimiter
+	hasher     otpHasher
+	testEmails []string
 }
 
-func newOTPLogin(store otpStore, sender otpSender, limiter sendLimiter, hasher otpHasher) *otpLogin {
-	return &otpLogin{store: store, sender: sender, limiter: limiter, hasher: hasher}
+func newOTPLogin(store otpStore, sender otpSender, limiter sendLimiter, hasher otpHasher, testEmails []string) *otpLogin {
+	return &otpLogin{store: store, sender: sender, limiter: limiter, hasher: hasher, testEmails: testEmails}
 }
 
 func (l *otpLogin) request(ctx context.Context, universityID UniversityID, email string) error {
@@ -53,7 +55,7 @@ func (l *otpLogin) request(ctx context.Context, universityID UniversityID, email
 	}
 
 	email = normalizeEmail(email)
-	if !un.acceptsEmail(email) {
+	if !un.acceptsEmail(email) && !slices.Contains(l.testEmails, email) {
 		return fmt.Errorf("%w: %s does not accept this email domain", ErrEmailNotAllowed, un.ID)
 	}
 

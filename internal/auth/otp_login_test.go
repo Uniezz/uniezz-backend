@@ -69,7 +69,7 @@ type otpLoginFixture struct {
 
 func newOTPLoginFixture() otpLoginFixture {
 	f := otpLoginFixture{store: &fakeOTPStore{}, sender: &fakeOTPSender{}, limiter: &fakeLimiter{}}
-	f.login = newOTPLogin(f.store, f.sender, f.limiter, newOTPHasher([]byte("test-key")))
+	f.login = newOTPLogin(f.store, f.sender, f.limiter, newOTPHasher([]byte("test-key")), []string{"tester@gmail.com"})
 	return f
 }
 
@@ -150,6 +150,25 @@ func TestOTPLogin_Request(t *testing.T) {
 		}
 		if len(f.limiter.keys) != 0 || len(f.store.created) != 0 || f.sender.calls != 0 {
 			t.Error("expected no limiter call, nothing stored or sent")
+		}
+	})
+
+	t.Run("test email is accepted outside the university domains", func(t *testing.T) {
+		f := newOTPLoginFixture()
+
+		if err := f.login.request(ctx, UniversityKUL, " Tester@Gmail.com "); err != nil {
+			t.Fatalf("expected the test email to be accepted, got: %v", err)
+		}
+		if f.sender.to != "tester@gmail.com" {
+			t.Errorf("expected the code sent to tester@gmail.com, got %q", f.sender.to)
+		}
+	})
+
+	t.Run("test email still needs an OTP university", func(t *testing.T) {
+		f := newOTPLoginFixture()
+
+		if err := f.login.request(ctx, UniversityUMCS, "tester@gmail.com"); !errors.Is(err, ErrWrongAuthMethod) {
+			t.Fatalf("expected ErrWrongAuthMethod, got: %v", err)
 		}
 	})
 

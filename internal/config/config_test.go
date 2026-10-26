@@ -102,3 +102,43 @@ func TestLoad_RequiresLongEnoughOTPHashKey(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_OTPTestEmails(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  string
+		want []string
+	}{
+		{name: "unset", env: "", want: nil},
+		{name: "normalizes and skips empty items", env: " Nikita@Gmail.com , ,kyrylo@gmail.com, ", want: []string{"nikita@gmail.com", "kyrylo@gmail.com"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := loadWith(t, map[string]string{"OTP_TEST_EMAILS": tc.env}).OTPTestEmails
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestLoad_OTPTestEmailsRejectedInProduction(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("RESEND_API_KEY", "re_test")
+	t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
+	t.Setenv("OTP_HASH_KEY", testOTPHashKey)
+	t.Setenv("ENV", "production")
+	t.Setenv("OTP_TEST_EMAILS", "nikita@gmail.com")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error for OTP_TEST_EMAILS in production, got nil")
+	}
+}
+
+func TestLoad_OTPTestEmailsAllowedOutsideProduction(t *testing.T) {
+	for _, env := range []string{"development", "staging"} {
+		cfg := loadWith(t, map[string]string{"ENV": env, "OTP_TEST_EMAILS": "nikita@gmail.com"})
+		if len(cfg.OTPTestEmails) != 1 {
+			t.Errorf("%s: expected the test email to load, got %q", env, cfg.OTPTestEmails)
+		}
+	}
+}

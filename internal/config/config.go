@@ -28,6 +28,7 @@ type Config struct {
 	MailFrom           string
 	OTPEmailTemplateID string
 	OTPHashKey         string
+	OTPTestEmails      []string
 }
 
 func Load() (*Config, error) {
@@ -74,6 +75,11 @@ func Load() (*Config, error) {
 
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
 
+	cfg.OTPTestEmails = splitEmails(os.Getenv("OTP_TEST_EMAILS"))
+	if cfg.Env == "production" && len(cfg.OTPTestEmails) > 0 {
+		return nil, fmt.Errorf("OTP_TEST_EMAILS must not be set in production")
+	}
+
 	return cfg, nil
 }
 
@@ -94,4 +100,15 @@ func splitOrigins(s string) []string {
 		}
 	}
 	return origins
+}
+
+func splitEmails(s string) []string {
+	var emails []string
+	for email := range strings.SplitSeq(s, ",") {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if email != "" {
+			emails = append(emails, email)
+		}
+	}
+	return emails
 }

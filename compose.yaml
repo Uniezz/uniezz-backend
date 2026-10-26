@@ -69,6 +69,7 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       OTP_EMAIL_TEMPLATE_ID: ${OTP_EMAIL_TEMPLATE_ID:-}
       OTP_HASH_KEY: ${OTP_HASH_KEY:-}
+      OTP_TEST_EMAILS: ${OTP_TEST_EMAILS:-}
     ports:
       - "8080:8080"
     volumes:

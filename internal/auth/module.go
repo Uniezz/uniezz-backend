@@ -41,6 +41,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error)
 				sender,
 				ratelimit.New(db, "otp-send", otpSendLimit, otpSendWindow),
 				newOTPHasher([]byte(cfg.OTPHashKey)),
+				cfg.OTPTestEmails,
 			),
 			logins: logins,
 		},
