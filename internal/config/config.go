@@ -39,7 +39,7 @@ func Load() (*Config, error) {
 		AppWebURL:          getEnv("APP_WEB_URL", "http://localhost:3000"),
 		AppMobileScheme:    getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
 		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
-		MailFrom:           getEnv("MAIL_FROM", "no-reply@uniezz.pl"),
+		MailFrom:           getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
 		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
 		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
 		UsosConfigs: map[string]UsosCredentials{
