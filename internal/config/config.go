@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// minOTPHashKeyLength keeps the HMAC key at least as long as the SHA-256 output.
+const minOTPHashKeyLength = 32
+
 type UsosCredentials struct {
 	BaseURL        string
 	ConsumerKey    string
@@ -24,6 +27,7 @@ type Config struct {
 	ResendAPIKey       string
 	MailFrom           string
 	OTPEmailTemplateID string
+	OTPHashKey         string
 }
 
 func Load() (*Config, error) {
@@ -37,6 +41,7 @@ func Load() (*Config, error) {
 		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
 		MailFrom:           getEnv("MAIL_FROM", "no-reply@uniezz.pl"),
 		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
+		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -61,6 +66,10 @@ func Load() (*Config, error) {
 
 	if cfg.OTPEmailTemplateID == "" {
 		return nil, fmt.Errorf("OTP_EMAIL_TEMPLATE_ID environment variable is required")
+	}
+
+	if len(cfg.OTPHashKey) < minOTPHashKeyLength {
+		return nil, fmt.Errorf("OTP_HASH_KEY environment variable must be at least %d characters", minOTPHashKeyLength)
 	}
 
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))

@@ -5,12 +5,15 @@ import (
 	"testing"
 )
 
+const testOTPHashKey = "0123456789abcdef0123456789abcdef"
+
 func loadWith(t *testing.T, env map[string]string) *Config {
 	t.Helper()
 
 	t.Setenv("DATABASE_URL", "postgres://test")
 	t.Setenv("RESEND_API_KEY", "re_test")
 	t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
+	t.Setenv("OTP_HASH_KEY", testOTPHashKey)
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
@@ -80,8 +83,22 @@ func TestLoad_RequiresOTPEmailTemplateID(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://test")
 	t.Setenv("RESEND_API_KEY", "re_test")
 	t.Setenv("OTP_EMAIL_TEMPLATE_ID", "")
+	t.Setenv("OTP_HASH_KEY", testOTPHashKey)
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected an error for a missing OTP_EMAIL_TEMPLATE_ID, got nil")
+	}
+}
+
+func TestLoad_RequiresLongEnoughOTPHashKey(t *testing.T) {
+	for _, key := range []string{"", "too-short"} {
+		t.Setenv("DATABASE_URL", "postgres://test")
+		t.Setenv("RESEND_API_KEY", "re_test")
+		t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
+		t.Setenv("OTP_HASH_KEY", key)
+
+		if _, err := Load(); err == nil {
+			t.Errorf("expected an error for OTP_HASH_KEY %q, got nil", key)
+		}
 	}
 }
