@@ -10,6 +10,7 @@ func loadWith(t *testing.T, env map[string]string) *Config {
 
 	t.Setenv("DATABASE_URL", "postgres://test")
 	t.Setenv("RESEND_API_KEY", "re_test")
+	t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
@@ -71,5 +72,16 @@ func TestLoad_APPWebURLStaysSingle(t *testing.T) {
 
 	if cfg.AppWebURL != "https://stg.example.com" {
 		t.Errorf("expected APP_WEB_URL to stay %q, got %q", "https://stg.example.com", cfg.AppWebURL)
+	}
+}
+
+func TestLoad_RequiresOTPEmailTemplateID(t *testing.T) {
+	// A missing template ID would only surface when the first OTP email fails, so startup must refuse it.
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("RESEND_API_KEY", "re_test")
+	t.Setenv("OTP_EMAIL_TEMPLATE_ID", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error for a missing OTP_EMAIL_TEMPLATE_ID, got nil")
 	}
 }

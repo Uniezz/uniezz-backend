@@ -23,18 +23,20 @@ type Config struct {
 	CORSAllowedOrigins []string
 	ResendAPIKey       string
 	MailFrom           string
+	OTPEmailTemplateID string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:             getEnv("PORT", "8080"),
-		Env:              getEnv("ENV", "development"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		BackendPublicURL: getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
-		AppWebURL:        getEnv("APP_WEB_URL", "http://localhost:3000"),
-		AppMobileScheme:  getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
-		ResendAPIKey:     os.Getenv("RESEND_API_KEY"),
-		MailFrom:         getEnv("MAIL_FROM", "no-reply@uniezz.pl"),
+		Port:               getEnv("PORT", "8080"),
+		Env:                getEnv("ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		BackendPublicURL:   getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
+		AppWebURL:          getEnv("APP_WEB_URL", "http://localhost:3000"),
+		AppMobileScheme:    getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
+		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
+		MailFrom:           getEnv("MAIL_FROM", "no-reply@uniezz.pl"),
+		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -55,6 +57,10 @@ func Load() (*Config, error) {
 
 	if cfg.ResendAPIKey == "" {
 		return nil, fmt.Errorf("RESEND_API_KEY environment variable is required")
+	}
+
+	if cfg.OTPEmailTemplateID == "" {
+		return nil, fmt.Errorf("OTP_EMAIL_TEMPLATE_ID environment variable is required")
 	}
 
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
