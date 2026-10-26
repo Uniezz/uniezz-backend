@@ -17,8 +17,6 @@ import (
 
 const testUserID = "u-7f3a9c"
 
-// newTestRouter builds the router after setupTestTelemetry, so otelhttp picks
-// up the test tracer provider.
 func newTestRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(Middleware)
@@ -355,7 +353,6 @@ func TestReportError(t *testing.T) {
 	}
 	tt.expectNoSecrets(t)
 
-	// An event captured outside any request must not carry a request's tags.
 	sentry.CurrentHub().CaptureMessage("probe")
 	events = tt.sentry.Events()
 	if _, ok := events[len(events)-1].Tags["request_id"]; ok {

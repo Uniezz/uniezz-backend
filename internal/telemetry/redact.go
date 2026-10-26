@@ -77,7 +77,6 @@ func redactAttr(a slog.Attr) slog.Attr {
 	case slog.KindGroup:
 		return slog.Attr{Key: a.Key, Value: slog.GroupValue(redactAttrs(a.Value.Group())...)}
 	case slog.KindAny:
-		// Errors, structs and slices are written as scrubbed text: their fields may hold secrets.
 		if err, ok := a.Value.Any().(error); ok {
 			return slog.String(a.Key, Scrub(err.Error()))
 		}
@@ -95,8 +94,6 @@ func redactAttrs(attrs []slog.Attr) []slog.Attr {
 	return out
 }
 
-// redactHandler applies the redaction rules before a record reaches any
-// output, so stdout and the OTLP export see the same masked values.
 type redactHandler struct {
 	next slog.Handler
 }

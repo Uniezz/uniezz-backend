@@ -17,7 +17,6 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// captureLog redirects the default slog logger into a buffer for the duration of the test.
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
@@ -29,7 +28,6 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// captureSentry sends Sentry events to a mock transport for the duration of the test.
 func captureSentry(t *testing.T) *sentry.MockTransport {
 	t.Helper()
 
@@ -224,7 +222,6 @@ func TestHandlerError(t *testing.T) {
 }
 
 func TestUnexpectedHandlerError(t *testing.T) {
-	// A plain error, not built with Error, still becomes one internal_error report.
 	logs := captureLog(t)
 	events := captureSentry(t)
 	api := newTestAPI(t, errors.New("pq: connection to 10.0.0.5 refused"))

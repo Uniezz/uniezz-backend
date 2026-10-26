@@ -9,7 +9,6 @@ import (
 // minOTPHashKeyLength keeps the HMAC key at least as long as the SHA-256 output.
 const minOTPHashKeyLength = 32
 
-// DefaultServiceName names the API in logs, traces and Sentry when OTEL_SERVICE_NAME is unset.
 const DefaultServiceName = "uniezz-api"
 
 type UsosCredentials struct {

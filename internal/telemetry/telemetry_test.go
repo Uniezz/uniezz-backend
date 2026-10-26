@@ -31,7 +31,6 @@ func clearTelemetryEnv(t *testing.T) {
 	}
 }
 
-// restoreGlobals undoes what Setup installs globally.
 func restoreGlobals(t *testing.T) {
 	t.Helper()
 	prevTP := otel.GetTracerProvider()
@@ -94,7 +93,6 @@ type otlpRequest struct {
 	body       string
 }
 
-// fakeOTLP records what the exporters send, as the Sentry OTLP endpoint would receive it.
 type fakeOTLP struct {
 	mu       sync.Mutex
 	requests []otlpRequest
@@ -138,7 +136,6 @@ func TestSetup_ExportsToTheConfiguredEndpoints(t *testing.T) {
 	srv := httptest.NewServer(otlp)
 	t.Cleanup(srv.Close)
 
-	// The complete URLs from Sentry's OpenTelemetry tab, used as they are.
 	const tracesPath = "/api/1/integration/otlp/v1/traces"
 	const logsPath = "/api/1/integration/otlp/v1/logs"
 	const auth = "sentry sentry_key=public123"

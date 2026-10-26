@@ -1,9 +1,3 @@
-// Package telemetry sets up logging, tracing and error reporting: JSON logs on
-// stdout, OpenTelemetry traces and logs over OTLP, and Sentry error events.
-//
-// The OTLP exporters are configured by the standard OTEL_EXPORTER_OTLP_*
-// variables and stay off when no endpoint is set; Sentry stays off without a
-// DSN. Local development and tests need neither.
 package telemetry
 
 import (
@@ -33,8 +27,8 @@ type Options struct {
 	Resource
 
 	SentryDSN         string
-	SentryEnvironment string // defaults to Env
-	SentryRelease     string // defaults to Version, the build SHA
+	SentryEnvironment string
+	SentryRelease     string
 
 	Stdout io.Writer
 }
@@ -45,16 +39,13 @@ type Telemetry struct {
 	shutdowns []func(context.Context) error
 }
 
-// Setup starts the exporters that are configured and returns the logger to
-// use. Call Shutdown before exiting to flush what is buffered.
 func Setup(ctx context.Context, opts Options) (*Telemetry, error) {
 	t := &Telemetry{}
 	stdout := newStdoutHandler(opts.Stdout, opts.Resource)
 
-	// Exporter failures go to stdout only: sending them through the failing exporter would loop.
-	stdoutLogger := slog.New(redactHandler{next: stdout})
+	exporterErrorLog := slog.New(redactHandler{next: stdout})
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		stdoutLogger.Warn("opentelemetry", "error", err)
+		exporterErrorLog.Warn("opentelemetry", "error", err)
 	}))
 	installPropagator()
 
@@ -68,7 +59,6 @@ func Setup(ctx context.Context, opts Options) (*Telemetry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("create OTLP trace exporter: %w", err)
 		}
-		// The sampler comes from OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG.
 		tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter), sdktrace.WithResource(res))
 		otel.SetTracerProvider(tp)
 		t.shutdowns = append(t.shutdowns, tp.Shutdown)

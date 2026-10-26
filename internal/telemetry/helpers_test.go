@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-// Representative secrets: none of them may show up in any output.
 const (
 	secretSessionToken = "sess_9f8e7d6c5b4a39281706f5e4d3c2b1a0"
 	secretOAuthToken   = "rtok_Zx81QwErTy"
@@ -34,7 +33,6 @@ var allSecrets = []string{secretSessionToken, secretOAuthToken, secretVerifier, 
 
 var testResource = Resource{Service: "uniezz-api-test", Env: "test", Version: "abc1234"}
 
-// syncBuffer is a bytes.Buffer safe for the exporters' goroutines.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -52,7 +50,6 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// records parses the JSON lines written to stdout.
 func (b *syncBuffer) records(t *testing.T) []map[string]any {
 	t.Helper()
 
@@ -80,7 +77,6 @@ func (b *syncBuffer) withMsg(t *testing.T, msg string) []map[string]any {
 	return out
 }
 
-// logRecorder is an OTel log exporter that keeps what it is given.
 type logRecorder struct {
 	mu      sync.Mutex
 	records []sdklog.Record
@@ -104,7 +100,6 @@ func (r *logRecorder) all() []sdklog.Record {
 	return append([]sdklog.Record(nil), r.records...)
 }
 
-// text renders an exported record as one string, to search it for secrets.
 func recordText(rec sdklog.Record) string {
 	var sb strings.Builder
 	sb.WriteString(rec.Body().String())
@@ -141,8 +136,6 @@ func eventText(t *testing.T, e *sentry.Event) string {
 	return string(b)
 }
 
-// testTelemetry wires every output to in-memory recorders: stdout, OTel spans,
-// OTel logs and Sentry events.
 type testTelemetry struct {
 	stdout *syncBuffer
 	spans  *tracetest.InMemoryExporter
@@ -187,7 +180,6 @@ func setupTestTelemetry(t *testing.T) *testTelemetry {
 	return tt
 }
 
-// expectNoSecrets fails when any output holds one of the representative secrets.
 func (tt *testTelemetry) expectNoSecrets(t *testing.T) {
 	t.Helper()
 

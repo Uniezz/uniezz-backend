@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"cmp"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -26,10 +27,22 @@ var validRequestID = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
 func Middleware(next http.Handler) http.Handler {
 	return otelhttp.NewHandler(requests(next), "http.server",
-		otelhttp.WithFilter(func(r *http.Request) bool { return !isHealthCheck(r) }),
-		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }),
-		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
+		otelhttp.WithFilter(isNotHealthCheck),
+		otelhttp.WithSpanNameFormatter(spanNameBeforeRouting),
+		otelhttp.WithPublicEndpointFn(ignoreClientSamplingDecision),
 	)
+}
+
+func isNotHealthCheck(r *http.Request) bool {
+	return !isHealthCheck(r)
+}
+
+func spanNameBeforeRouting(_ string, r *http.Request) string {
+	return r.Method
+}
+
+func ignoreClientSamplingDecision(*http.Request) bool {
+	return true
 }
 
 func isHealthCheck(r *http.Request) bool {
@@ -86,18 +99,14 @@ func writeInternalError(w http.ResponseWriter) {
 
 func logRequest(r *http.Request, status int, duration time.Duration) {
 	ctx := r.Context()
-	if status == 0 {
-		status = http.StatusOK
-	}
+	status = cmp.Or(status, http.StatusOK)
 
 	route := routeOf(ctx)
 	if route == "" {
 		route = unmatchedRoute
 	}
 
-	span := trace.SpanFromContext(ctx)
-	span.SetName(r.Method + " " + route)
-	span.SetAttributes(semconv.HTTPRoute(route), semconv.URLPath(route))
+	nameSpanByRoute(trace.SpanFromContext(ctx), r.Method, route)
 
 	slog.Default().LogAttrs(ctx, levelFor(status), "request",
 		slog.String("method", r.Method),
@@ -106,6 +115,15 @@ func logRequest(r *http.Request, status int, duration time.Duration) {
 		slog.Float64("duration_ms", float64(duration.Microseconds())/1000),
 		slog.String("client_ip", clientIP(r)),
 	)
+}
+
+func nameSpanByRoute(span trace.Span, method, route string) {
+	span.SetName(method + " " + route)
+	replaceRawPathWithRoute(span, route)
+}
+
+func replaceRawPathWithRoute(span trace.Span, route string) {
+	span.SetAttributes(semconv.HTTPRoute(route), semconv.URLPath(route))
 }
 
 func levelFor(status int) slog.Level {

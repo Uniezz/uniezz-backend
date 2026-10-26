@@ -92,7 +92,6 @@ func main() {
 		return
 	}
 
-	// Until the configuration is loaded, log to stdout only.
 	slog.SetDefault(telemetry.NewLogger(os.Stdout, telemetry.Resource{
 		Service: config.DefaultServiceName,
 		Env:     cmp.Or(os.Getenv("ENV"), "development"),
@@ -134,8 +133,6 @@ func main() {
 	}
 }
 
-// run serves until SIGINT or SIGTERM and shuts down gracefully. It returns,
-// rather than exits, on errors, so main can flush telemetry first.
 func run(cfg *config.Config) error {
 	initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer initCancel()
