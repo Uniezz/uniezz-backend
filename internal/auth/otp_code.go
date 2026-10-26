@@ -28,7 +28,3 @@ func (h otpHasher) hash(code string) []byte {
 	mac.Write([]byte(code))
 	return mac.Sum(nil)
 }
-
-func (h otpHasher) matches(code string, stored []byte) bool {
-	return hmac.Equal(h.hash(code), stored)
-}

@@ -30,18 +30,10 @@ func TestGenerateOTPCode_Varies(t *testing.T) {
 	}
 }
 
-func TestOTPHasher_MatchesOnlyTheSameCode(t *testing.T) {
+func TestOTPHasher_DependsOnCode(t *testing.T) {
 	h := newOTPHasher([]byte("test-key"))
-	stored := h.hash("123456")
-
-	if !h.matches("123456", stored) {
-		t.Error("expected the same code to match")
-	}
-	if h.matches("123457", stored) {
-		t.Error("expected a different code not to match")
-	}
-	if h.matches("", stored) {
-		t.Error("expected an empty code not to match")
+	if bytes.Equal(h.hash("123456"), h.hash("123457")) {
+		t.Fatal("expected different codes to produce different hashes")
 	}
 }
 
