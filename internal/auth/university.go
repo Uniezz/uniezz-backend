@@ -2,6 +2,8 @@ package auth
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 )
 
 type AuthType string
@@ -99,4 +101,12 @@ func GetUniversityByID(id UniversityID) (University, error) {
 		return University{}, fmt.Errorf("%w: %q", ErrUnknownUniversity, id)
 	}
 	return u, nil
+}
+
+func (u University) acceptsEmail(email string) bool {
+	local, domain, ok := strings.Cut(normalizeEmail(email), "@")
+	if !ok || local == "" || strings.Contains(domain, "@") {
+		return false
+	}
+	return slices.Contains(u.Domains, domain)
 }

@@ -117,10 +117,15 @@ In the development stack, `compose.yaml` sets `DATABASE_URL`, `PORT` and `ENV` f
 | `DATABASE_URL`                                          | yes        | —                        | PostgreSQL connection string. Startup fails if unset.                |
 | `UMCS_USOS_CONSUMER_KEY`, `UMCS_USOS_CONSUMER_SECRET`   | yes        | —                        | USOS credentials for UMCS. Startup fails if unset.                   |
 | `UMLUB_USOS_CONSUMER_KEY`, `UMLUB_USOS_CONSUMER_SECRET` | yes        | —                        | USOS credentials for UMLub. Startup fails if unset.                  |
+| `RESEND_API_KEY`                                        | yes        | —                        | Resend API key for OTP emails. Startup fails if unset.               |
+| `OTP_EMAIL_TEMPLATE_ID`                                 | yes        | —                        | ID of the Resend-hosted OTP email template. Startup fails if unset.  |
+| `OTP_HASH_KEY`                                          | yes        | —                        | HMAC key for stored OTP codes, at least 32 characters. Never change it once in use. |
 | `BACKEND_PUBLIC_URL`                                    | no         | `http://localhost:8080`  | Public URL of the API; the USOS callback URL is built from it.       |
 | `APP_WEB_URL`                                           | no         | `http://localhost:3000`  | Web app URL.                                                         |
 | `APP_MOBILE_SCHEME`                                     | no         | `uniezz://auth/callback` | Mobile app callback URL.                                             |
 | `CORS_ALLOWED_ORIGINS`                                  | no         | `APP_WEB_URL`            | Comma-separated allowed origins.                                     |
+| `MAIL_FROM`                                             | no         | `Uniezz <no-reply@mail.uniezz.pl>` | Sender of OTP emails; the domain must be verified in Resend. |
+| `OTP_TEST_EMAILS`                                       | no         | —                        | Comma-separated emails accepted for OTP login at any OTP university, for testing. Startup fails if set when `ENV=production`. |
 | `PORT`                                                  | no         | `8080`                   | HTTP listen port.                                                    |
 | `ENV`                                                   | no         | `development`            | Environment name.                                                    |
 | `GOOSE_DBSTRING`                                        | staging CI | —                        | Connection string for goose in the staging deploy. Not used locally. |

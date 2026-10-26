@@ -9,7 +9,7 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/resend/resend-go/v2 v2.28.0
+	github.com/resend/resend-go/v4 v4.9.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

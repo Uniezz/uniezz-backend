@@ -6,6 +6,7 @@ package server
 import (
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/mail"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -15,7 +16,8 @@ type Modules struct {
 }
 
 func New(db *pgxpool.Pool, cfg *config.Config) (Modules, error) {
-	authModule, err := auth.New(db, cfg)
+	mailModule := mail.NewResendSender(cfg)
+	authModule, err := auth.New(db, cfg, mailModule)
 	if err != nil {
 		return Modules{}, err
 	}

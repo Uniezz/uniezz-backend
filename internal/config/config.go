@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// minOTPHashKeyLength keeps the HMAC key at least as long as the SHA-256 output.
+const minOTPHashKeyLength = 32
+
 type UsosCredentials struct {
 	BaseURL        string
 	ConsumerKey    string
@@ -23,18 +26,23 @@ type Config struct {
 	CORSAllowedOrigins []string
 	ResendAPIKey       string
 	MailFrom           string
+	OTPEmailTemplateID string
+	OTPHashKey         string
+	OTPTestEmails      []string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:             getEnv("PORT", "8080"),
-		Env:              getEnv("ENV", "development"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		BackendPublicURL: getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
-		AppWebURL:        getEnv("APP_WEB_URL", "http://localhost:3000"),
-		AppMobileScheme:  getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
-		ResendAPIKey:     os.Getenv("RESEND_API_KEY"),
-		MailFrom:         getEnv("MAIL_FROM", "no-reply@uniezz.pl"),
+		Port:               getEnv("PORT", "8080"),
+		Env:                getEnv("ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		BackendPublicURL:   getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
+		AppWebURL:          getEnv("APP_WEB_URL", "http://localhost:3000"),
+		AppMobileScheme:    getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
+		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
+		MailFrom:           getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
+		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
+		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -57,7 +65,20 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("RESEND_API_KEY environment variable is required")
 	}
 
+	if cfg.OTPEmailTemplateID == "" {
+		return nil, fmt.Errorf("OTP_EMAIL_TEMPLATE_ID environment variable is required")
+	}
+
+	if len(cfg.OTPHashKey) < minOTPHashKeyLength {
+		return nil, fmt.Errorf("OTP_HASH_KEY environment variable must be at least %d characters", minOTPHashKeyLength)
+	}
+
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
+
+	cfg.OTPTestEmails = splitEmails(os.Getenv("OTP_TEST_EMAILS"))
+	if cfg.Env == "production" && len(cfg.OTPTestEmails) > 0 {
+		return nil, fmt.Errorf("OTP_TEST_EMAILS must not be set in production")
+	}
 
 	return cfg, nil
 }
@@ -79,4 +100,15 @@ func splitOrigins(s string) []string {
 		}
 	}
 	return origins
+}
+
+func splitEmails(s string) []string {
+	var emails []string
+	for email := range strings.SplitSeq(s, ",") {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if email != "" {
+			emails = append(emails, email)
+		}
+	}
+	return emails
 }
