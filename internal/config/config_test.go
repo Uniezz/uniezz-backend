@@ -9,6 +9,7 @@ func loadWith(t *testing.T, env map[string]string) *Config {
 	t.Helper()
 
 	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("RESEND_API_KEY", "re_test")
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
