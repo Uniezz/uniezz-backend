@@ -81,7 +81,7 @@ var universities = map[UniversityID]University{
 		ID:       UniversityWSEI,
 		Name:     "Wyższa Szkoła Ekonomii i Innowacji w Lublinie",
 		AuthType: AuthTypeOTP,
-		Domains:  []string{"wsei.lublin.pl"},
+		Domains:  []string{"wsei.lublin.pl", "studentwsei.pl"},
 	},
 }
 
