@@ -58,9 +58,9 @@ The server ignores the sampling decision in an incoming `traceparent` (each requ
 
 A request trace is about 1 server span plus one span per query, usually 2–6 spans. Spans per month ≈ requests per month × `OTEL_TRACES_SAMPLER_ARG` × spans per request. Log volume is about 300 bytes per request record.
 
-Before enabling ingestion, check in **Settings → Subscription / Usage** what the organization's plan includes for errors, spans and logs, its retention and which alert types it allows, and set the available usage notifications and spending limits (on-demand budget 0 unless an upgrade is decided separately). The plan includes 5 GB of logs per month and one uptime monitor.
+The free Developer plan includes per month 5k errors, 5M spans, 5 GB of logs and one uptime monitor, with 30 days of retention. It cannot be charged: once a quota is used up, Sentry drops new data of that kind until the month resets. Check the current numbers in **Settings → Subscription / Usage**.
 
-Use `1.0` only to verify staging, then lower it so the expected monthly spans stay well within the span quota, for example `0.1`.
+At about 5 spans per request, 5M spans cover about 1M traced requests per month, so staging can keep `1.0`. Lower the rate when traffic grows enough to approach the quota, so errors and logs are never crowded out.
 
 ## Sentry setup (no code)
 
