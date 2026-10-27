@@ -76,6 +76,16 @@ func TestLoad_AWSPublicEndpoint(t *testing.T) {
 	}
 }
 
+func TestLoad_AWSPublicMediaURL(t *testing.T) {
+	cfg := loadWith(t, map[string]string{
+		"AWS_PUBLIC_MEDIA_URL": "https://media.uniezz.pl",
+	})
+
+	if cfg.AWSPublicMediaURL != "https://media.uniezz.pl" {
+		t.Errorf("expected public media URL %q, got %q", "https://media.uniezz.pl", cfg.AWSPublicMediaURL)
+	}
+}
+
 func TestLoad_APPWebURLStaysSingle(t *testing.T) {
 	// APP_WEB_URL is also the post-login redirect target, so a CORS list must not leak into it.
 	cfg := loadWith(t, map[string]string{

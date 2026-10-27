@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
@@ -9,7 +10,15 @@ import (
 )
 
 func productionConfig(usos map[string]config.UsosCredentials) *config.Config {
-	return &config.Config{Env: "production", BackendPublicURL: "https://api.test", UsosConfigs: usos}
+	return &config.Config{
+		Env:                "production",
+		BackendPublicURL:   "https://api.test",
+		UsosConfigs:        usos,
+		AWSRegion:          "us-east-1",
+		AWSS3Bucket:        "test-bucket",
+		AWSAccessKeyID:     "test-access-key",
+		AWSSecretAccessKey: "test-secret-key",
+	}
 }
 
 func TestNew(t *testing.T) {
@@ -19,13 +28,13 @@ func TestNew(t *testing.T) {
 	}
 
 	t.Run("builds every module with full config", func(t *testing.T) {
-		if _, err := New(nil, productionConfig(full)); err != nil {
+		if _, err := New(context.Background(), nil, productionConfig(full)); err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 	})
 
 	t.Run("returns the module error instead of panicking", func(t *testing.T) {
-		if _, err := New(nil, productionConfig(nil)); err == nil {
+		if _, err := New(context.Background(), nil, productionConfig(nil)); err == nil {
 			t.Error("expected an error for missing USOS credentials in production, got nil")
 		}
 	})

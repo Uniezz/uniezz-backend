@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
@@ -13,9 +14,48 @@ import (
 )
 
 type Storage struct {
-	client  *s3.Client
-	presign *s3.PresignClient
-	bucket  string
+	client         *s3.Client
+	presign        *s3.PresignClient
+	bucket         string
+	publicMediaURL string
+}
+
+type Kind string
+
+const (
+	KindAvatar Kind = "avatar"
+	KindFeed   Kind = "feed"
+	KindChat   Kind = "chat"
+
+	uploadURLTTL          = 10 * time.Minute
+	privateDownloadURLTTL = 10 * time.Minute
+)
+
+func maxUploadSize(kind Kind) (int64, error) {
+	switch kind {
+	case KindAvatar:
+		return 5 * 1024 * 1024, nil
+	case KindFeed, KindChat:
+		return 10 * 1024 * 1024, nil
+	default:
+		return 0, fmt.Errorf("unsupported media kind %q", kind)
+	}
+}
+
+func validateUpload(kind Kind, contentType string, size int64) error {
+	maxSize, err := maxUploadSize(kind)
+	if err != nil {
+		return err
+	}
+	switch contentType {
+	case "image/jpeg", "image/png", "image/webp":
+	default:
+		return fmt.Errorf("unsupported media content type %q", contentType)
+	}
+	if size <= 0 || size > maxSize {
+		return fmt.Errorf("media size must be between 1 and %d bytes", maxSize)
+	}
+	return nil
 }
 
 func publicEndpoint(cfg *config.Config) string {
@@ -35,7 +75,23 @@ func (s *Storage) CheckBucket(ctx context.Context) error {
 	return nil
 }
 
-func New(ctx context.Context, cfg *config.Config) (*Storage, error) {
+func (s *Storage) HeadObject(ctx context.Context, key string) (int64, string, error) {
+	if key == "" {
+		return 0, "", fmt.Errorf("media object key is required")
+	}
+
+	output, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return 0, "", fmt.Errorf("check media object: %w", err)
+	}
+
+	return aws.ToInt64(output.ContentLength), aws.ToString(output.ContentType), nil
+}
+
+func newStorage(ctx context.Context, cfg *config.Config) (*Storage, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("media config is required")
 	}
@@ -78,53 +134,40 @@ func New(ctx context.Context, cfg *config.Config) (*Storage, error) {
 	})
 
 	storage := &Storage{
-		client:  client,
-		presign: s3.NewPresignClient(presignClient),
-		bucket:  cfg.AWSS3Bucket,
-	}
-
-	if err := storage.CheckBucket(ctx); err != nil {
-		return nil, err
+		client:         client,
+		presign:        s3.NewPresignClient(presignClient),
+		bucket:         cfg.AWSS3Bucket,
+		publicMediaURL: cfg.AWSPublicMediaURL,
 	}
 
 	return storage, nil
 
 }
 
-const maxPresignDuration = 7 * 24 * time.Hour
-
-func validatePresignExpiry(expires time.Duration) error {
-	if expires <= 0 || expires > maxPresignDuration {
-		return fmt.Errorf("presigned URL expiry must be between 0 and 7 days")
-	}
-	return nil
-}
-
 func (s *Storage) PresignPutURL(
 	ctx context.Context,
 	key string,
+	kind Kind,
 	contentType string,
-	expires time.Duration,
+	size int64,
 ) (string, error) {
 	if key == "" {
 		return "", fmt.Errorf("media object key is required")
 	}
-	if contentType == "" {
-		return "", fmt.Errorf("media content type is required")
-	}
-	if err := validatePresignExpiry(expires); err != nil {
+	if err := validateUpload(kind, contentType, size); err != nil {
 		return "", err
 	}
 
 	request, err := s.presign.PresignPutObject(
 		ctx,
 		&s3.PutObjectInput{
-			Bucket:      aws.String(s.bucket),
-			Key:         aws.String(key),
-			ContentType: aws.String(contentType),
+			Bucket:        aws.String(s.bucket),
+			Key:           aws.String(key),
+			ContentType:   aws.String(contentType),
+			ContentLength: aws.Int64(size),
 		},
 		func(options *s3.PresignOptions) {
-			options.Expires = expires
+			options.Expires = uploadURLTTL
 		},
 	)
 	if err != nil {
@@ -136,13 +179,9 @@ func (s *Storage) PresignPutURL(
 func (s *Storage) PresignGetURL(
 	ctx context.Context,
 	key string,
-	expires time.Duration,
 ) (string, error) {
 	if key == "" {
 		return "", fmt.Errorf("media object key is required")
-	}
-	if err := validatePresignExpiry(expires); err != nil {
-		return "", err
 	}
 
 	request, err := s.presign.PresignGetObject(
@@ -152,13 +191,24 @@ func (s *Storage) PresignGetURL(
 			Key:    aws.String(key),
 		},
 		func(options *s3.PresignOptions) {
-			options.Expires = expires
+			options.Expires = privateDownloadURLTTL
 		},
 	)
 	if err != nil {
 		return "", fmt.Errorf("presign media download: %w", err)
 	}
 	return request.URL, nil
+}
+
+func (s *Storage) PublicURL(key string) (string, error) {
+	if s.publicMediaURL == "" {
+		return "", fmt.Errorf("public media URL is not configured")
+	}
+	if key == "" || strings.HasPrefix(key, "/") || strings.Contains(key, "..") {
+		return "", fmt.Errorf("invalid media object key")
+	}
+
+	return strings.TrimRight(s.publicMediaURL, "/") + "/" + key, nil
 }
 
 func (s *Storage) Delete(ctx context.Context, key string) error {

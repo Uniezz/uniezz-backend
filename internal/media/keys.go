@@ -3,6 +3,8 @@ package media
 import (
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func AvatarKey(userID, filename string) (string, error) {
@@ -36,4 +38,32 @@ func validateKeyPart(name, value string) error {
 		return fmt.Errorf("invalid media %s", name)
 	}
 	return nil
+}
+
+func NewObjectKey(kind Kind, contentType string) (string, error) {
+	if err := validateUpload(kind, contentType, 1); err != nil {
+		return "", err
+	}
+
+	prefix := ""
+	switch kind {
+	case KindAvatar:
+		prefix = "avatars"
+	case KindFeed:
+		prefix = "feed"
+	case KindChat:
+		prefix = "chat"
+	}
+
+	extension := ""
+	switch contentType {
+	case "image/jpeg":
+		extension = ".jpg"
+	case "image/png":
+		extension = ".png"
+	case "image/webp":
+		extension = ".webp"
+	}
+
+	return fmt.Sprintf("%s/%s%s", prefix, uuid.NewString(), extension), nil
 }

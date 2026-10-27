@@ -42,6 +42,7 @@ type Config struct {
 	AWSSecretAccessKey  string
 	AWSEndpoint         string
 	AWSPublicEndpoint   string
+	AWSPublicMediaURL   string
 	AWSS3ForcePathStyle bool
 }
 
@@ -75,6 +76,7 @@ func Load() (*Config, error) {
 		AWSSecretAccessKey:  os.Getenv("AWS_SECRET_ACCESS_KEY"),
 		AWSEndpoint:         os.Getenv("AWS_ENDPOINT"),
 		AWSPublicEndpoint:   os.Getenv("AWS_PUBLIC_ENDPOINT"),
+		AWSPublicMediaURL:   os.Getenv("AWS_PUBLIC_MEDIA_URL"),
 		AWSS3ForcePathStyle: forcePathStyle,
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {

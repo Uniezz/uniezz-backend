@@ -1,6 +1,11 @@
 package media
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+)
 
 func TestMediaKeys(t *testing.T) {
 	tests := []struct {
@@ -45,6 +50,56 @@ func TestMediaKeysRejectInvalidParts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := tt.make(tt.id, tt.file); err == nil {
 				t.Fatal("expected an error for invalid key part")
+			}
+		})
+	}
+}
+
+func TestNewObjectKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		kind        Kind
+		contentType string
+		prefix      string
+		extension   string
+	}{
+		{"avatar jpeg", KindAvatar, "image/jpeg", "avatars/", ".jpg"},
+		{"feed png", KindFeed, "image/png", "feed/", ".png"},
+		{"chat webp", KindChat, "image/webp", "chat/", ".webp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := NewObjectKey(tt.kind, tt.contentType)
+			if err != nil {
+				t.Fatalf("NewObjectKey() error = %v", err)
+			}
+			if !strings.HasPrefix(key, tt.prefix) || !strings.HasSuffix(key, tt.extension) {
+				t.Fatalf("key %q should start with %q and end with %q", key, tt.prefix, tt.extension)
+			}
+
+			id := strings.TrimSuffix(strings.TrimPrefix(key, tt.prefix), tt.extension)
+			if _, err := uuid.Parse(id); err != nil {
+				t.Errorf("key contains invalid UUID %q: %v", id, err)
+			}
+		})
+	}
+}
+
+func TestNewObjectKeyRejectsInvalidInput(t *testing.T) {
+	tests := []struct {
+		name        string
+		kind        Kind
+		contentType string
+	}{
+		{"unknown kind", Kind("other"), "image/jpeg"},
+		{"unsupported content type", KindAvatar, "image/svg+xml"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NewObjectKey(tt.kind, tt.contentType); err == nil {
+				t.Fatal("expected an error")
 			}
 		})
 	}
