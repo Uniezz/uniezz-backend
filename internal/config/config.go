@@ -48,11 +48,11 @@ type Config struct {
 
 func Load() (*Config, error) {
 	forcePathStyle, err := strconv.ParseBool(
-		getEnv("AWS_S3_FORCE_PATH_STYLE", "false"),
+		getEnv("S3_FORCE_PATH_STYLE", "false"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"invalid AWS_S3_FORCE_PATH_STYLE: %w", err,
+			"invalid S3_FORCE_PATH_STYLE: %w", err,
 		)
 	}
 	cfg := &Config{
@@ -70,13 +70,13 @@ func Load() (*Config, error) {
 		SentryDSN:           os.Getenv("SENTRY_DSN"),
 		SentryEnvironment:   os.Getenv("SENTRY_ENVIRONMENT"),
 		SentryRelease:       os.Getenv("SENTRY_RELEASE"),
-		AWSRegion:           getEnv("AWS_REGION", "us-east-1"),
-		AWSS3Bucket:         getEnv("AWS_S3_BUCKET", "uniezz-media"),
-		AWSAccessKeyID:      os.Getenv("AWS_ACCESS_KEY_ID"),
-		AWSSecretAccessKey:  os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		AWSEndpoint:         os.Getenv("AWS_ENDPOINT"),
-		AWSPublicEndpoint:   os.Getenv("AWS_PUBLIC_ENDPOINT"),
-		AWSPublicMediaURL:   os.Getenv("AWS_PUBLIC_MEDIA_URL"),
+		AWSRegion:           getEnv("S3_REGION", "us-east-1"),
+		AWSS3Bucket:         getEnv("S3_BUCKET", "uniezz-media"),
+		AWSAccessKeyID:      os.Getenv("S3_ACCESS_KEY_ID"),
+		AWSSecretAccessKey:  os.Getenv("S3_SECRET_ACCESS_KEY"),
+		AWSEndpoint:         os.Getenv("S3_ENDPOINT"),
+		AWSPublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
+		AWSPublicMediaURL:   os.Getenv("MEDIA_PUBLIC_URL"),
 		AWSS3ForcePathStyle: forcePathStyle,
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {

@@ -96,13 +96,13 @@ func newStorage(ctx context.Context, cfg *config.Config) (*Storage, error) {
 		return nil, fmt.Errorf("media config is required")
 	}
 	if cfg.AWSRegion == "" {
-		return nil, fmt.Errorf("AWS_REGION is required")
+		return nil, fmt.Errorf("S3_REGION is required")
 	}
 	if cfg.AWSS3Bucket == "" {
-		return nil, fmt.Errorf("AWS_S3_BUCKET is required")
+		return nil, fmt.Errorf("S3_BUCKET is required")
 	}
 	if cfg.AWSAccessKeyID == "" || cfg.AWSSecretAccessKey == "" {
-		return nil, fmt.Errorf("AWS access key and secret key are required")
+		return nil, fmt.Errorf("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required")
 	}
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(

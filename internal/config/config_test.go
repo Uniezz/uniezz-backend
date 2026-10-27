@@ -66,9 +66,9 @@ func TestLoad_CORSAllowedOrigins(t *testing.T) {
 	}
 }
 
-func TestLoad_AWSPublicEndpoint(t *testing.T) {
+func TestLoad_S3PublicEndpoint(t *testing.T) {
 	cfg := loadWith(t, map[string]string{
-		"AWS_PUBLIC_ENDPOINT": "http://localhost:9000",
+		"S3_PUBLIC_ENDPOINT": "http://localhost:9000",
 	})
 
 	if cfg.AWSPublicEndpoint != "http://localhost:9000" {
@@ -76,9 +76,9 @@ func TestLoad_AWSPublicEndpoint(t *testing.T) {
 	}
 }
 
-func TestLoad_AWSPublicMediaURL(t *testing.T) {
+func TestLoad_MediaPublicURL(t *testing.T) {
 	cfg := loadWith(t, map[string]string{
-		"AWS_PUBLIC_MEDIA_URL": "https://media.uniezz.pl",
+		"MEDIA_PUBLIC_URL": "https://media.uniezz.pl",
 	})
 
 	if cfg.AWSPublicMediaURL != "https://media.uniezz.pl" {
