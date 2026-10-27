@@ -3,11 +3,13 @@
 package httpapi
 
 import (
-	"log"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -24,6 +26,7 @@ func NewConfig(cfg *config.Config) huma.Config {
 		BearerAuth: {Type: "http", Scheme: "bearer"},
 	}
 	c.CreateHooks = nil
+	c.Transformers = append(c.Transformers, reportServerErrors)
 	if cfg.Env == "production" {
 		c.DocsPath = ""
 	}
@@ -32,6 +35,7 @@ func NewConfig(cfg *config.Config) huma.Config {
 
 type ErrorBody struct {
 	status int
+	cause  error
 	Code   string `json:"error" example:"invalid_input" doc:"Machine-readable error code"`
 }
 
@@ -39,10 +43,21 @@ func (e *ErrorBody) Error() string  { return e.Code }
 func (e *ErrorBody) GetStatus() int { return e.status }
 
 func Error(status int, code string, err error) huma.StatusError {
-	if status >= http.StatusInternalServerError {
-		log.Printf("httpapi: %s: %v", code, err)
+	return &ErrorBody{status: status, cause: err, Code: code}
+}
+
+func reportServerErrors(ctx huma.Context, _ string, v any) (any, error) {
+	e, ok := v.(*ErrorBody)
+	if !ok || e.status < http.StatusInternalServerError {
+		return v, nil
 	}
-	return &ErrorBody{status: status, Code: code}
+
+	cause := e.cause
+	if cause == nil {
+		cause = errors.New(e.Code)
+	}
+	telemetry.ReportError(ctx.Context(), "server error", cause, slog.String("error_code", e.Code))
+	return v, nil
 }
 
 func init() {
@@ -56,8 +71,13 @@ func newError(status int, msg string, errs ...error) huma.StatusError {
 	case status == http.StatusBadRequest || status == http.StatusUnprocessableEntity:
 		return &ErrorBody{status: http.StatusBadRequest, Code: "invalid_input"}
 	case status >= http.StatusInternalServerError:
-		log.Printf("httpapi: %s: %v", msg, errs)
-		return &ErrorBody{status: status, Code: "internal_error"}
+		cause := errors.Join(errs...)
+		if cause == nil {
+			cause = errors.New(msg)
+		} else {
+			cause = errors.Join(errors.New(msg), cause)
+		}
+		return &ErrorBody{status: status, cause: cause, Code: "internal_error"}
 	default:
 		return &ErrorBody{status: status, Code: statusCode(status)}
 	}

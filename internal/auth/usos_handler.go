@@ -2,10 +2,11 @@ package auth
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 
+	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -46,7 +47,7 @@ var usosStartOperation = huma.Operation{
 func (h *usosHandler) start(ctx context.Context, in *usosStartInput) (*redirectOutput, error) {
 	authorizeURL, err := h.usos.start(ctx, in.University, in.Platform)
 	if err != nil {
-		return h.redirectWithError(in.Platform, err), nil
+		return h.redirectWithError(ctx, in.Platform, err), nil
 	}
 	return found(authorizeURL), nil
 }
@@ -75,26 +76,26 @@ func (h *usosHandler) callback(ctx context.Context, in *usosCallbackInput) (*red
 		if platform == "" {
 			return nil, apiError(err)
 		}
-		return h.redirectWithError(platform, err), nil
+		return h.redirectWithError(ctx, platform, err), nil
 	}
 
 	user, err := h.logins.signIn(ctx, id)
 	if err != nil {
-		return h.redirectWithError(platform, err), nil
+		return h.redirectWithError(ctx, platform, err), nil
 	}
 
 	code, err := h.logins.issueLoginCode(ctx, user.ID)
 	if err != nil {
-		return h.redirectWithError(platform, err), nil
+		return h.redirectWithError(ctx, platform, err), nil
 	}
 
 	return h.redirectToApp(platform, url.Values{"code": {code}}), nil
 }
 
-func (h *usosHandler) redirectWithError(platform Platform, err error) *redirectOutput {
+func (h *usosHandler) redirectWithError(ctx context.Context, platform Platform, err error) *redirectOutput {
 	status, code := errorResponse(err)
 	if status >= http.StatusInternalServerError {
-		log.Printf("auth: usos login: %v", err)
+		telemetry.ReportError(ctx, "usos login failed", err, slog.String("error_code", code))
 	}
 	return h.redirectToApp(platform, url.Values{"error": {code}})
 }
