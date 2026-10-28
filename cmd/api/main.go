@@ -150,7 +150,7 @@ func run(cfg *config.Config) error {
 
 	health.Register(r, &isShuttingDown, dbPool)
 
-	modules, err := server.New(dbPool, cfg)
+	modules, err := server.New(initCtx, dbPool, cfg)
 	if err != nil {
 		return fmt.Errorf("set up modules: %w", err)
 	}

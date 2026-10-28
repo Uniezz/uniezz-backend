@@ -16,7 +16,10 @@ type Handler struct {
 }
 
 func newHandler(isShuttingDown *atomic.Bool, db *pgxpool.Pool) *Handler {
-	return &Handler{isShuttingDown: isShuttingDown, db: db}
+	return &Handler{
+		isShuttingDown: isShuttingDown,
+		db:             db,
+	}
 }
 
 func (h *Handler) registerRoutes(r chi.Router) {
