@@ -16,7 +16,7 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	}
 
 	config.MaxConns = 25
-	config.MinConns = 2
+	config.MinConns = 0
 	config.MaxConnIdleTime = 5 * time.Minute
 	config.MaxConnLifetime = 1 * time.Hour
 

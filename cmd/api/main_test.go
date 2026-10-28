@@ -286,13 +286,13 @@ func TestRealIP(t *testing.T) {
 	}
 }
 
-func TestReadyURL(t *testing.T) {
+func TestLiveURL(t *testing.T) {
 	for _, tc := range []struct{ port, want string }{
-		{"", "http://127.0.0.1:8080/healthz/ready"},
-		{"9090", "http://127.0.0.1:9090/healthz/ready"},
+		{"", "http://127.0.0.1:8080/healthz/live"},
+		{"9090", "http://127.0.0.1:9090/healthz/live"},
 	} {
-		if got := readyURL(tc.port); got != tc.want {
-			t.Errorf("readyURL(%q): expected %q, got %q", tc.port, tc.want, got)
+		if got := liveURL(tc.port); got != tc.want {
+			t.Errorf("liveURL(%q): expected %q, got %q", tc.port, tc.want, got)
 		}
 	}
 }

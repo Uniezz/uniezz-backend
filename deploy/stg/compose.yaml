@@ -72,7 +72,7 @@ services:
       - traefik.http.routers.api.entrypoints=websecure
       - traefik.http.routers.api.tls.certresolver=le
       - traefik.http.services.api.loadbalancer.server.port=8080
-      - traefik.http.services.api.loadbalancer.healthcheck.path=/healthz/ready
+      - traefik.http.services.api.loadbalancer.healthcheck.path=/healthz/live
       - traefik.http.services.api.loadbalancer.healthcheck.interval=10s
 
 networks:

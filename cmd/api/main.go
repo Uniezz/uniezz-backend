@@ -53,8 +53,8 @@ func realIP(next http.Handler) http.Handler {
 	})
 }
 
-func readyURL(port string) string {
-	return "http://" + net.JoinHostPort("127.0.0.1", cmp.Or(port, "8080")) + "/healthz/ready"
+func liveURL(port string) string {
+	return "http://" + net.JoinHostPort("127.0.0.1", cmp.Or(port, "8080")) + "/healthz/live"
 }
 
 func checkHealth(url string) error {
@@ -85,7 +85,7 @@ func main() {
 	flag.Parse()
 
 	if *healthcheck {
-		if err := checkHealth(readyURL(os.Getenv("PORT"))); err != nil {
+		if err := checkHealth(liveURL(os.Getenv("PORT"))); err != nil {
 			fmt.Fprintf(os.Stderr, "healthcheck: %v\n", err)
 			os.Exit(1)
 		}
@@ -150,7 +150,7 @@ func run(cfg *config.Config) error {
 
 	health.Register(r, &isShuttingDown, dbPool)
 
-	modules, err := server.New(dbPool, cfg)
+	modules, err := server.New(initCtx, dbPool, cfg)
 	if err != nil {
 		return fmt.Errorf("set up modules: %w", err)
 	}

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -94,7 +95,10 @@ func (h *usosHandler) callback(ctx context.Context, in *usosCallbackInput) (*red
 
 func (h *usosHandler) redirectWithError(ctx context.Context, platform Platform, err error) *redirectOutput {
 	status, code := errorResponse(err)
-	if status >= http.StatusInternalServerError {
+	switch {
+	case errors.Is(err, context.Canceled):
+		slog.InfoContext(ctx, "usos login abandoned by client", slog.Any("error", err))
+	case status >= http.StatusInternalServerError:
 		telemetry.ReportError(ctx, "usos login failed", err, slog.String("error_code", code))
 	}
 	return h.redirectToApp(platform, url.Values{"error": {code}})

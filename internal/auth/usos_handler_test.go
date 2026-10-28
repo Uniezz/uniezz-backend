@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -133,6 +136,17 @@ func expectJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	if body["error"] != wantCode {
 		t.Errorf(`expected {"error":%q}, got %s`, wantCode, rec.Body.String())
 	}
+}
+
+// captureLogs redirects the default slog logger into a buffer until the test ends.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
 }
 
 func usersWithUsosID(t *testing.T, pool *pgxpool.Pool, usosUserID string) int {
@@ -298,6 +312,36 @@ func TestUsosHandler_Callback(t *testing.T) {
 
 		if params.Get("error") != "provider_unavailable" {
 			t.Errorf("expected ?error=provider_unavailable, got %v", params)
+		}
+	})
+
+	t.Run("USOS failure is reported as an error", func(t *testing.T) {
+		s := newAuthTestServer(t)
+		s.usos.finishErr = errors.New("usos api returned status: 500")
+		s.start(t, PlatformWeb)
+		logs := captureLogs(t)
+
+		redirectParams(t, s.callback(t), testWebRedirectURL)
+
+		if !strings.Contains(logs.String(), `level=ERROR msg="usos login failed"`) {
+			t.Errorf("expected the failure to be reported, got logs:\n%s", logs.String())
+		}
+	})
+
+	t.Run("client disconnect is sent back with provider_unavailable but not reported", func(t *testing.T) {
+		s := newAuthTestServer(t)
+		s.usos.finishErr = fmt.Errorf("failed to fetch user info: %w",
+			&url.Error{Op: "Get", URL: "https://usos.test/services/users/user", Err: context.Canceled})
+		s.start(t, PlatformWeb)
+		logs := captureLogs(t)
+
+		params := redirectParams(t, s.callback(t), testWebRedirectURL)
+
+		if params.Get("error") != "provider_unavailable" {
+			t.Errorf("expected ?error=provider_unavailable, got %v", params)
+		}
+		if strings.Contains(logs.String(), "level=ERROR") {
+			t.Errorf("expected no error to be reported, got logs:\n%s", logs.String())
 		}
 	})
 

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -36,9 +37,23 @@ type Config struct {
 	SentryDSN         string
 	SentryEnvironment string
 	SentryRelease     string
+
+	S3Region          string
+	S3Bucket          string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	S3Endpoint        string
+	S3PublicEndpoint  string
+	S3ForcePathStyle  bool
+	MediaPublicURL    string
 }
 
 func Load() (*Config, error) {
+	s3ForcePathStyle, err := strconv.ParseBool(getEnv("S3_FORCE_PATH_STYLE", "false"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid S3_FORCE_PATH_STYLE: %w", err)
+	}
+
 	cfg := &Config{
 		Port:               getEnv("PORT", "8080"),
 		Env:                getEnv("ENV", "development"),
@@ -54,6 +69,14 @@ func Load() (*Config, error) {
 		SentryDSN:          os.Getenv("SENTRY_DSN"),
 		SentryEnvironment:  os.Getenv("SENTRY_ENVIRONMENT"),
 		SentryRelease:      os.Getenv("SENTRY_RELEASE"),
+		S3Region:           getEnv("S3_REGION", "us-east-1"),
+		S3Bucket:           getEnv("S3_BUCKET", "uniezz-media"),
+		S3AccessKeyID:      os.Getenv("S3_ACCESS_KEY_ID"),
+		S3SecretAccessKey:  os.Getenv("S3_SECRET_ACCESS_KEY"),
+		S3Endpoint:         os.Getenv("S3_ENDPOINT"),
+		S3PublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
+		S3ForcePathStyle:   s3ForcePathStyle,
+		MediaPublicURL:     os.Getenv("MEDIA_PUBLIC_URL"),
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -82,6 +105,10 @@ func Load() (*Config, error) {
 
 	if len(cfg.OTPHashKey) < minOTPHashKeyLength {
 		return nil, fmt.Errorf("OTP_HASH_KEY environment variable must be at least %d characters", minOTPHashKeyLength)
+	}
+
+	if cfg.S3AccessKeyID == "" || cfg.S3SecretAccessKey == "" {
+		return nil, fmt.Errorf("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY environment variables are required")
 	}
 
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
