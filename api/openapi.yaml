@@ -199,6 +199,10 @@ components:
           type: string
         trustBadge:
           description: "Verification level: verified (USOS), directory (Entra), or domain (email)"
+          enum:
+            - verified
+            - directory
+            - domain
           examples:
             - verified
           type: string
@@ -266,7 +270,7 @@ paths:
         - auth
   /auth/me:
     get:
-      description: "?"
+      description: Returns the profile of the user who owns the session token, including the trust badge computed by the server.
       operationId: getMe
       parameters:
         - description: Bearer <session token>
@@ -282,13 +286,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserProfileDTO"
           description: OK
-        default:
+        "401":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
-          description: Error
-      summary: Get the list of information about requester
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      summary: Get the logged-in user's profile
       tags:
         - auth
   /auth/otp/request:

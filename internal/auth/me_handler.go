@@ -24,7 +24,7 @@ type UserProfileDTO struct {
 	Major        string     `json:"major,omitempty" doc:"Field of study (kierunek studiów)" example:"Informatyka"`
 	CurrentYear  int        `json:"currentYear,omitempty" doc:"Current student year of study" example:"3"`
 	Avatar       string     `json:"avatar,omitempty" doc:"URL to user profile avatar image" example:"https://cdn.uniezz.pl/avatars/1431.jpg"`
-	TrustBadge   TrustBadge `json:"trustBadge" doc:"Verification level: verified (USOS), directory (Entra), or domain (email)" example:"verified"`
+	TrustBadge   TrustBadge `json:"trustBadge" enum:"verified,directory,domain" doc:"Verification level: verified (USOS), directory (Entra), or domain (email)" example:"verified"`
 }
 
 type MeResponse struct {
@@ -35,8 +35,9 @@ var meOperation = huma.Operation{
 	OperationID: "getMe",
 	Method:      http.MethodGet,
 	Path:        "/auth/me",
-	Summary:     "Get the list of information about requester",
-	Description: "?",
+	Summary:     "Get the logged-in user's profile",
+	Description: "Returns the profile of the user who owns the session token, including the trust badge computed by the server.",
+	Errors:      []int{http.StatusUnauthorized},
 	Tags:        []string{"auth"},
 }
 
