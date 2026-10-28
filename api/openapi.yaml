@@ -22,6 +22,46 @@ components:
       required:
         - code
       type: object
+    FacultyDTO:
+      additionalProperties: false
+      properties:
+        address:
+          description: Street address of the faculty building
+          examples:
+            - pl. Marii Curie-Skłodowskiej 2
+          type: string
+        location:
+          $ref: "#/components/schemas/GeoPointDTO"
+          description: Geographic location of the faculty building
+        name:
+          description: Display name of the faculty
+          examples:
+            - Wydział Chemii
+          type: string
+      required:
+        - name
+        - address
+        - location
+      type: object
+    GeoPointDTO:
+      additionalProperties: false
+      properties:
+        latitude:
+          description: Latitude in decimal degrees (WGS 84)
+          examples:
+            - 51.24513
+          format: double
+          type: number
+        longitude:
+          description: Longitude in decimal degrees (WGS 84)
+          examples:
+            - 22.54247
+          format: double
+          type: number
+      required:
+        - latitude
+        - longitude
+      type: object
     IssuedSession:
       additionalProperties: false
       properties:
@@ -100,6 +140,13 @@ components:
           type:
             - array
             - "null"
+        faculties:
+          description: Faculties of the university with their locations
+          items:
+            $ref: "#/components/schemas/FacultyDTO"
+          type:
+            - array
+            - "null"
         id:
           description: Unique identifier of the university
           examples:
@@ -114,6 +161,7 @@ components:
         - id
         - name
         - authMethod
+        - faculties
       type: object
   securitySchemes:
     bearer:
