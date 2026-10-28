@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
@@ -11,13 +12,14 @@ import (
 
 func productionConfig(usos map[string]config.UsosCredentials) *config.Config {
 	return &config.Config{
-		Env:                "production",
-		BackendPublicURL:   "https://api.test",
-		UsosConfigs:        usos,
-		AWSRegion:          "us-east-1",
-		AWSS3Bucket:        "test-bucket",
-		AWSAccessKeyID:     "test-access-key",
-		AWSSecretAccessKey: "test-secret-key",
+		Env:               "production",
+		BackendPublicURL:  "https://api.test",
+		UsosConfigs:       usos,
+		S3Region:          "us-east-1",
+		S3Bucket:          "test-bucket",
+		S3Endpoint:        "http://127.0.0.1:1",
+		S3AccessKeyID:     "test-access-key",
+		S3SecretAccessKey: "test-secret-key",
 	}
 }
 
@@ -28,7 +30,10 @@ func TestNew(t *testing.T) {
 	}
 
 	t.Run("builds every module with full config", func(t *testing.T) {
-		if _, err := New(context.Background(), nil, productionConfig(full)); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		if _, err := New(ctx, nil, productionConfig(full)); err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 	})

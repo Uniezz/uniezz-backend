@@ -8,135 +8,73 @@ import (
 	"github.com/google/uuid"
 )
 
-type claimTestRepository struct {
+type fakePendingStore struct {
+	mediaStore
 	item        *Media
 	getErr      error
-	markErr     error
 	markedReady bool
 }
 
-func (r *claimTestRepository) getOwnedPending(
-	_ context.Context,
-	_, _ uuid.UUID,
-	_ Kind,
-) (*Media, error) {
-	return r.item, r.getErr
+func (f *fakePendingStore) getOwnedPending(context.Context, uuid.UUID, uuid.UUID, Kind) (*Media, error) {
+	return f.item, f.getErr
 }
 
-func (r *claimTestRepository) markReady(
-	_ context.Context,
-	_, _ uuid.UUID,
-) error {
-	if r.markErr != nil {
-		return r.markErr
-	}
-	r.markedReady = true
+func (f *fakePendingStore) markReady(context.Context, uuid.UUID, uuid.UUID) error {
+	f.markedReady = true
 	return nil
 }
 
-type claimTestStorage struct {
+type fakeInspector struct {
+	objectStore
 	size        int64
 	contentType string
 	err         error
 	called      bool
 }
 
-func (s *claimTestStorage) HeadObject(
-	_ context.Context,
-	_ string,
-) (int64, string, error) {
-	s.called = true
-	return s.size, s.contentType, s.err
+func (f *fakeInspector) headObject(context.Context, string) (int64, string, error) {
+	f.called = true
+	return f.size, f.contentType, f.err
 }
 
-func TestClaimUploadedMedia(t *testing.T) {
+func TestClaim(t *testing.T) {
 	storageErr := errors.New("storage unavailable")
-	repositoryErr := errors.New("database unavailable")
 
 	tests := []struct {
-		name          string
-		repositoryErr error
-		storageErr    error
-		actualSize    int64
-		actualType    string
-		wantError     bool
-		wantHeadCall  bool
-		wantReady     bool
+		name       string
+		getErr     error
+		headErr    error
+		size       int64
+		ctype      string
+		wantErr    error
+		wantHead   bool
+		wantMarked bool
 	}{
-		{
-			name:         "claims matching uploaded object",
-			actualSize:   1024,
-			actualType:   "image/jpeg",
-			wantHeadCall: true,
-			wantReady:    true,
-		},
-		{
-			name:         "rejects mismatched size",
-			actualSize:   2048,
-			actualType:   "image/jpeg",
-			wantError:    true,
-			wantHeadCall: true,
-		},
-		{
-			name:         "rejects mismatched content type",
-			actualSize:   1024,
-			actualType:   "image/png",
-			wantError:    true,
-			wantHeadCall: true,
-		},
-		{
-			name:         "returns storage error",
-			storageErr:   storageErr,
-			wantError:    true,
-			wantHeadCall: true,
-		},
-		{
-			name:          "returns repository error",
-			repositoryErr: repositoryErr,
-			wantError:     true,
-		},
+		{name: "claims matching object", size: 1024, ctype: "image/jpeg", wantHead: true, wantMarked: true},
+		{name: "rejects other size", size: 2048, ctype: "image/jpeg", wantErr: ErrUploadMismatch, wantHead: true},
+		{name: "rejects other content type", size: 1024, ctype: "image/png", wantErr: ErrUploadMismatch, wantHead: true},
+		{name: "returns storage error", headErr: storageErr, wantErr: storageErr, wantHead: true},
+		{name: "returns not found before touching storage", getErr: ErrNotFound, wantErr: ErrNotFound},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mediaID := uuid.New()
-			ownerID := uuid.New()
+			store := &fakePendingStore{
+				item:   &Media{ObjectKey: "avatars/test.jpg", ContentType: "image/jpeg", SizeBytes: 1024},
+				getErr: tt.getErr,
+			}
+			inspector := &fakeInspector{size: tt.size, contentType: tt.ctype, err: tt.headErr}
 
-			repo := &claimTestRepository{
-				item: &Media{
-					ID:          mediaID,
-					OwnerUserID: ownerID,
-					Kind:        KindAvatar,
-					ObjectKey:   "avatars/test.jpg",
-					ContentType: "image/jpeg",
-					SizeBytes:   1024,
-					Status:      "pending",
-				},
-				getErr: tt.repositoryErr,
-			}
-			storage := &claimTestStorage{
-				size:        tt.actualSize,
-				contentType: tt.actualType,
-				err:         tt.storageErr,
-			}
+			err := Module{repo: store, storage: inspector}.Claim(context.Background(), uuid.New(), uuid.New(), KindAvatar)
 
-			err := claimUploadedMedia(
-				context.Background(),
-				repo,
-				storage,
-				mediaID,
-				ownerID,
-				KindAvatar,
-			)
-
-			if (err != nil) != tt.wantError {
-				t.Fatalf("claimUploadedMedia() error = %v, wantError %v", err, tt.wantError)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Claim() error = %v, want %v", err, tt.wantErr)
 			}
-			if storage.called != tt.wantHeadCall {
-				t.Errorf("HeadObject called = %v, want %v", storage.called, tt.wantHeadCall)
+			if inspector.called != tt.wantHead {
+				t.Errorf("headObject called = %v, want %v", inspector.called, tt.wantHead)
 			}
-			if repo.markedReady != tt.wantReady {
-				t.Errorf("markedReady = %v, want %v", repo.markedReady, tt.wantReady)
+			if store.markedReady != tt.wantMarked {
+				t.Errorf("markedReady = %v, want %v", store.markedReady, tt.wantMarked)
 			}
 		})
 	}

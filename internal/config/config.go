@@ -19,65 +19,64 @@ type UsosCredentials struct {
 }
 
 type Config struct {
-	Port                string
-	Env                 string
-	DatabaseURL         string
-	BackendPublicURL    string
-	AppWebURL           string
-	AppMobileScheme     string
-	UsosConfigs         map[string]UsosCredentials
-	CORSAllowedOrigins  []string
-	ResendAPIKey        string
-	MailFrom            string
-	OTPEmailTemplateID  string
-	OTPHashKey          string
-	OTPTestEmails       []string
-	ServiceName         string
-	SentryDSN           string
-	SentryEnvironment   string
-	SentryRelease       string
-	AWSRegion           string
-	AWSS3Bucket         string
-	AWSAccessKeyID      string
-	AWSSecretAccessKey  string
-	AWSEndpoint         string
-	AWSPublicEndpoint   string
-	AWSPublicMediaURL   string
-	AWSS3ForcePathStyle bool
+	Port               string
+	Env                string
+	DatabaseURL        string
+	BackendPublicURL   string
+	AppWebURL          string
+	AppMobileScheme    string
+	UsosConfigs        map[string]UsosCredentials
+	CORSAllowedOrigins []string
+	ResendAPIKey       string
+	MailFrom           string
+	OTPEmailTemplateID string
+	OTPHashKey         string
+	OTPTestEmails      []string
+
+	ServiceName       string
+	SentryDSN         string
+	SentryEnvironment string
+	SentryRelease     string
+
+	S3Region          string
+	S3Bucket          string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	S3Endpoint        string
+	S3PublicEndpoint  string
+	S3ForcePathStyle  bool
+	MediaPublicURL    string
 }
 
 func Load() (*Config, error) {
-	forcePathStyle, err := strconv.ParseBool(
-		getEnv("S3_FORCE_PATH_STYLE", "false"),
-	)
+	s3ForcePathStyle, err := strconv.ParseBool(getEnv("S3_FORCE_PATH_STYLE", "false"))
 	if err != nil {
-		return nil, fmt.Errorf(
-			"invalid S3_FORCE_PATH_STYLE: %w", err,
-		)
+		return nil, fmt.Errorf("invalid S3_FORCE_PATH_STYLE: %w", err)
 	}
+
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
-		Env:                 getEnv("ENV", "development"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		BackendPublicURL:    getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
-		AppWebURL:           getEnv("APP_WEB_URL", "http://localhost:3000"),
-		AppMobileScheme:     getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
-		ResendAPIKey:        os.Getenv("RESEND_API_KEY"),
-		MailFrom:            getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
-		OTPEmailTemplateID:  os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
-		OTPHashKey:          os.Getenv("OTP_HASH_KEY"),
-		ServiceName:         getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
-		SentryDSN:           os.Getenv("SENTRY_DSN"),
-		SentryEnvironment:   os.Getenv("SENTRY_ENVIRONMENT"),
-		SentryRelease:       os.Getenv("SENTRY_RELEASE"),
-		AWSRegion:           getEnv("S3_REGION", "us-east-1"),
-		AWSS3Bucket:         getEnv("S3_BUCKET", "uniezz-media"),
-		AWSAccessKeyID:      os.Getenv("S3_ACCESS_KEY_ID"),
-		AWSSecretAccessKey:  os.Getenv("S3_SECRET_ACCESS_KEY"),
-		AWSEndpoint:         os.Getenv("S3_ENDPOINT"),
-		AWSPublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
-		AWSPublicMediaURL:   os.Getenv("MEDIA_PUBLIC_URL"),
-		AWSS3ForcePathStyle: forcePathStyle,
+		Port:               getEnv("PORT", "8080"),
+		Env:                getEnv("ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		BackendPublicURL:   getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
+		AppWebURL:          getEnv("APP_WEB_URL", "http://localhost:3000"),
+		AppMobileScheme:    getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
+		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
+		MailFrom:           getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
+		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
+		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
+		ServiceName:        getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
+		SentryDSN:          os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:  os.Getenv("SENTRY_ENVIRONMENT"),
+		SentryRelease:      os.Getenv("SENTRY_RELEASE"),
+		S3Region:           getEnv("S3_REGION", "us-east-1"),
+		S3Bucket:           getEnv("S3_BUCKET", "uniezz-media"),
+		S3AccessKeyID:      os.Getenv("S3_ACCESS_KEY_ID"),
+		S3SecretAccessKey:  os.Getenv("S3_SECRET_ACCESS_KEY"),
+		S3Endpoint:         os.Getenv("S3_ENDPOINT"),
+		S3PublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
+		S3ForcePathStyle:   s3ForcePathStyle,
+		MediaPublicURL:     os.Getenv("MEDIA_PUBLIC_URL"),
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -106,6 +105,10 @@ func Load() (*Config, error) {
 
 	if len(cfg.OTPHashKey) < minOTPHashKeyLength {
 		return nil, fmt.Errorf("OTP_HASH_KEY environment variable must be at least %d characters", minOTPHashKeyLength)
+	}
+
+	if cfg.S3AccessKeyID == "" || cfg.S3SecretAccessKey == "" {
+		return nil, fmt.Errorf("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY environment variables are required")
 	}
 
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))

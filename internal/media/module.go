@@ -1,97 +1,47 @@
+// Package media stores user uploads such as avatars, feed images and chat attachments. Clients upload files straight to S3-compatible storage through presigned URLs; other modules keep only a media ID and ask this package for a URL to show.
 package media
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Module struct {
-	storage *Storage
-	repo    *repository
+var _ mediaStore = (*repository)(nil)
+
+type mediaStore interface {
+	createPending(ctx context.Context, ownerUserID uuid.UUID, kind Kind, objectKey, contentType string, sizeBytes int64) (*Media, error)
+	getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*Media, error)
+	markReady(ctx context.Context, id, ownerUserID uuid.UUID) error
+	getReady(ctx context.Context, id uuid.UUID) (*Media, error)
 }
 
-type Upload struct {
-	MediaID   uuid.UUID
-	UploadURL string
-	ExpiresAt time.Time
+var _ objectStore = (*objectStorage)(nil)
+
+type objectStore interface {
+	headObject(ctx context.Context, key string) (size int64, contentType string, err error)
+	presignPut(ctx context.Context, key, contentType string, size int64) (string, error)
+	presignGet(ctx context.Context, key string) (string, error)
+	publicURL(key string) (string, error)
+}
+
+type Module struct {
+	storage objectStore
+	repo    mediaStore
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, error) {
-	storage, err := newStorage(ctx, cfg)
+	storage, err := newObjectStorage(ctx, cfg)
 	if err != nil {
 		return Module{}, err
 	}
 
-	if err := storage.CheckBucket(ctx); err != nil {
+	if err := storage.checkBucket(ctx); err != nil {
 		slog.WarnContext(ctx, "media storage bucket is unavailable", "error", err)
 	}
 
-	return Module{
-		storage: storage,
-		repo:    newRepository(db),
-	}, nil
-}
-
-func (m Module) Claim(
-	ctx context.Context,
-	mediaID uuid.UUID,
-	ownerUserID uuid.UUID,
-	kind Kind,
-) error {
-	return claimUploadedMedia(ctx, m.repo, m.storage, mediaID, ownerUserID, kind)
-}
-
-func (m Module) URL(ctx context.Context, mediaID uuid.UUID) (string, error) {
-	item, err := m.repo.getReady(ctx, mediaID)
-	if err != nil {
-		return "", err
-	}
-
-	switch item.Kind {
-	case KindAvatar, KindFeed:
-		return m.storage.PublicURL(item.ObjectKey)
-	case KindChat:
-		return m.storage.PresignGetURL(ctx, item.ObjectKey)
-	default:
-		return "", fmt.Errorf("unsupported media kind %q", item.Kind)
-	}
-}
-
-func (m Module) CreateUpload(
-	ctx context.Context,
-	ownerUserID uuid.UUID,
-	kind Kind,
-	contentType string,
-	size int64,
-) (Upload, error) {
-	if err := validateUpload(kind, contentType, size); err != nil {
-		return Upload{}, err
-	}
-
-	key, err := NewObjectKey(kind, contentType)
-	if err != nil {
-		return Upload{}, err
-	}
-
-	uploadURL, err := m.storage.PresignPutURL(ctx, key, kind, contentType, size)
-	if err != nil {
-		return Upload{}, fmt.Errorf("create media upload URL: %w", err)
-	}
-
-	item, err := m.repo.createPending(ctx, ownerUserID, kind, key, contentType, size)
-	if err != nil {
-		return Upload{}, err
-	}
-
-	return Upload{
-		MediaID:   item.ID,
-		UploadURL: uploadURL,
-		ExpiresAt: time.Now().Add(uploadURLTTL),
-	}, nil
+	return Module{storage: storage, repo: newRepository(db)}, nil
 }

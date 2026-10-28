@@ -14,6 +14,8 @@ func loadWith(t *testing.T, env map[string]string) *Config {
 	t.Setenv("RESEND_API_KEY", "re_test")
 	t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
 	t.Setenv("OTP_HASH_KEY", testOTPHashKey)
+	t.Setenv("S3_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "test-secret-key")
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
@@ -71,8 +73,8 @@ func TestLoad_S3PublicEndpoint(t *testing.T) {
 		"S3_PUBLIC_ENDPOINT": "http://localhost:9000",
 	})
 
-	if cfg.AWSPublicEndpoint != "http://localhost:9000" {
-		t.Errorf("expected public endpoint %q, got %q", "http://localhost:9000", cfg.AWSPublicEndpoint)
+	if cfg.S3PublicEndpoint != "http://localhost:9000" {
+		t.Errorf("expected public endpoint %q, got %q", "http://localhost:9000", cfg.S3PublicEndpoint)
 	}
 }
 
@@ -81,8 +83,8 @@ func TestLoad_MediaPublicURL(t *testing.T) {
 		"MEDIA_PUBLIC_URL": "https://media.uniezz.pl",
 	})
 
-	if cfg.AWSPublicMediaURL != "https://media.uniezz.pl" {
-		t.Errorf("expected public media URL %q, got %q", "https://media.uniezz.pl", cfg.AWSPublicMediaURL)
+	if cfg.MediaPublicURL != "https://media.uniezz.pl" {
+		t.Errorf("expected public media URL %q, got %q", "https://media.uniezz.pl", cfg.MediaPublicURL)
 	}
 }
 
@@ -188,4 +190,19 @@ func TestLoad_Telemetry(t *testing.T) {
 			t.Errorf("unexpected telemetry config: %+v", cfg)
 		}
 	})
+}
+
+func TestLoad_RequiresS3Credentials(t *testing.T) {
+	for _, tc := range []struct{ key, secret string }{{"", "secret"}, {"key", ""}} {
+		t.Setenv("DATABASE_URL", "postgres://test")
+		t.Setenv("RESEND_API_KEY", "re_test")
+		t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
+		t.Setenv("OTP_HASH_KEY", testOTPHashKey)
+		t.Setenv("S3_ACCESS_KEY_ID", tc.key)
+		t.Setenv("S3_SECRET_ACCESS_KEY", tc.secret)
+
+		if _, err := Load(); err == nil {
+			t.Errorf("expected an error for S3 key %q and secret %q, got nil", tc.key, tc.secret)
+		}
+	}
 }

@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -105,8 +106,8 @@ func TestRepositoryLifecycle(t *testing.T) {
 		t.Errorf("media ID = %v, want %v", found.ID, created.ID)
 	}
 
-	if _, err := repo.getOwnedPending(ctx, created.ID, uuid.New(), KindAvatar); err == nil {
-		t.Fatal("expected an error for a different owner")
+	if _, err := repo.getOwnedPending(ctx, created.ID, uuid.New(), KindAvatar); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("different owner: error = %v, want ErrNotFound", err)
 	}
 
 	if err := repo.markReady(ctx, created.ID, ownerID); err != nil {
@@ -121,7 +122,10 @@ func TestRepositoryLifecycle(t *testing.T) {
 		t.Errorf("status = %q, want ready", ready.Status)
 	}
 
-	if _, err := repo.getOwnedPending(ctx, created.ID, ownerID, KindAvatar); err == nil {
-		t.Fatal("ready media should not be returned as pending")
+	if _, err := repo.getOwnedPending(ctx, created.ID, ownerID, KindAvatar); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ready media returned as pending: error = %v, want ErrNotFound", err)
+	}
+	if err := repo.markReady(ctx, created.ID, ownerID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second markReady: error = %v, want ErrNotFound", err)
 	}
 }

@@ -16,13 +16,11 @@ import (
 )
 
 type Modules struct {
-	Auth  auth.Module
-	Media media.Module
+	Auth auth.Module
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, error) {
-	mediaModule, err := media.New(ctx, db, cfg)
-	if err != nil {
+	if _, err := media.New(ctx, db, cfg); err != nil {
 		return Modules{}, fmt.Errorf("initialize media: %w", err)
 	}
 
@@ -32,7 +30,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule}, nil
+	return Modules{Auth: authModule}, nil
 }
 
 func (m Modules) Register(api huma.API) {
