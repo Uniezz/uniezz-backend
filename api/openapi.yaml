@@ -115,6 +115,56 @@ components:
         - name
         - authMethod
       type: object
+    UserProfileDTO:
+      additionalProperties: false
+      properties:
+        avatar:
+          description: URL to user profile avatar image
+          examples:
+            - https://cdn.uniezz.pl/avatars/1431.jpg
+          type: string
+        currentYear:
+          description: Current student year of study
+          examples:
+            - 3
+          format: int64
+          type: integer
+        email:
+          description: User primary email address
+          examples:
+            - jan.kowalski@student.kul.pl
+          type: string
+        fullName:
+          description: Display first and last name of the user
+          examples:
+            - Janusz Kowalski
+          type: string
+        id:
+          description: Unique identifier of the user
+          examples:
+            - "1431"
+          type: string
+        major:
+          description: Field of study (kierunek studiów)
+          examples:
+            - Informatyka
+          type: string
+        trustBadge:
+          description: "Verification level: verified (USOS), directory (Entra), or domain (email)"
+          examples:
+            - verified
+          type: string
+        universityId:
+          description: ID of the university user belongs to
+          examples:
+            - kul
+          type: string
+      required:
+        - id
+        - fullName
+        - email
+        - trustBadge
+      type: object
   securitySchemes:
     bearer:
       scheme: bearer
@@ -165,6 +215,33 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
           description: Internal Server Error
       summary: Exchange a one-time login code for a session
+      tags:
+        - auth
+  /auth/me:
+    get:
+      description: "?"
+      operationId: getMe
+      parameters:
+        - description: Bearer <session token>
+          in: header
+          name: Authorization
+          schema:
+            description: Bearer <session token>
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Error
+      summary: Get the list of information about requester
       tags:
         - auth
   /auth/otp/request:
