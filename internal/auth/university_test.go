@@ -98,6 +98,34 @@ func TestUniversity_USOSAcceptsNoEmail(t *testing.T) {
 	}
 }
 
+func TestUniversities_FacultiesAreComplete(t *testing.T) {
+	for _, u := range GetUniversities() {
+		if len(u.Faculties) == 0 {
+			t.Errorf("%s has no faculties", u.ID)
+		}
+		for _, f := range u.Faculties {
+			if strings.TrimSpace(f.Name) == "" || strings.TrimSpace(f.Address) == "" {
+				t.Errorf("%s: faculty %+v must have a name and an address", u.ID, f)
+			}
+		}
+	}
+}
+
+func TestUniversities_FacultiesLocatedInLublin(t *testing.T) {
+	const (
+		minLat, maxLat = 51.1, 51.35
+		minLng, maxLng = 22.4, 22.7
+	)
+	for _, u := range GetUniversities() {
+		for _, f := range u.Faculties {
+			lat, lng := f.Location.Latitude, f.Location.Longitude
+			if lat < minLat || lat > maxLat || lng < minLng || lng > maxLng {
+				t.Errorf("%s: %q at (%v, %v) is outside Lublin; latitude and longitude may be swapped", u.ID, f.Name, lat, lng)
+			}
+		}
+	}
+}
+
 func TestUniversities_OTPHaveLowercaseDomains(t *testing.T) {
 	for _, u := range GetUniversities() {
 		if u.AuthType != AuthTypeOTP {
