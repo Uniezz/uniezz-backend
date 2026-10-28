@@ -16,6 +16,7 @@ type Module struct {
 	session      *sessionHandler
 	universities *universitiesHandler
 	otp          *otpHandler
+	me           *meHandler
 }
 
 func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error) {
@@ -35,6 +36,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error)
 		},
 		session:      &sessionHandler{logins: logins},
 		universities: &universitiesHandler{},
+		me:           &meHandler{logins: logins},
 		otp: &otpHandler{
 			otp: newOTPLogin(
 				newOTPRequestRepository(db),
@@ -55,6 +57,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, universitiesOperation, m.universities.list)
 	huma.Register(api, otpRequestOperation, m.otp.request)
 	huma.Register(api, otpVerifyOperation, m.otp.verify)
+	huma.Register(api, meOperation, m.me.getMe)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {

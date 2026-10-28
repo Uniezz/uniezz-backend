@@ -17,6 +17,9 @@ type User struct {
 	Email        *string
 	FirstName    *string
 	LastName     *string
+	Major        *string
+	CurrentYear  *int
+	Avatar       *string
 	LastLoginAt  *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -34,6 +37,7 @@ const userColumns = `id,
 					university_id,
 					usos_user_id, email,
 					first_name, last_name,
+					major, current_year, avatar,
 					last_login_at,
 					created_at,
 					updated_at`
@@ -59,6 +63,8 @@ const upsertByEmailQuery = `
 								last_login_at = NOW()
 							RETURNING ` + userColumns
 
+const getByIDQuery = `SELECT ` + userColumns + ` FROM users WHERE id = $1`
+
 func (r *UserRepository) Upsert(ctx context.Context, id Identity) (*User, error) {
 	var row pgx.Row
 	if id.UsosUserID != "" {
@@ -77,12 +83,40 @@ func (r *UserRepository) Upsert(ctx context.Context, id Identity) (*User, error)
 		&u.Email,
 		&u.FirstName,
 		&u.LastName,
+		&u.Major,
+		&u.CurrentYear,
+		&u.Avatar,
 		&u.LastLoginAt,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert user: %w", err)
+	}
+
+	return &u, nil
+}
+
+func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
+	row := r.db.QueryRow(ctx, getByIDQuery, id)
+
+	var u User
+	err := row.Scan(
+		&u.ID,
+		&u.UniversityID,
+		&u.UsosUserID,
+		&u.Email,
+		&u.FirstName,
+		&u.LastName,
+		&u.Major,
+		&u.CurrentYear,
+		&u.Avatar,
+		&u.LastLoginAt,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
 	return &u, nil

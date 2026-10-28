@@ -161,7 +161,6 @@ components:
           type: string
       required:
         - id
-        - fullName
         - email
         - trustBadge
       type: object

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,6 +67,22 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 		return nil, err
 	}
 	return l.users.Upsert(ctx, id)
+}
+
+func (l *logins) authenticate(ctx context.Context, header string) (uuid.UUID, error) {
+	token, ok := strings.CutPrefix(header, "Bearer ")
+	if !ok {
+		return uuid.Nil, ErrInvalidTokenString
+	}
+	hash, err := HashTokenString(token)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: %w", ErrInvalidTokenString, err)
+	}
+	s, err := l.sessions.GetActiveSessionByHash(ctx, hash[:])
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return s.UserID, nil
 }
 
 type IssuedSession struct {
