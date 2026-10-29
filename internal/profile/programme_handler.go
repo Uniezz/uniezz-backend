@@ -10,31 +10,26 @@ import (
 	"github.com/google/uuid"
 )
 
-type ProgrammeDTO struct {
-	ID            string  `json:"id" format:"uuid"`
-	Faculty       string  `json:"faculty" example:"Wydział Matematyki, Fizyki i Informatyki"`
-	Programme     string  `json:"programme" example:"Informatyka"`
-	Level         *string `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
-	ModeOfStudies *string `json:"modeOfStudies" nullable:"true" enum:"full_time,part_time"`
-	YearOfStudy   *int    `json:"yearOfStudy" nullable:"true" minimum:"1" maximum:"6" example:"2"`
-	Status        string  `json:"status" enum:"active,graduated,suspended,cancelled"`
-	IsPrimary     bool    `json:"isPrimary"`
+type programmeHandler struct {
+	programmes *programmeRepository
 }
 
-func toProgrammeDTO(p programme) ProgrammeDTO {
-	return ProgrammeDTO{
-		ID:            p.ID.String(),
-		Faculty:       p.Faculty,
-		Programme:     p.Programme,
-		Level:         p.Level,
-		ModeOfStudies: p.ModeOfStudies,
-		YearOfStudy:   p.YearOfStudy,
-		Status:        p.Status,
-		IsPrimary:     p.IsPrimary,
-	}
+type Programme struct {
+	ID            uuid.UUID `json:"id" format:"uuid"`
+	Faculty       string    `json:"faculty" example:"Wydział Matematyki, Fizyki i Informatyki"`
+	Programme     string    `json:"programme" example:"Informatyka"`
+	Level         *string   `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
+	ModeOfStudies *string   `json:"modeOfStudies" nullable:"true" enum:"full_time,part_time"`
+	YearOfStudy   *int      `json:"yearOfStudy" nullable:"true" minimum:"1" maximum:"6" example:"2"`
+	Status        string    `json:"status" enum:"active,graduated,suspended,cancelled"`
+	IsPrimary     bool      `json:"isPrimary"`
 }
 
-type programmeBody struct {
+func toProgramme(row programmeRow) Programme {
+	return Programme(row)
+}
+
+type programmeRequest struct {
 	Faculty       string  `json:"faculty" minLength:"1" maxLength:"255"`
 	Programme     string  `json:"programme" minLength:"1" maxLength:"255"`
 	Level         *string `json:"level,omitempty" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
@@ -44,15 +39,15 @@ type programmeBody struct {
 	IsPrimary     bool    `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others"`
 }
 
-func (b programmeBody) fields() (programmeFields, error) {
+func (r programmeRequest) fields() (programmeFields, error) {
 	f := programmeFields{
-		Faculty:       strings.TrimSpace(b.Faculty),
-		Programme:     strings.TrimSpace(b.Programme),
-		Level:         b.Level,
-		ModeOfStudies: b.ModeOfStudies,
-		YearOfStudy:   b.YearOfStudy,
-		Status:        b.Status,
-		IsPrimary:     b.IsPrimary,
+		Faculty:       strings.TrimSpace(r.Faculty),
+		Programme:     strings.TrimSpace(r.Programme),
+		Level:         r.Level,
+		ModeOfStudies: r.ModeOfStudies,
+		YearOfStudy:   r.YearOfStudy,
+		Status:        r.Status,
+		IsPrimary:     r.IsPrimary,
 	}
 	if f.Faculty == "" || f.Programme == "" {
 		return programmeFields{}, ErrInvalidInput
@@ -63,13 +58,9 @@ func (b programmeBody) fields() (programmeFields, error) {
 	return f, nil
 }
 
-type programmeOutput struct {
-	Body ProgrammeDTO
-}
-
-type programmesOutput struct {
+type listProgrammesOutput struct {
 	Body struct {
-		Programmes []ProgrammeDTO `json:"programmes"`
+		Programmes []Programme `json:"programmes"`
 	}
 }
 
@@ -81,27 +72,31 @@ var listProgrammesOperation = auth.Protected(huma.Operation{
 	Tags:        []string{"profile"},
 })
 
-func (m Module) listProgrammes(ctx context.Context, _ *struct{}) (*programmesOutput, error) {
+func (h *programmeHandler) listProgrammes(ctx context.Context, _ *struct{}) (*listProgrammesOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, unauthorized()
 	}
 
-	programmes, err := m.repo.listProgrammes(ctx, userID)
+	rows, err := h.programmes.list(ctx, userID)
 	if err != nil {
 		return nil, apiError(err)
 	}
 
-	out := &programmesOutput{}
-	out.Body.Programmes = make([]ProgrammeDTO, 0, len(programmes))
-	for _, p := range programmes {
-		out.Body.Programmes = append(out.Body.Programmes, toProgrammeDTO(p))
+	out := &listProgrammesOutput{}
+	out.Body.Programmes = make([]Programme, 0, len(rows))
+	for _, row := range rows {
+		out.Body.Programmes = append(out.Body.Programmes, toProgramme(row))
 	}
 	return out, nil
 }
 
 type createProgrammeInput struct {
-	Body programmeBody
+	Body programmeRequest
+}
+
+type createProgrammeOutput struct {
+	Body Programme
 }
 
 var createProgrammeOperation = auth.Protected(huma.Operation{
@@ -114,7 +109,7 @@ var createProgrammeOperation = auth.Protected(huma.Operation{
 	Errors:        []int{http.StatusBadRequest},
 })
 
-func (m Module) createProgramme(ctx context.Context, in *createProgrammeInput) (*programmeOutput, error) {
+func (h *programmeHandler) createProgramme(ctx context.Context, in *createProgrammeInput) (*createProgrammeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, unauthorized()
@@ -124,16 +119,20 @@ func (m Module) createProgramme(ctx context.Context, in *createProgrammeInput) (
 	if err != nil {
 		return nil, apiError(err)
 	}
-	p, err := m.repo.createProgramme(ctx, userID, f)
+	row, err := h.programmes.create(ctx, userID, f)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return &programmeOutput{Body: toProgrammeDTO(*p)}, nil
+	return &createProgrammeOutput{Body: toProgramme(*row)}, nil
 }
 
 type replaceProgrammeInput struct {
-	ID   string `path:"id" format:"uuid"`
-	Body programmeBody
+	ID   uuid.UUID `path:"id" format:"uuid"`
+	Body programmeRequest
+}
+
+type replaceProgrammeOutput struct {
+	Body Programme
 }
 
 var replaceProgrammeOperation = auth.Protected(huma.Operation{
@@ -146,29 +145,25 @@ var replaceProgrammeOperation = auth.Protected(huma.Operation{
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
-func (m Module) replaceProgramme(ctx context.Context, in *replaceProgrammeInput) (*programmeOutput, error) {
+func (h *programmeHandler) replaceProgramme(ctx context.Context, in *replaceProgrammeInput) (*replaceProgrammeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, unauthorized()
 	}
 
-	id, err := uuid.Parse(in.ID)
-	if err != nil {
-		return nil, apiError(ErrNotFound)
-	}
 	f, err := in.Body.fields()
 	if err != nil {
 		return nil, apiError(err)
 	}
-	p, err := m.repo.replaceProgramme(ctx, userID, id, f)
+	row, err := h.programmes.replace(ctx, userID, in.ID, f)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return &programmeOutput{Body: toProgrammeDTO(*p)}, nil
+	return &replaceProgrammeOutput{Body: toProgramme(*row)}, nil
 }
 
 type deleteProgrammeInput struct {
-	ID string `path:"id" format:"uuid"`
+	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
 var deleteProgrammeOperation = auth.Protected(huma.Operation{
@@ -181,17 +176,13 @@ var deleteProgrammeOperation = auth.Protected(huma.Operation{
 	Errors:        []int{http.StatusNotFound},
 })
 
-func (m Module) deleteProgramme(ctx context.Context, in *deleteProgrammeInput) (*struct{}, error) {
+func (h *programmeHandler) deleteProgramme(ctx context.Context, in *deleteProgrammeInput) (*struct{}, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, unauthorized()
 	}
 
-	id, err := uuid.Parse(in.ID)
-	if err != nil {
-		return nil, apiError(ErrNotFound)
-	}
-	if err := m.repo.deleteProgramme(ctx, userID, id); err != nil {
+	if err := h.programmes.delete(ctx, userID, in.ID); err != nil {
 		return nil, apiError(err)
 	}
 	return nil, nil

@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Media struct {
+type mediaRow struct {
 	ID          uuid.UUID
 	OwnerUserID uuid.UUID
 	Kind        Kind
@@ -32,7 +32,7 @@ func newRepository(db *pgxpool.Pool) *repository {
 	return &repository{db: db}
 }
 
-func (r *repository) createPending(ctx context.Context, ownerUserID uuid.UUID, kind Kind, objectKey, contentType string, sizeBytes int64) (*Media, error) {
+func (r *repository) createPending(ctx context.Context, ownerUserID uuid.UUID, kind Kind, objectKey, contentType string, sizeBytes int64) (*mediaRow, error) {
 	const query = `
         INSERT INTO media (owner_user_id, kind, object_key, content_type, size_bytes)
         VALUES ($1, $2, $3, $4, $5)
@@ -45,7 +45,7 @@ func (r *repository) createPending(ctx context.Context, ownerUserID uuid.UUID, k
 	return item, nil
 }
 
-func (r *repository) getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*Media, error) {
+func (r *repository) getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*mediaRow, error) {
 	const query = `
         SELECT ` + mediaColumns + `
         FROM media
@@ -77,7 +77,7 @@ func (r *repository) markReady(ctx context.Context, id, ownerUserID uuid.UUID) e
 	return nil
 }
 
-func (r *repository) getReady(ctx context.Context, id uuid.UUID) (*Media, error) {
+func (r *repository) getReady(ctx context.Context, id uuid.UUID) (*mediaRow, error) {
 	const query = `
         SELECT ` + mediaColumns + `
         FROM media
@@ -106,7 +106,7 @@ func (r *repository) markDeleting(ctx context.Context, tx pgx.Tx, id uuid.UUID) 
 	return nil
 }
 
-func (r *repository) getDeleting(ctx context.Context, id uuid.UUID) (*Media, error) {
+func (r *repository) getDeleting(ctx context.Context, id uuid.UUID) (*mediaRow, error) {
 	const query = `
         SELECT ` + mediaColumns + `
         FROM media
@@ -129,8 +129,8 @@ func (r *repository) deleteDeleting(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func scanMedia(row pgx.Row) (*Media, error) {
-	var item Media
+func scanMedia(row pgx.Row) (*mediaRow, error) {
+	var item mediaRow
 	err := row.Scan(&item.ID, &item.OwnerUserID, &item.Kind, &item.ObjectKey, &item.ContentType, &item.SizeBytes, &item.Status, &item.CreatedAt)
 	if err != nil {
 		return nil, err

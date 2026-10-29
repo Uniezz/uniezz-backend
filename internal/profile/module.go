@@ -27,27 +27,39 @@ type mediaService interface {
 }
 
 type Module struct {
-	repo  *repository
-	media mediaService
-	jobs  *jobs.Runner
+	profiles   *profileRepository
+	programmes *programmeRepository
+	media      mediaService
+	jobs       *jobs.Runner
+
+	profileHandler   *profileHandler
+	programmeHandler *programmeHandler
 }
 
 func New(db *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Module, error) {
-	m := Module{repo: newRepository(db), media: mediaModule, jobs: runner}
+	m := Module{
+		profiles:   newProfileRepository(db),
+		programmes: newProgrammeRepository(db),
+		media:      mediaModule,
+		jobs:       runner,
+	}
 
 	err := jobs.Register(runner, ImportAvatar, m.importAvatar, jobs.Options{Timeout: 30 * time.Second, MaxAttempts: 5})
 	if err != nil {
 		return Module{}, fmt.Errorf("profile: %w", err)
 	}
+
+	m.profileHandler = &profileHandler{profile: m}
+	m.programmeHandler = &programmeHandler{programmes: m.programmes}
 	return m, nil
 }
 
 func (m Module) Register(api huma.API) {
-	huma.Register(api, getMeOperation, m.getMe)
-	huma.Register(api, updateMeOperation, m.updateMe)
-	huma.Register(api, deleteAvatarOperation, m.deleteAvatar)
-	huma.Register(api, listProgrammesOperation, m.listProgrammes)
-	huma.Register(api, createProgrammeOperation, m.createProgramme)
-	huma.Register(api, replaceProgrammeOperation, m.replaceProgramme)
-	huma.Register(api, deleteProgrammeOperation, m.deleteProgramme)
+	huma.Register(api, getMeOperation, m.profileHandler.getMe)
+	huma.Register(api, updateMeOperation, m.profileHandler.updateMe)
+	huma.Register(api, deleteAvatarOperation, m.profileHandler.deleteAvatar)
+	huma.Register(api, listProgrammesOperation, m.programmeHandler.listProgrammes)
+	huma.Register(api, createProgrammeOperation, m.programmeHandler.createProgramme)
+	huma.Register(api, replaceProgrammeOperation, m.programmeHandler.replaceProgramme)
+	huma.Register(api, deleteProgrammeOperation, m.programmeHandler.deleteProgramme)
 }

@@ -32,7 +32,7 @@ func (f *fakeObjects) putObject(_ context.Context, key, _ string, body []byte) e
 	return nil
 }
 
-func readyMedia(t *testing.T, repo *repository, ownerID uuid.UUID) *Media {
+func readyMedia(t *testing.T, repo *repository, ownerID uuid.UUID) *mediaRow {
 	t.Helper()
 
 	ctx := context.Background()

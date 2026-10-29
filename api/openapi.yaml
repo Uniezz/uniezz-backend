@@ -1,5 +1,32 @@
 components:
   schemas:
+    CreateUploadInputBody:
+      additionalProperties: false
+      properties:
+        contentType:
+          description: MIME type the file will be uploaded with
+          enum:
+            - image/jpeg
+            - image/png
+            - image/webp
+          type: string
+        kind:
+          description: What the file will be used for
+          enum:
+            - avatar
+            - feed
+            - chat
+          type: string
+        size:
+          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for feed and chat
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - kind
+        - contentType
+        - size
+      type: object
     ErrorBody:
       additionalProperties: false
       properties:
@@ -76,6 +103,18 @@ components:
         - token
         - expiresAt
       type: object
+    ListProgrammesOutputBody:
+      additionalProperties: false
+      properties:
+        programmes:
+          items:
+            $ref: "#/components/schemas/Programme"
+          type:
+            - array
+            - "null"
+      required:
+        - programmes
+      type: object
     OtpRequestInputBody:
       additionalProperties: false
       properties:
@@ -123,7 +162,7 @@ components:
         - email
         - code
       type: object
-    ProfileDTO:
+    Profile:
       additionalProperties: false
       properties:
         avatarUrl:
@@ -160,7 +199,7 @@ components:
         programmes:
           description: Study programmes, primary first; empty when the student has none
           items:
-            $ref: "#/components/schemas/ProgrammeDTO"
+            $ref: "#/components/schemas/Programme"
           type:
             - array
             - "null"
@@ -178,51 +217,7 @@ components:
         - avatarUrl
         - createdAt
       type: object
-    ProgrammeBody:
-      additionalProperties: false
-      properties:
-        faculty:
-          maxLength: 255
-          minLength: 1
-          type: string
-        isPrimary:
-          description: Making a programme primary clears the flag on the others
-          type: boolean
-        level:
-          enum:
-            - first_cycle
-            - second_cycle
-            - long_cycle
-            - third_cycle
-            - phd_school
-          type: string
-        modeOfStudies:
-          enum:
-            - full_time
-            - part_time
-          type: string
-        programme:
-          maxLength: 255
-          minLength: 1
-          type: string
-        status:
-          default: active
-          enum:
-            - active
-            - graduated
-            - suspended
-            - cancelled
-          type: string
-        yearOfStudy:
-          format: int64
-          maximum: 6
-          minimum: 1
-          type: integer
-      required:
-        - faculty
-        - programme
-      type: object
-    ProgrammeDTO:
+    Programme:
       additionalProperties: false
       properties:
         faculty:
@@ -281,17 +276,49 @@ components:
         - status
         - isPrimary
       type: object
-    ProgrammesOutputBody:
+    ProgrammeRequest:
       additionalProperties: false
       properties:
-        programmes:
-          items:
-            $ref: "#/components/schemas/ProgrammeDTO"
-          type:
-            - array
-            - "null"
+        faculty:
+          maxLength: 255
+          minLength: 1
+          type: string
+        isPrimary:
+          description: Making a programme primary clears the flag on the others
+          type: boolean
+        level:
+          enum:
+            - first_cycle
+            - second_cycle
+            - long_cycle
+            - third_cycle
+            - phd_school
+          type: string
+        modeOfStudies:
+          enum:
+            - full_time
+            - part_time
+          type: string
+        programme:
+          maxLength: 255
+          minLength: 1
+          type: string
+        status:
+          default: active
+          enum:
+            - active
+            - graduated
+            - suspended
+            - cancelled
+          type: string
+        yearOfStudy:
+          format: int64
+          maximum: 6
+          minimum: 1
+          type: integer
       required:
-        - programmes
+        - faculty
+        - programme
       type: object
     UniversityDTO:
       additionalProperties: false
@@ -349,34 +376,7 @@ components:
           minLength: 1
           type: string
       type: object
-    UploadInputBody:
-      additionalProperties: false
-      properties:
-        contentType:
-          description: MIME type the file will be uploaded with
-          enum:
-            - image/jpeg
-            - image/png
-            - image/webp
-          type: string
-        kind:
-          description: What the file will be used for
-          enum:
-            - avatar
-            - feed
-            - chat
-          type: string
-        size:
-          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for feed and chat
-          format: int64
-          minimum: 1
-          type: integer
-      required:
-        - kind
-        - contentType
-        - size
-      type: object
-    UploadOutputBody:
+    Upload:
       additionalProperties: false
       properties:
         expiresAt:
@@ -674,14 +674,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UploadInputBody"
+              $ref: "#/components/schemas/CreateUploadInputBody"
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UploadOutputBody"
+                $ref: "#/components/schemas/Upload"
           description: Created
         "400":
           content:
@@ -745,7 +745,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProfileDTO"
+                $ref: "#/components/schemas/Profile"
           description: OK
         "401":
           content:
@@ -778,7 +778,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProfileDTO"
+                $ref: "#/components/schemas/Profile"
           description: OK
         "400":
           content:
@@ -817,7 +817,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProgrammesOutputBody"
+                $ref: "#/components/schemas/ListProgrammesOutputBody"
           description: OK
         "401":
           content:
@@ -842,14 +842,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProgrammeBody"
+              $ref: "#/components/schemas/ProgrammeRequest"
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProgrammeDTO"
+                $ref: "#/components/schemas/Programme"
           description: Created
         "400":
           content:
@@ -936,14 +936,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProgrammeBody"
+              $ref: "#/components/schemas/ProgrammeRequest"
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProgrammeDTO"
+                $ref: "#/components/schemas/Programme"
           description: OK
         "400":
           content:
