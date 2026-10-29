@@ -17,9 +17,6 @@ type User struct {
 	Email        *string
 	FirstName    *string
 	LastName     *string
-	Major        *string
-	CurrentYear  *int
-	Avatar       *string
 	LastLoginAt  *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -37,7 +34,6 @@ const userColumns = `id,
 					university_id,
 					usos_user_id, email,
 					first_name, last_name,
-					major, current_year, avatar,
 					last_login_at,
 					created_at,
 					updated_at`
@@ -51,7 +47,7 @@ const upsertByUsosIDQuery = `
 							first_name    = COALESCE(users.first_name, EXCLUDED.first_name),
 							last_name     = COALESCE(users.last_name, EXCLUDED.last_name),
 							last_login_at = NOW()
-						RETURNING ` + userColumns
+						RETURNING ` + userColumns + `, (xmax = 0)`
 
 const upsertByEmailQuery = `
 							INSERT INTO users (university_id, email, first_name, last_name, last_login_at)
@@ -61,21 +57,25 @@ const upsertByEmailQuery = `
 								first_name    = COALESCE(users.first_name, EXCLUDED.first_name),
 								last_name     = COALESCE(users.last_name, EXCLUDED.last_name),
 								last_login_at = NOW()
-							RETURNING ` + userColumns
-
-const getByIDQuery = `SELECT ` + userColumns + ` FROM users WHERE id = $1`
+							RETURNING ` + userColumns + `, (xmax = 0)`
 
 func (r *UserRepository) Upsert(ctx context.Context, id Identity) (*User, error) {
+	u, _, err := r.upsert(ctx, r.db, id)
+	return u, err
+}
+
+func (r *UserRepository) upsert(ctx context.Context, q pgxQuerier, id Identity) (*User, bool, error) {
 	var row pgx.Row
 	if id.UsosUserID != "" {
-		row = r.db.QueryRow(ctx, upsertByUsosIDQuery,
+		row = q.QueryRow(ctx, upsertByUsosIDQuery,
 			id.UniversityID, id.UsosUserID, nullIfEmpty(id.Email), nullIfEmpty(id.FirstName), nullIfEmpty(id.LastName))
 	} else {
-		row = r.db.QueryRow(ctx, upsertByEmailQuery,
+		row = q.QueryRow(ctx, upsertByEmailQuery,
 			id.UniversityID, id.Email, nullIfEmpty(id.FirstName), nullIfEmpty(id.LastName))
 	}
 
 	var u User
+	var created bool
 	err := row.Scan(
 		&u.ID,
 		&u.UniversityID,
@@ -83,43 +83,20 @@ func (r *UserRepository) Upsert(ctx context.Context, id Identity) (*User, error)
 		&u.Email,
 		&u.FirstName,
 		&u.LastName,
-		&u.Major,
-		&u.CurrentYear,
-		&u.Avatar,
 		&u.LastLoginAt,
 		&u.CreatedAt,
 		&u.UpdatedAt,
+		&created,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upsert user: %w", err)
+		return nil, false, fmt.Errorf("failed to upsert user: %w", err)
 	}
 
-	return &u, nil
+	return &u, created, nil
 }
 
-func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
-	row := r.db.QueryRow(ctx, getByIDQuery, id)
-
-	var u User
-	err := row.Scan(
-		&u.ID,
-		&u.UniversityID,
-		&u.UsosUserID,
-		&u.Email,
-		&u.FirstName,
-		&u.LastName,
-		&u.Major,
-		&u.CurrentYear,
-		&u.Avatar,
-		&u.LastLoginAt,
-		&u.CreatedAt,
-		&u.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user by id: %w", err)
-	}
-
-	return &u, nil
+type pgxQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 func nullIfEmpty(s string) *string {

@@ -26,7 +26,7 @@ Estimates: **0.5d or 1d**. Sprint = two weeks, about 10d.
 | BE-1.10 | Block staff on Entra | 1 | BE-1.9 | Staff cannot get a student session (rules from the auth doc). |
 | BE-1.11 | Send the email code | 1 | BE-1.6 | Only university emails. Code is stored as a hash. |
 | BE-1.12 | Check the email code and rate limits | 0.5 | BE-1.11 | 3 codes per email per hour, 10 per IP, 5 tries, then the code dies. |
-| BE-1.13 | One profile shape and a trust badge | 0.5 | BE-1.8, BE-1.10, BE-1.12 | `/auth/me` shows verified, directory, or domain. |
+| BE-1.13 | One profile shape | 0.5 | BE-1.8, BE-1.10, BE-1.12 | `/profile/me` returns the same shape for every login method, with all study programmes. |
 
 **Sprint total: 11.5d** (auth is tight. If we have no live Entra student yet, prove one tenant in Sprint 2.)
 

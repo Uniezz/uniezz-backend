@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/usos"
@@ -83,6 +84,18 @@ func activeStudent() usos.User {
 		LastName:      "Kowalski",
 		Email:         ptr("jan@umcs.pl"),
 		StudentStatus: ptr(usos.StatusActiveStudent),
+		HasPhoto:      true,
+		PhotoURLs:     map[string]string{"400x400": "https://usos.test/photos/123456.jpg"},
+		Programmes: []usos.StudentProgramme{{
+			ID:     "1",
+			Status: "active",
+			Programme: usos.Programme{
+				Name:          usos.LangDict{PL: "Informatyka", EN: "Computer Science"},
+				Level:         "first_cycle",
+				ModeOfStudies: usos.LangDict{PL: "stacjonarne", EN: "full-time"},
+				Faculty:       &usos.Faculty{Name: usos.LangDict{PL: "Wydział Matematyki, Fizyki i Informatyki"}},
+			},
+		}},
 	}
 }
 
@@ -211,8 +224,18 @@ func TestUsosLogin_Finish(t *testing.T) {
 			Email:        "jan@umcs.pl",
 			FirstName:    "Jan",
 			LastName:     "Kowalski",
+			Seed: AccountSeed{
+				PhotoURL: "https://usos.test/photos/123456.jpg",
+				Programmes: []ProgrammeSeed{{
+					Faculty:       "Wydział Matematyki, Fizyki i Informatyki",
+					Programme:     "Informatyka",
+					Level:         "first_cycle",
+					ModeOfStudies: "full_time",
+					IsPrimary:     true,
+				}},
+			},
 		}
-		if id != want {
+		if !reflect.DeepEqual(id, want) {
 			t.Errorf("identity mismatch:\nexpected %+v\ngot      %+v", want, id)
 		}
 		if platform != PlatformMobile {

@@ -11,6 +11,20 @@ type Identity struct {
 	Email        string
 	FirstName    string
 	LastName     string
+	Seed         AccountSeed
+}
+
+type AccountSeed struct {
+	Programmes []ProgrammeSeed
+	PhotoURL   string
+}
+
+type ProgrammeSeed struct {
+	Faculty       string
+	Programme     string
+	Level         string
+	ModeOfStudies string
+	IsPrimary     bool
 }
 
 func (i Identity) normalized() Identity {

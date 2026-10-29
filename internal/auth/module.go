@@ -3,6 +3,7 @@ package auth
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
@@ -16,16 +17,18 @@ type Module struct {
 	session      *sessionHandler
 	universities *universitiesHandler
 	otp          *otpHandler
-	me           *meHandler
+	guard        *guard
 }
 
-func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error) {
+func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender, seeder AccountSeeder) (Module, error) {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
 		return Module{}, err
 	}
 
-	logins := newLogins(NewUserRepository(db), NewSessionRepository(db), newLoginCodeRepository(db), defaultSessionTTL)
+	sessions := NewSessionRepository(db)
+	logins := newLogins(NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
+	logins.seeder = seeder
 
 	return Module{
 		usos: &usosHandler{
@@ -36,7 +39,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender) (Module, error)
 		},
 		session:      &sessionHandler{logins: logins},
 		universities: &universitiesHandler{},
-		me:           &meHandler{logins: logins},
+		guard:        &guard{sessions: sessions, sessionTTL: defaultSessionTTL, now: time.Now},
 		otp: &otpHandler{
 			otp: newOTPLogin(
 				newOTPRequestRepository(db),
@@ -57,7 +60,6 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, universitiesOperation, m.universities.list)
 	huma.Register(api, otpRequestOperation, m.otp.request)
 	huma.Register(api, otpVerifyOperation, m.otp.verify)
-	huma.Register(api, meOperation, m.me.getMe)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {

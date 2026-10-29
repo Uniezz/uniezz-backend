@@ -156,6 +156,14 @@ func run(cfg *config.Config) error {
 	}
 	modules.Register(api)
 
+	jobsCtx, stopJobs := context.WithCancel(context.Background())
+	defer stopJobs()
+	jobsDone := make(chan struct{})
+	go func() {
+		modules.Jobs.Run(jobsCtx)
+		close(jobsDone)
+	}()
+
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	defer stopOngoingGracefully()
 	server := &http.Server{
@@ -199,6 +207,14 @@ func run(cfg *config.Config) error {
 	}
 
 	stopOngoingGracefully()
+
+	stopJobs()
+	select {
+	case <-jobsDone:
+	case <-shutdownCtx.Done():
+		slog.Warn("background jobs did not stop in time")
+	}
+
 	slog.Info("server gracefully stopped")
 	return nil
 }

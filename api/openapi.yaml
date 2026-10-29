@@ -123,6 +123,176 @@ components:
         - email
         - code
       type: object
+    ProfileDTO:
+      additionalProperties: false
+      properties:
+        avatarUrl:
+          description: URL of the avatar image, null when the student has none
+          type:
+            - string
+            - "null"
+        createdAt:
+          format: date-time
+          type: string
+        email:
+          description: University email, null when USOS did not share it
+          examples:
+            - jan.kowalski@umcs.pl
+          type:
+            - string
+            - "null"
+        firstName:
+          examples:
+            - Jan
+          type:
+            - string
+            - "null"
+        id:
+          description: User ID
+          format: uuid
+          type: string
+        lastName:
+          examples:
+            - Kowalski
+          type:
+            - string
+            - "null"
+        programmes:
+          description: Study programmes, primary first; empty when the student has none
+          items:
+            $ref: "#/components/schemas/ProgrammeDTO"
+          type:
+            - array
+            - "null"
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - id
+        - email
+        - firstName
+        - lastName
+        - universityId
+        - programmes
+        - avatarUrl
+        - createdAt
+      type: object
+    ProgrammeBody:
+      additionalProperties: false
+      properties:
+        faculty:
+          maxLength: 255
+          minLength: 1
+          type: string
+        isPrimary:
+          description: Making a programme primary clears the flag on the others
+          type: boolean
+        level:
+          enum:
+            - first_cycle
+            - second_cycle
+            - long_cycle
+            - third_cycle
+            - phd_school
+          type: string
+        modeOfStudies:
+          enum:
+            - full_time
+            - part_time
+          type: string
+        programme:
+          maxLength: 255
+          minLength: 1
+          type: string
+        status:
+          default: active
+          enum:
+            - active
+            - graduated
+            - suspended
+            - cancelled
+          type: string
+        yearOfStudy:
+          format: int64
+          maximum: 6
+          minimum: 1
+          type: integer
+      required:
+        - faculty
+        - programme
+      type: object
+    ProgrammeDTO:
+      additionalProperties: false
+      properties:
+        faculty:
+          examples:
+            - Wydział Matematyki, Fizyki i Informatyki
+          type: string
+        id:
+          format: uuid
+          type: string
+        isPrimary:
+          type: boolean
+        level:
+          enum:
+            - first_cycle
+            - second_cycle
+            - long_cycle
+            - third_cycle
+            - phd_school
+          type:
+            - string
+            - "null"
+        modeOfStudies:
+          enum:
+            - full_time
+            - part_time
+          type:
+            - string
+            - "null"
+        programme:
+          examples:
+            - Informatyka
+          type: string
+        status:
+          enum:
+            - active
+            - graduated
+            - suspended
+            - cancelled
+          type: string
+        yearOfStudy:
+          examples:
+            - 2
+          format: int64
+          maximum: 6
+          minimum: 1
+          type:
+            - integer
+            - "null"
+      required:
+        - id
+        - faculty
+        - programme
+        - level
+        - modeOfStudies
+        - yearOfStudy
+        - status
+        - isPrimary
+      type: object
+    ProgrammesOutputBody:
+      additionalProperties: false
+      properties:
+        programmes:
+          items:
+            $ref: "#/components/schemas/ProgrammeDTO"
+          type:
+            - array
+            - "null"
+      required:
+        - programmes
+      type: object
     UniversityDTO:
       additionalProperties: false
       properties:
@@ -163,58 +333,67 @@ components:
         - authMethod
         - faculties
       type: object
-    UserProfileDTO:
+    UpdateMeInputBody:
       additionalProperties: false
       properties:
-        avatar:
-          description: URL to user profile avatar image
-          examples:
-            - https://cdn.uniezz.pl/avatars/1431.jpg
+        avatarMediaId:
+          description: mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted
+          format: uuid
           type: string
-        currentYear:
-          description: Current student year of study
-          examples:
-            - 3
-          format: int64
-          type: integer
-        email:
-          description: User primary email address
-          examples:
-            - jan.kowalski@student.kul.pl
+        firstName:
+          maxLength: 100
+          minLength: 1
           type: string
-        fullName:
-          description: Display first and last name of the user
-          examples:
-            - Janusz Kowalski
+        lastName:
+          maxLength: 100
+          minLength: 1
           type: string
-        id:
-          description: Unique identifier of the user
-          examples:
-            - "1431"
-          type: string
-        major:
-          description: Field of study (kierunek studiów)
-          examples:
-            - Informatyka
-          type: string
-        trustBadge:
-          description: "Verification level: verified (USOS), directory (Entra), or domain (email)"
+      type: object
+    UploadInputBody:
+      additionalProperties: false
+      properties:
+        contentType:
+          description: MIME type the file will be uploaded with
           enum:
-            - verified
-            - directory
-            - domain
-          examples:
-            - verified
+            - image/jpeg
+            - image/png
+            - image/webp
           type: string
-        universityId:
-          description: ID of the university user belongs to
-          examples:
-            - kul
+        kind:
+          description: What the file will be used for
+          enum:
+            - avatar
+            - feed
+            - chat
+          type: string
+        size:
+          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for feed and chat
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - kind
+        - contentType
+        - size
+      type: object
+    UploadOutputBody:
+      additionalProperties: false
+      properties:
+        expiresAt:
+          description: When the upload URL stops working
+          format: date-time
+          type: string
+        mediaId:
+          description: ID to pass to the endpoint that uses the file, e.g. avatarMediaId
+          format: uuid
+          type: string
+        uploadUrl:
+          description: Presigned URL to PUT the file to, with the same Content-Type and Content-Length
           type: string
       required:
-        - id
-        - email
-        - trustBadge
+        - mediaId
+        - uploadUrl
+        - expiresAt
       type: object
   securitySchemes:
     bearer:
@@ -266,45 +445,6 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
           description: Internal Server Error
       summary: Exchange a one-time login code for a session
-      tags:
-        - auth
-  /auth/me:
-    get:
-      description: Returns the profile of the user who owns the session token, including the trust badge computed by the server.
-      operationId: getMe
-      parameters:
-        - description: Bearer <session token>
-          in: header
-          name: Authorization
-          schema:
-            description: Bearer <session token>
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserProfileDTO"
-          description: OK
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Unauthorized
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Unprocessable Entity
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Internal Server Error
-      summary: Get the logged-in user's profile
       tags:
         - auth
   /auth/otp/request:
@@ -526,3 +666,317 @@ paths:
       summary: Start a USOS login
       tags:
         - auth
+  /media/uploads:
+    post:
+      description: Creates a pending media item owned by the caller and returns a presigned URL to upload the file to.
+      operationId: createMediaUpload
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadOutputBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Start a media upload
+      tags:
+        - media
+  /profile/avatar:
+    delete:
+      description: Clears the avatar and deletes its file. Succeeds when there is no avatar.
+      operationId: deleteMyAvatar
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove the logged-in student's avatar
+      tags:
+        - profile
+  /profile/me:
+    get:
+      description: Same shape for every university and login method. Read from our database only.
+      operationId: getMyProfile
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileDTO"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get the logged-in student's profile
+      tags:
+        - profile
+    patch:
+      description: Changes only the fields that are present. Returns the updated profile.
+      operationId: updateMyProfile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileDTO"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Update the logged-in student's profile
+      tags:
+        - profile
+  /profile/programmes:
+    get:
+      operationId: listMyProgrammes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgrammesOutputBody"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the logged-in student's study programmes
+      tags:
+        - profile
+    post:
+      operationId: createMyProgramme
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgrammeBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgrammeDTO"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Add a study programme
+      tags:
+        - profile
+  /profile/programmes/{id}:
+    delete:
+      operationId: deleteMyProgramme
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete a study programme
+      tags:
+        - profile
+    put:
+      description: Overwrites every field; omitted optional fields become null.
+      operationId: replaceMyProgramme
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgrammeBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgrammeDTO"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Replace a study programme
+      tags:
+        - profile

@@ -46,12 +46,19 @@ type Config struct {
 	S3PublicEndpoint  string
 	S3ForcePathStyle  bool
 	MediaPublicURL    string
+
+	JobWorkers int
 }
 
 func Load() (*Config, error) {
 	s3ForcePathStyle, err := strconv.ParseBool(getEnv("S3_FORCE_PATH_STYLE", "false"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid S3_FORCE_PATH_STYLE: %w", err)
+	}
+
+	jobWorkers, err := strconv.Atoi(getEnv("JOB_WORKERS", "1"))
+	if err != nil || jobWorkers < 1 {
+		return nil, fmt.Errorf("JOB_WORKERS must be a positive integer")
 	}
 
 	cfg := &Config{
@@ -77,6 +84,7 @@ func Load() (*Config, error) {
 		S3PublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
 		S3ForcePathStyle:   s3ForcePathStyle,
 		MediaPublicURL:     os.Getenv("MEDIA_PUBLIC_URL"),
+		JobWorkers:         jobWorkers,
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",

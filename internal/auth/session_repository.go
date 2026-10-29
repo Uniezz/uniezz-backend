@@ -81,3 +81,12 @@ func (r *SessionRepository) GetActiveSessionByHash(
 
 	return &s, nil
 }
+
+func (r *SessionRepository) ExtendSession(ctx context.Context, id uuid.UUID, expiresAt time.Time) error {
+	const query = `UPDATE sessions SET expires_at = $2 WHERE id = $1 AND expires_at < $2`
+
+	if _, err := r.db.Exec(ctx, query, id, expiresAt); err != nil {
+		return fmt.Errorf("failed to extend session: %w", err)
+	}
+	return nil
+}

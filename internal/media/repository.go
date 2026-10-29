@@ -93,6 +93,42 @@ func (r *repository) getReady(ctx context.Context, id uuid.UUID) (*Media, error)
 	return item, nil
 }
 
+func (r *repository) markDeleting(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	const query = `UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'`
+
+	result, err := tx.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("mark media deleting: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) getDeleting(ctx context.Context, id uuid.UUID) (*Media, error) {
+	const query = `
+        SELECT ` + mediaColumns + `
+        FROM media
+        WHERE id = $1 AND status = 'deleting'`
+
+	item, err := scanMedia(r.db.QueryRow(ctx, query, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get deleting media: %w", err)
+	}
+	return item, nil
+}
+
+func (r *repository) deleteDeleting(ctx context.Context, id uuid.UUID) error {
+	if _, err := r.db.Exec(ctx, `DELETE FROM media WHERE id = $1 AND status = 'deleting'`, id); err != nil {
+		return fmt.Errorf("delete media: %w", err)
+	}
+	return nil
+}
+
 func scanMedia(row pgx.Row) (*Media, error) {
 	var item Media
 	err := row.Scan(&item.ID, &item.OwnerUserID, &item.Kind, &item.ObjectKey, &item.ContentType, &item.SizeBytes, &item.Status, &item.CreatedAt)

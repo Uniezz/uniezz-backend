@@ -4,9 +4,13 @@ package media
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,6 +21,9 @@ type mediaStore interface {
 	getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*Media, error)
 	markReady(ctx context.Context, id, ownerUserID uuid.UUID) error
 	getReady(ctx context.Context, id uuid.UUID) (*Media, error)
+	markDeleting(ctx context.Context, tx pgx.Tx, id uuid.UUID) error
+	getDeleting(ctx context.Context, id uuid.UUID) (*Media, error)
+	deleteDeleting(ctx context.Context, id uuid.UUID) error
 }
 
 var _ objectStore = (*objectStorage)(nil)
@@ -26,11 +33,15 @@ type objectStore interface {
 	presignPut(ctx context.Context, key, contentType string, size int64) (string, error)
 	presignGet(ctx context.Context, key string) (string, error)
 	publicURL(key string) (string, error)
+	putObject(ctx context.Context, key, contentType string, body []byte) error
+	deleteObject(ctx context.Context, key string) error
 }
 
 type Module struct {
-	storage objectStore
-	repo    mediaStore
+	storage    objectStore
+	repo       mediaStore
+	httpClient *http.Client
+	uploads    *uploadHandler
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, error) {
@@ -43,5 +54,11 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, err
 		slog.WarnContext(ctx, "media storage bucket is unavailable", "error", err)
 	}
 
-	return Module{storage: storage, repo: newRepository(db)}, nil
+	m := Module{storage: storage, repo: newRepository(db), httpClient: &http.Client{Timeout: 10 * time.Second}}
+	m.uploads = &uploadHandler{media: m}
+	return m, nil
+}
+
+func (m Module) Register(api huma.API) {
+	huma.Register(api, uploadOperation, m.uploads.create)
 }
