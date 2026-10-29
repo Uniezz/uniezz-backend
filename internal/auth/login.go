@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 const defaultSessionTTL = 30 * 24 * time.Hour
@@ -15,6 +16,11 @@ type logins struct {
 	sessions   *SessionRepository
 	loginCodes *loginCodeRepository
 	sessionTTL time.Duration
+	seeder     AccountSeeder
+}
+
+type AccountSeeder interface {
+	SeedAccount(ctx context.Context, tx pgx.Tx, userID uuid.UUID, seed AccountSeed) (afterCommit func(), err error)
 }
 
 func newLogins(users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
@@ -65,7 +71,28 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 	if err := id.validate(); err != nil {
 		return nil, err
 	}
-	return l.users.Upsert(ctx, id)
+	var user *User
+	var afterCommit func()
+	err := pgx.BeginFunc(ctx, l.users.db, func(tx pgx.Tx) error {
+		u, created, err := l.users.upsert(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		user = u
+		if !created || l.seeder == nil {
+			return nil
+		}
+		afterCommit, err = l.seeder.SeedAccount(ctx, tx, u.ID, id.Seed)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if afterCommit != nil {
+		afterCommit()
+	}
+	return user, nil
 }
 
 type IssuedSession struct {

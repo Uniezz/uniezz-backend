@@ -1,6 +1,7 @@
 package media
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -71,6 +72,27 @@ func (s *objectStorage) headObject(ctx context.Context, key string) (int64, stri
 		return 0, "", fmt.Errorf("head media object: %w", err)
 	}
 	return aws.ToInt64(out.ContentLength), aws.ToString(out.ContentType), nil
+}
+
+func (s *objectStorage) putObject(ctx context.Context, key, contentType string, body []byte) error {
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(key),
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(int64(len(body))),
+		Body:          bytes.NewReader(body),
+	})
+	if err != nil {
+		return fmt.Errorf("put media object: %w", err)
+	}
+	return nil
+}
+
+func (s *objectStorage) deleteObject(ctx context.Context, key string) error {
+	if _, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}); err != nil {
+		return fmt.Errorf("delete media object: %w", err)
+	}
+	return nil
 }
 
 func (s *objectStorage) presignPut(ctx context.Context, key, contentType string, size int64) (string, error) {

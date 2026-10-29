@@ -168,7 +168,7 @@ Web and mobile never talk to USOS, Entra, or the mail provider. They talk to one
 |-------|---------|
 | `POST /auth/start` | Body: `{ university, provider? }`. Returns the redirect URL for the chosen provider, or starts the OTP flow |
 | `GET /auth/callback/:provider` | Single callback surface. Handles the USOS verifier, the Entra authorization code, and OTP submission |
-| `GET /auth/me` | Current session profile |
+| `GET /profile/me` | Profile of the logged-in student (bearer session) |
 | `POST /auth/logout` | Clears the Uniezz session |
 
 `:provider` is one of `usos`, `entra`, `otp`.

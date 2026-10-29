@@ -3,10 +3,14 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestRequireUniversity(t *testing.T) {
@@ -227,6 +231,78 @@ func TestLogins_Integration(t *testing.T) {
 
 		if first.Token == second.Token {
 			t.Error("expected different tokens for different sessions")
+		}
+	})
+}
+
+type recordingSeeder struct {
+	seeded      []uuid.UUID
+	err         error
+	afterCommit int
+}
+
+func (s *recordingSeeder) SeedAccount(ctx context.Context, tx pgx.Tx, userID uuid.UUID, _ AccountSeed) (func(), error) {
+	var n int
+	if err := tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", userID).Scan(&n); err != nil || n != 1 {
+		return nil, fmt.Errorf("seeder must see the new user in its transaction: n=%d err=%v", n, err)
+	}
+	s.seeded = append(s.seeded, userID)
+	return func() { s.afterCommit++ }, s.err
+}
+
+func TestLogins_SeedsOnlyNewAccounts(t *testing.T) {
+	pool := setupTestDB(t)
+	ctx := context.Background()
+
+	newSeededLogins := func(seeder AccountSeeder) *logins {
+		l := newLogins(NewUserRepository(pool), NewSessionRepository(pool), newLoginCodeRepository(pool), time.Hour)
+		l.seeder = seeder
+		return l
+	}
+
+	t.Run("the first login seeds the account, later logins do not", func(t *testing.T) {
+		seeder := &recordingSeeder{}
+		l := newSeededLogins(seeder)
+		id := Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
+
+		first, err := l.signIn(ctx, id)
+		if err != nil {
+			t.Fatalf("first signIn failed: %v", err)
+		}
+		deleteUserOnCleanup(t, pool, first.ID)
+
+		if _, err := l.signIn(ctx, id); err != nil {
+			t.Fatalf("second signIn failed: %v", err)
+		}
+
+		if len(seeder.seeded) != 1 || seeder.seeded[0] != first.ID {
+			t.Errorf("expected one seed for %v, got %v", first.ID, seeder.seeded)
+		}
+		if seeder.afterCommit != 1 {
+			t.Errorf("expected afterCommit to run once, ran %d times", seeder.afterCommit)
+		}
+	})
+
+	t.Run("a failed seed rolls back the new account", func(t *testing.T) {
+		boom := errors.New("programme insert failed")
+		seeder := &recordingSeeder{err: boom}
+		l := newSeededLogins(seeder)
+		usosID := testUsosUserID()
+
+		_, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: usosID})
+		if !errors.Is(err, boom) {
+			t.Fatalf("expected the seed error, got %v", err)
+		}
+
+		var n int
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE usos_user_id = $1", usosID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("expected no user after a failed seed, got %d", n)
+		}
+		if seeder.afterCommit != 0 {
+			t.Error("afterCommit must not run when the transaction rolls back")
 		}
 	})
 }

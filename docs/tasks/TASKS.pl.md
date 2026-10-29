@@ -26,7 +26,7 @@ Szacunki: **0.5d albo 1d**. Sprint = dwa tygodnie, około 10d.
 | BE-1.10 | Blokować pracowników Entra | 1 | BE-1.9 | Pracownik nie dostaje sesji studenta. |
 | BE-1.11 | Wysłać kod na mail | 1 | BE-1.6 | Tylko mail uczelni. Kod jako hash. |
 | BE-1.12 | Sprawdzić kod i limity | 0.5 | BE-1.11 | 3 kody na mail / h, 10 na IP, 5 prób, potem kod ginie. |
-| BE-1.13 | Jeden kształt profilu i odznaka | 0.5 | BE-1.8, BE-1.10, BE-1.12 | `/auth/me` pokazuje verified, directory albo domain. |
+| BE-1.13 | Jeden kształt profilu | 0.5 | BE-1.8, BE-1.10, BE-1.12 | `/profile/me` zwraca ten sam kształt dla każdej metody logowania, ze wszystkimi kierunkami studiów. |
 
 **Suma: 11.5d** (jeśli nie ma żywego studenta Entra — dowieść jeden tenant w sprincie 2.)
 

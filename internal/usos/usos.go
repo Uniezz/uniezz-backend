@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,12 +28,53 @@ const (
 )
 
 type User struct {
-	ID            string         `json:"id"`
-	FirstName     string         `json:"first_name"`
-	LastName      string         `json:"last_name"`
-	Email         *string        `json:"email"`
-	StudentStatus *StudentStatus `json:"student_status"`
+	ID            string            `json:"id"`
+	FirstName     string            `json:"first_name"`
+	LastName      string            `json:"last_name"`
+	Email         *string           `json:"email"`
+	StudentStatus *StudentStatus    `json:"student_status"`
+	HasPhoto      bool              `json:"has_photo"`
+	PhotoURLs     map[string]string `json:"photo_urls"`
+
+	Programmes []StudentProgramme `json:"-"`
 }
+
+type LangDict struct {
+	PL string `json:"pl"`
+	EN string `json:"en"`
+}
+
+func (d LangDict) String() string {
+	if d.PL != "" {
+		return d.PL
+	}
+	return d.EN
+}
+
+type StudentProgramme struct {
+	ID        string    `json:"id"`
+	Status    string    `json:"status"`
+	IsPrimary bool      `json:"is_primary"`
+	Programme Programme `json:"programme"`
+}
+
+type Programme struct {
+	ID            string   `json:"id"`
+	Name          LangDict `json:"name"`
+	Level         string   `json:"level"`
+	ModeOfStudies LangDict `json:"mode_of_studies"`
+	Faculty       *Faculty `json:"faculty"`
+}
+
+type Faculty struct {
+	ID   string   `json:"id"`
+	Name LangDict `json:"name"`
+}
+
+const (
+	userFields      = "id|first_name|last_name|email|student_status|has_photo|photo_urls[400x400]"
+	programmeFields = "id|status|is_primary|programme[id|name|level|mode_of_studies|faculty[id|name]]"
+)
 
 type Client struct {
 	baseURL        string
@@ -75,7 +117,7 @@ func (c *Client) newConfig(scopes ...string) *oauth1.Config {
 }
 
 func (c *Client) Begin(ctx context.Context) (RequestToken, string, error) {
-	config := c.newConfig("email")
+	config := c.newConfig("email", "studies")
 
 	requestToken, requestSecret, err := config.RequestToken()
 	if err != nil {
@@ -104,27 +146,38 @@ func (c *Client) Finish(ctx context.Context, rt RequestToken, verifier string) (
 	ctx = context.WithValue(ctx, oauth1.HTTPClient, c.httpClient)
 	authedClient := config.Client(ctx, token)
 
-	baseURL := c.baseURL
-	userURL := fmt.Sprintf("%s/services/users/user?fields=id|first_name|last_name|email|student_status", baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, userURL, nil)
-	if err != nil {
-		return User{}, fmt.Errorf("failed to create request: %w", err)
+	var user User
+	if err := getJSON(ctx, authedClient, c.baseURL+"/services/users/user?fields="+url.QueryEscape(userFields), &user); err != nil {
+		return User{}, fmt.Errorf("failed to fetch user info: %w", err)
 	}
 
-	resp, err := authedClient.Do(req)
+	err = getJSON(ctx, authedClient, c.baseURL+"/services/progs/student?fields="+url.QueryEscape(programmeFields), &user.Programmes)
 	if err != nil {
-		return User{}, fmt.Errorf("failed to fetch user info: %w", err)
+		slog.WarnContext(ctx, "fetch USOS student programmes", slog.String("usos_user_id", user.ID), slog.Any("error", err))
+		user.Programmes = nil
+	}
+
+	return user, nil
+}
+
+func getJSON(ctx context.Context, client *http.Client, target string, v any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return User{}, fmt.Errorf("usos api returned status: %d", resp.StatusCode)
+		return fmt.Errorf("usos api returned status: %d", resp.StatusCode)
 	}
 
-	var user User
-	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-		return User{}, fmt.Errorf("failed to decode user response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
 	}
-
-	return user, nil
+	return nil
 }

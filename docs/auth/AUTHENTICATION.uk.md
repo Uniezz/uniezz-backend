@@ -168,7 +168,7 @@ GET https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipa
 |---------|-------------|
 | `POST /auth/start` | Тіло: `{ university, provider? }`. Повертає URL редиректу обраного провайдера або запускає потік OTP |
 | `GET /auth/callback/:provider` | Єдина точка зворотного виклику. Обробляє verifier від USOS, код авторизації Entra та введення OTP |
-| `GET /auth/me` | Профіль поточної сесії |
+| `GET /profile/me` | Профіль студента, що увійшов (bearer-сесія) |
 | `POST /auth/logout` | Очищає сесію Uniezz |
 
 `:provider` — одне з `usos`, `entra`, `otp`.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -224,7 +225,7 @@ func TestOTPLogin_Verify(t *testing.T) {
 			t.Fatalf("verify failed: %v", err)
 		}
 		want := Identity{UniversityID: UniversityKUL, Email: "jan@student.kul.pl"}
-		if id != want {
+		if !reflect.DeepEqual(id, want) {
 			t.Errorf("expected %+v, got %+v", want, id)
 		}
 		if err := id.validate(); err != nil {

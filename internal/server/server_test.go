@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/humatest"
 )
 
@@ -52,6 +54,23 @@ func TestModules_ZeroValueRegistersEveryOperation(t *testing.T) {
 	for _, path := range []string{"/auth/usos/start", "/auth/usos/callback", "/auth/exchange"} {
 		if api.OpenAPI().Paths[path] == nil {
 			t.Errorf("%s is missing from the spec", path)
+		}
+	}
+}
+
+func TestModules_OnlyAuthRoutesArePublic(t *testing.T) {
+	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
+	Modules{}.Register(api)
+
+	for path, item := range api.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put, item.Patch, item.Delete} {
+			if op == nil {
+				continue
+			}
+			public := strings.HasPrefix(path, "/auth/")
+			if hasBearer := len(op.Security) > 0; hasBearer == public {
+				t.Errorf("%s %s: public=%v but security=%v", op.Method, path, public, op.Security)
+			}
 		}
 	}
 }

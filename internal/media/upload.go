@@ -11,9 +11,9 @@ import (
 const uploadURLTTL = 10 * time.Minute
 
 type Upload struct {
-	MediaID   uuid.UUID
-	UploadURL string
-	ExpiresAt time.Time
+	MediaID   uuid.UUID `json:"mediaId" format:"uuid" doc:"ID to pass to the endpoint that uses the file, e.g. avatarMediaId"`
+	UploadURL string    `json:"uploadUrl" doc:"Presigned URL to PUT the file to, with the same Content-Type and Content-Length"`
+	ExpiresAt time.Time `json:"expiresAt" doc:"When the upload URL stops working"`
 }
 
 func (m Module) CreateUpload(ctx context.Context, ownerUserID uuid.UUID, kind Kind, contentType string, size int64) (Upload, error) {

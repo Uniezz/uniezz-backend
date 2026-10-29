@@ -168,7 +168,7 @@ Web i mobile nigdy nie komunikują się z USOS, Entra ani dostawcą poczty. Rozm
 |-------|---------------|
 | `POST /auth/start` | Treść: `{ university, provider? }`. Zwraca URL przekierowania wybranego dostawcy lub rozpoczyna przepływ OTP |
 | `GET /auth/callback/:provider` | Jeden punkt zwrotny. Obsługuje verifier z USOS, kod autoryzacyjny Entra oraz wprowadzenie OTP |
-| `GET /auth/me` | Profil bieżącej sesji |
+| `GET /profile/me` | Profil zalogowanego studenta (sesja bearer) |
 | `POST /auth/logout` | Czyści sesję Uniezz |
 
 `:provider` to jedno z `usos`, `entra`, `otp`.

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -102,7 +103,7 @@ func TestIdentity_Normalized(t *testing.T) {
 		FirstName:    "Jan",
 		LastName:     "Kowalski",
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("normalized() mismatch:\nexpected %+v\ngot      %+v", want, got)
 	}
 

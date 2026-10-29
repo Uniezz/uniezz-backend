@@ -10,12 +10,12 @@ import (
 
 type fakePendingStore struct {
 	mediaStore
-	item        *Media
+	item        *mediaRow
 	getErr      error
 	markedReady bool
 }
 
-func (f *fakePendingStore) getOwnedPending(context.Context, uuid.UUID, uuid.UUID, Kind) (*Media, error) {
+func (f *fakePendingStore) getOwnedPending(context.Context, uuid.UUID, uuid.UUID, Kind) (*mediaRow, error) {
 	return f.item, f.getErr
 }
 
@@ -60,7 +60,7 @@ func TestClaim(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakePendingStore{
-				item:   &Media{ObjectKey: "avatars/test.jpg", ContentType: "image/jpeg", SizeBytes: 1024},
+				item:   &mediaRow{ObjectKey: "avatars/test.jpg", ContentType: "image/jpeg", SizeBytes: 1024},
 				getErr: tt.getErr,
 			}
 			inspector := &fakeInspector{size: tt.size, contentType: tt.ctype, err: tt.headErr}

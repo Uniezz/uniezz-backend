@@ -1,5 +1,7 @@
 # Working with Claude in this repository
 
+File layout and naming: [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
+
 ## The developer writes the code
 
 - Do not create or edit production code yourself: non-test `.go` files, migrations, `mise.toml`, configuration. Show the code in chat; the developer types it in.
