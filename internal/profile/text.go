@@ -1,12 +1,10 @@
 package profile
 
 import (
-	"html"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
-	"github.com/microcosm-cc/bluemonday"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 )
 
 const (
@@ -15,27 +13,11 @@ const (
 	maxInterestLength = 30
 )
 
-var stripTags = bluemonday.StrictPolicy()
-
-func plainText(s string, keepNewlines bool) string {
-	s = html.UnescapeString(stripTags.Sanitize(s))
-	s = strings.Map(func(r rune) rune {
-		if r == '\n' && keepNewlines {
-			return r
-		}
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
-	return strings.TrimSpace(s)
-}
-
 func cleanBio(bio *string) (*string, bool, error) {
 	if bio == nil {
 		return nil, false, nil
 	}
-	clean := plainText(*bio, true)
+	clean := text.Plain(*bio, true)
 	if utf8.RuneCountInString(clean) > maxBioLength {
 		return nil, false, ErrInvalidInput
 	}
@@ -53,7 +35,7 @@ func cleanInterests(interests *[]string) ([]string, error) {
 	clean := make([]string, 0, len(*interests))
 	seen := map[string]bool{}
 	for _, raw := range *interests {
-		tag := plainText(raw, false)
+		tag := text.Plain(raw, false)
 		if tag == "" || utf8.RuneCountInString(tag) > maxInterestLength {
 			return nil, ErrInvalidInput
 		}

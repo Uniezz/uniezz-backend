@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -112,7 +113,7 @@ func trimmedName(name *string) (*string, error) {
 	if name == nil {
 		return nil, nil
 	}
-	trimmed := plainText(*name, false)
+	trimmed := text.Plain(*name, false)
 	if trimmed == "" {
 		return nil, ErrInvalidInput
 	}

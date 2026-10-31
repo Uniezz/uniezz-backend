@@ -7,24 +7,6 @@ import (
 	"testing"
 )
 
-func TestPlainText(t *testing.T) {
-	for _, tc := range []struct {
-		in, want string
-		newlines bool
-	}{
-		{in: "  Hello  ", want: "Hello"},
-		{in: "<b>bold</b> and <script>alert(1)</script>text", want: "bold and text"},
-		{in: "a < b & c > d", want: "a < b & c > d"},
-		{in: "line one\nline two", want: "line one\nline two", newlines: true},
-		{in: "line one\nline two", want: "line oneline two"},
-		{in: "tab\there\x00", want: "tabhere"},
-	} {
-		if got := plainText(tc.in, tc.newlines); got != tc.want {
-			t.Errorf("plainText(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
 func TestCleanBio(t *testing.T) {
 	ptr := func(s string) *string { return &s }
 
