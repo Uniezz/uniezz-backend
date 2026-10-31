@@ -62,8 +62,10 @@ func TestPresignPut(t *testing.T) {
 		t.Errorf("expiry = %q, want 600 seconds", parsed.Query().Get("X-Amz-Expires"))
 	}
 	signed := parsed.Query().Get("X-Amz-SignedHeaders")
-	if !strings.Contains(signed, "content-type") || !strings.Contains(signed, "content-length") {
-		t.Errorf("signed headers = %q, want content-type and content-length", signed)
+	for _, header := range []string{"content-type", "content-length", "if-none-match"} {
+		if !strings.Contains(signed, header) {
+			t.Errorf("signed headers = %q, want %s", signed, header)
+		}
 	}
 }
 

@@ -610,17 +610,23 @@ components:
           description: When the upload URL stops working
           format: date-time
           type: string
+        headers:
+          additionalProperties:
+            type: string
+          description: Headers the PUT must send exactly as given; If-None-Match makes the URL write the file only once
+          type: object
         mediaId:
           description: ID to pass to the endpoint that uses the file, e.g. avatarMediaId
           format: uuid
           type: string
         uploadUrl:
-          description: Presigned URL to PUT the file to, with the same Content-Type and Content-Length
+          description: Presigned URL to PUT the file to, with the headers below
           type: string
       required:
         - mediaId
         - uploadUrl
         - expiresAt
+        - headers
       type: object
   securitySchemes:
     bearer:

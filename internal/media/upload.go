@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,9 +12,10 @@ import (
 const uploadURLTTL = 10 * time.Minute
 
 type Upload struct {
-	MediaID   uuid.UUID `json:"mediaId" format:"uuid" doc:"ID to pass to the endpoint that uses the file, e.g. avatarMediaId"`
-	UploadURL string    `json:"uploadUrl" doc:"Presigned URL to PUT the file to, with the same Content-Type and Content-Length"`
-	ExpiresAt time.Time `json:"expiresAt" doc:"When the upload URL stops working"`
+	MediaID   uuid.UUID         `json:"mediaId" format:"uuid" doc:"ID to pass to the endpoint that uses the file, e.g. avatarMediaId"`
+	UploadURL string            `json:"uploadUrl" doc:"Presigned URL to PUT the file to, with the headers below"`
+	ExpiresAt time.Time         `json:"expiresAt" doc:"When the upload URL stops working"`
+	Headers   map[string]string `json:"headers" doc:"Headers the PUT must send exactly as given; If-None-Match makes the URL write the file only once"`
 }
 
 func (m Module) CreateUpload(ctx context.Context, ownerUserID uuid.UUID, kind Kind, contentType string, size int64) (Upload, error) {
@@ -34,7 +36,15 @@ func (m Module) CreateUpload(ctx context.Context, ownerUserID uuid.UUID, kind Ki
 		return Upload{}, err
 	}
 
-	return Upload{MediaID: item.ID, UploadURL: uploadURL, ExpiresAt: expiresAt}, nil
+	return Upload{MediaID: item.ID, UploadURL: uploadURL, ExpiresAt: expiresAt, Headers: uploadHeaders(contentType, size)}, nil
+}
+
+func uploadHeaders(contentType string, size int64) map[string]string {
+	return map[string]string{
+		"Content-Type":   contentType,
+		"Content-Length": strconv.FormatInt(size, 10),
+		"If-None-Match":  "*",
+	}
 }
 
 func validateUpload(kind Kind, contentType string, size int64) error {
