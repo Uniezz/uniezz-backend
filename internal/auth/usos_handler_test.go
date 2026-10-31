@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -60,18 +61,17 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	})
 
 	sessions := NewSessionRepository(pool)
-	logins := newLogins(pool, NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
+	logins := newLogins(database.New(pool), NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
 
-	usosH := &usosHandler{
+	m := Module{
 		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(pool)),
 		logins:            logins,
 		webRedirectURL:    testWebRedirectURL,
 		mobileRedirectURL: testMobileRedirectURL,
 	}
-	sessionH := &sessionHandler{logins: logins}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	Module{usos: usosH, session: sessionH}.Register(api)
+	m.Register(api)
 
 	return &authTestServer{api: api, usos: client, sessions: sessions, pool: pool}
 }

@@ -10,8 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Args interface {
@@ -23,18 +21,14 @@ type Options struct {
 	MaxAttempts int
 }
 
-type execer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-func Enqueue[T Args](ctx context.Context, tx execer, args T) error {
+func (r *Runner) Enqueue(ctx context.Context, args Args) error {
 	kind := args.Kind()
 	payload, err := json.Marshal(args)
 	if err != nil {
 		return fmt.Errorf("encode %s payload: %w", kind, err)
 	}
 
-	if _, err := tx.Exec(ctx, `INSERT INTO jobs (kind, payload) VALUES ($1, $2)`, kind, payload); err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, `INSERT INTO jobs (kind, payload) VALUES ($1, $2)`, kind, payload); err != nil {
 		return fmt.Errorf("enqueue %s: %w", kind, err)
 	}
 	return nil

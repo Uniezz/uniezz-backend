@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error) {
@@ -58,15 +57,15 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 	}
 
 	var previous *uuid.UUID
-	err = pgx.BeginFunc(ctx, m.db, func(tx pgx.Tx) error {
-		if err := m.profiles.updateNames(ctx, tx, userID, firstName, lastName); err != nil {
+	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := m.profiles.updateNames(ctx, userID, firstName, lastName); err != nil {
 			return err
 		}
 		if avatarID == nil {
 			return nil
 		}
 		var err error
-		previous, err = m.swapAvatar(ctx, tx, userID, avatarID)
+		previous, err = m.swapAvatar(ctx, userID, avatarID)
 		return err
 	})
 	if err != nil {

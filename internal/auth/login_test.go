@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func TestRequireUniversity(t *testing.T) {
@@ -53,7 +53,7 @@ func TestLogins_Integration(t *testing.T) {
 	pool := setupTestDB(t)
 	users := NewUserRepository(pool)
 	sessions := NewSessionRepository(pool)
-	l := newLogins(pool, users, sessions, newLoginCodeRepository(pool), time.Hour)
+	l := newLogins(database.New(pool), users, sessions, newLoginCodeRepository(pool), time.Hour)
 	ctx := context.Background()
 
 	signInTestUser := func(t *testing.T) *User {
@@ -236,14 +236,15 @@ func TestLogins_Integration(t *testing.T) {
 }
 
 type recordingProfiles struct {
+	db          database.DB
 	initialized []uuid.UUID
 	err         error
 	afterCommit int
 }
 
-func (s *recordingProfiles) InitProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, _ InitialProfile) (func(), error) {
+func (s *recordingProfiles) InitProfile(ctx context.Context, userID uuid.UUID, _ InitialProfile) (func(), error) {
 	var n int
-	if err := tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", userID).Scan(&n); err != nil || n != 1 {
+	if err := s.db.Conn(ctx).QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", userID).Scan(&n); err != nil || n != 1 {
 		return nil, fmt.Errorf("profiles must see the new user in its transaction: n=%d err=%v", n, err)
 	}
 	s.initialized = append(s.initialized, userID)
@@ -255,13 +256,13 @@ func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 	ctx := context.Background()
 
 	newLoginsWithProfiles := func(profiles ProfileInitializer) *logins {
-		l := newLogins(pool, NewUserRepository(pool), NewSessionRepository(pool), newLoginCodeRepository(pool), time.Hour)
+		l := newLogins(database.New(pool), NewUserRepository(pool), NewSessionRepository(pool), newLoginCodeRepository(pool), time.Hour)
 		l.profiles = profiles
 		return l
 	}
 
 	t.Run("the first login initializes the profile, later logins do not", func(t *testing.T) {
-		profiles := &recordingProfiles{}
+		profiles := &recordingProfiles{db: database.New(pool)}
 		l := newLoginsWithProfiles(profiles)
 		id := Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
 
@@ -285,7 +286,7 @@ func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 
 	t.Run("a failed profile initialization rolls back the new account", func(t *testing.T) {
 		boom := errors.New("programme insert failed")
-		profiles := &recordingProfiles{err: boom}
+		profiles := &recordingProfiles{db: database.New(pool), err: boom}
 		l := newLoginsWithProfiles(profiles)
 		usosID := testUsosUserID()
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,8 +43,8 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 
 	sender := &fakeOTPSender{}
 	sessions := NewSessionRepository(pool)
-	logins := newLogins(pool, NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
-	otpH := &otpHandler{
+	logins := newLogins(database.New(pool), NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
+	m := Module{
 		otp: newOTPLogin(
 			newOTPRequestRepository(pool),
 			sender,
@@ -55,7 +56,7 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 	}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	Module{otp: otpH}.Register(api)
+	m.Register(api)
 
 	return &otpTestServer{api: api, sender: sender, sessions: sessions, pool: pool, email: email}
 }

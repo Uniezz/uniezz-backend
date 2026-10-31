@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,7 +30,7 @@ type registration struct {
 }
 
 type Runner struct {
-	db           *pgxpool.Pool
+	db           database.DB
 	workers      int
 	pollInterval time.Duration
 	handlers     map[string]registration
@@ -38,7 +39,7 @@ type Runner struct {
 
 func NewRunner(db *pgxpool.Pool, workers int) *Runner {
 	return &Runner{
-		db:           db,
+		db:           database.New(db),
 		workers:      max(workers, 1),
 		pollInterval: defaultPollInterval,
 		handlers:     make(map[string]registration),
@@ -154,7 +155,7 @@ func (r *Runner) kinds() []string {
 }
 
 func (r *Runner) reportUnknownKinds(ctx context.Context) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.db.Conn(ctx).Query(ctx, `
 		SELECT kind, count(*) FROM jobs
 		WHERE status IN ('pending', 'running') AND kind <> ALL($1)
 		GROUP BY kind`, r.kinds())
@@ -203,7 +204,7 @@ func (r *Runner) claim(ctx context.Context) (claimedJob, error) {
 		RETURNING id, kind, payload, attempts, execution_token`
 
 	var job claimedJob
-	err := r.db.QueryRow(ctx, query, r.lease(), r.kinds()).Scan(&job.id, &job.kind, &job.payload, &job.attempts, &job.token)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, r.lease(), r.kinds()).Scan(&job.id, &job.kind, &job.payload, &job.attempts, &job.token)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return claimedJob{}, err
@@ -241,7 +242,7 @@ func (r *Runner) finish(job claimedJob, query string, args ...any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), finishTimeout)
 	defer cancel()
 
-	if _, err := r.db.Exec(ctx, query, append([]any{job.id, job.token}, args...)...); err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, append([]any{job.id, job.token}, args...)...); err != nil {
 		return fmt.Errorf("record result of job %s: %w", job.id, err)
 	}
 	return nil

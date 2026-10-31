@@ -10,7 +10,6 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,7 +61,7 @@ func cleanJobs(t *testing.T, pool *pgxpool.Pool) {
 
 func enqueue(t *testing.T, pool *pgxpool.Pool, args testArgs) {
 	t.Helper()
-	if err := Enqueue(context.Background(), pool, args); err != nil {
+	if err := NewRunner(pool, 1).Enqueue(context.Background(), args); err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
 }
@@ -232,7 +231,7 @@ func TestRunNext(t *testing.T) {
 		r := NewRunner(pool, 1)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
-		if err := Enqueue(context.Background(), pool, otherArgs{}); err != nil {
+		if err := r.Enqueue(context.Background(), otherArgs{}); err != nil {
 			t.Fatalf("Enqueue failed: %v", err)
 		}
 
@@ -332,8 +331,9 @@ func TestEnqueueRollsBackWithTheTransaction(t *testing.T) {
 	cleanJobs(t, pool)
 	boom := errors.New("account creation failed")
 
-	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		if err := Enqueue(ctx, tx, testArgs{}); err != nil {
+	r := NewRunner(pool, 1)
+	err := database.New(pool).WithTx(ctx, func(ctx context.Context) error {
+		if err := r.Enqueue(ctx, testArgs{}); err != nil {
 			return err
 		}
 		return boom

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,11 +34,11 @@ type programmeFields struct {
 }
 
 type programmeRepository struct {
-	db *pgxpool.Pool
+	db database.DB
 }
 
 func newProgrammeRepository(db *pgxpool.Pool) *programmeRepository {
-	return &programmeRepository{db: db}
+	return &programmeRepository{db: database.New(db)}
 }
 
 const programmeColumns = `id, faculty_name, programme_name, level, mode_of_studies, year_of_study, status, is_primary`
@@ -51,7 +52,7 @@ func scanProgramme(row pgx.Row) (*programmeRow, error) {
 }
 
 func (r *programmeRepository) list(ctx context.Context, userID uuid.UUID) ([]programmeRow, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.db.Conn(ctx).Query(ctx, `
 		SELECT `+programmeColumns+`
 		FROM student_programmes
 		WHERE user_id = $1
@@ -77,15 +78,15 @@ func (r *programmeRepository) list(ctx context.Context, userID uuid.UUID) ([]pro
 
 func (r *programmeRepository) create(ctx context.Context, userID uuid.UUID, f programmeFields) (*programmeRow, error) {
 	var created *programmeRow
-	err := pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
+	err := r.db.WithTx(ctx, func(ctx context.Context) error {
 		if f.IsPrimary {
-			if err := clearPrimary(ctx, tx, userID, uuid.Nil); err != nil {
+			if err := r.clearPrimary(ctx, userID, uuid.Nil); err != nil {
 				return err
 			}
 		}
 
 		var err error
-		created, err = scanProgramme(tx.QueryRow(ctx, `
+		created, err = scanProgramme(r.db.Conn(ctx).QueryRow(ctx, `
 			INSERT INTO student_programmes (user_id, faculty_name, programme_name, level, mode_of_studies, year_of_study, status, is_primary)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING `+programmeColumns,
@@ -100,15 +101,15 @@ func (r *programmeRepository) create(ctx context.Context, userID uuid.UUID, f pr
 
 func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID, f programmeFields) (*programmeRow, error) {
 	var updated *programmeRow
-	err := pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
+	err := r.db.WithTx(ctx, func(ctx context.Context) error {
 		if f.IsPrimary {
-			if err := clearPrimary(ctx, tx, userID, id); err != nil {
+			if err := r.clearPrimary(ctx, userID, id); err != nil {
 				return err
 			}
 		}
 
 		var err error
-		updated, err = scanProgramme(tx.QueryRow(ctx, `
+		updated, err = scanProgramme(r.db.Conn(ctx).QueryRow(ctx, `
 			UPDATE student_programmes
 			SET faculty_name = $3, programme_name = $4, level = $5, mode_of_studies = $6,
 				year_of_study = $7, status = $8, is_primary = $9
@@ -127,7 +128,7 @@ func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID,
 }
 
 func (r *programmeRepository) delete(ctx context.Context, userID, id uuid.UUID) error {
-	result, err := r.db.Exec(ctx, `DELETE FROM student_programmes WHERE id = $1 AND user_id = $2`, id, userID)
+	result, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM student_programmes WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete programme: %w", err)
 	}
@@ -137,9 +138,9 @@ func (r *programmeRepository) delete(ctx context.Context, userID, id uuid.UUID) 
 	return nil
 }
 
-func (r *programmeRepository) insertInitial(ctx context.Context, tx pgx.Tx, userID uuid.UUID, programmes []auth.InitialProgramme) error {
+func (r *programmeRepository) insertInitial(ctx context.Context, userID uuid.UUID, programmes []auth.InitialProgramme) error {
 	for _, p := range programmes {
-		_, err := tx.Exec(ctx, `
+		_, err := r.db.Conn(ctx).Exec(ctx, `
 			INSERT INTO student_programmes (user_id, faculty_name, programme_name, level, mode_of_studies, is_primary)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
 			userID, p.Faculty, p.Programme, nullIfEmpty(p.Level), nullIfEmpty(p.ModeOfStudies), p.IsPrimary)
@@ -150,8 +151,8 @@ func (r *programmeRepository) insertInitial(ctx context.Context, tx pgx.Tx, user
 	return nil
 }
 
-func clearPrimary(ctx context.Context, tx pgx.Tx, userID, except uuid.UUID) error {
-	_, err := tx.Exec(ctx, `UPDATE student_programmes SET is_primary = FALSE WHERE user_id = $1 AND is_primary AND id <> $2`, userID, except)
+func (r *programmeRepository) clearPrimary(ctx context.Context, userID, except uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `UPDATE student_programmes SET is_primary = FALSE WHERE user_id = $1 AND is_primary AND id <> $2`, userID, except)
 	if err != nil {
 		return fmt.Errorf("clear primary programme: %w", err)
 	}

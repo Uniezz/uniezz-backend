@@ -8,7 +8,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func (m Module) avatarURL(ctx context.Context, mediaID *uuid.UUID) *string {
@@ -44,9 +43,9 @@ func (m Module) claimAvatar(ctx context.Context, userID, mediaID uuid.UUID) (*uu
 
 func (m Module) removeAvatar(ctx context.Context, userID uuid.UUID) error {
 	var previous *uuid.UUID
-	err := pgx.BeginFunc(ctx, m.db, func(tx pgx.Tx) error {
+	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		var err error
-		previous, err = m.swapAvatar(ctx, tx, userID, nil)
+		previous, err = m.swapAvatar(ctx, userID, nil)
 		return err
 	})
 	if err != nil {
@@ -57,8 +56,8 @@ func (m Module) removeAvatar(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-func (m Module) swapAvatar(ctx context.Context, tx pgx.Tx, userID uuid.UUID, avatarID *uuid.UUID) (*uuid.UUID, error) {
-	previous, err := m.profiles.replaceAvatar(ctx, tx, userID, avatarID)
+func (m Module) swapAvatar(ctx context.Context, userID uuid.UUID, avatarID *uuid.UUID) (*uuid.UUID, error) {
+	previous, err := m.profiles.replaceAvatar(ctx, userID, avatarID)
 	if err != nil || previous == nil {
 		return nil, err
 	}
@@ -66,7 +65,7 @@ func (m Module) swapAvatar(ctx context.Context, tx pgx.Tx, userID uuid.UUID, ava
 		return nil, nil
 	}
 
-	err = m.media.MarkDeleting(ctx, tx, *previous)
+	err = m.media.MarkDeleting(ctx, *previous)
 	if errors.Is(err, media.ErrNotFound) {
 		return nil, nil
 	}

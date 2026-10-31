@@ -2,13 +2,13 @@ package profile
 
 import (
 	"context"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"net/http"
 	"slices"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func TestGetMe(t *testing.T) {
@@ -43,8 +43,8 @@ func TestGetMe(t *testing.T) {
 		u := e.newUser(t, "umcs", "profile-"+uuid.NewString()+"@umcs.pl")
 		ctx := context.Background()
 
-		err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
-			_, err := e.module.InitProfile(ctx, tx, u.id, auth.InitialProfile{Programmes: []auth.InitialProgramme{
+		err := database.New(e.pool).WithTx(ctx, func(ctx context.Context) error {
+			_, err := e.module.InitProfile(ctx, u.id, auth.InitialProfile{Programmes: []auth.InitialProgramme{
 				{Faculty: "Wydział Prawa", Programme: "Prawo", Level: "long_cycle"},
 				{Faculty: "Wydział Matematyki, Fizyki i Informatyki", Programme: "Informatyka", ModeOfStudies: "full_time", IsPrimary: true},
 			}})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,11 +18,11 @@ type otpRequest struct {
 }
 
 type otpRequestRepository struct {
-	db *pgxpool.Pool
+	db database.DB
 }
 
 func newOTPRequestRepository(db *pgxpool.Pool) *otpRequestRepository {
-	return &otpRequestRepository{db: db}
+	return &otpRequestRepository{db: database.New(db)}
 }
 
 func (r *otpRequestRepository) create(ctx context.Context, req otpRequest, ttl time.Duration) error {
@@ -30,7 +31,7 @@ func (r *otpRequestRepository) create(ctx context.Context, req otpRequest, ttl t
 		VALUES ($1, $2, $3, NOW() + make_interval(secs => $4));
 	`
 
-	if _, err := r.db.Exec(ctx, query, req.UniversityID, req.Email, req.CodeHash, ttl.Seconds()); err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, req.UniversityID, req.Email, req.CodeHash, ttl.Seconds()); err != nil {
 		return fmt.Errorf("failed to create otp request: %w", err)
 	}
 	return nil
@@ -51,7 +52,7 @@ func (r *otpRequestRepository) verify(ctx context.Context, universityID Universi
 	`
 
 	var matched bool
-	err := r.db.QueryRow(ctx, query, universityID, email, codeHash).Scan(&matched)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, universityID, email, codeHash).Scan(&matched)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrInvalidCode

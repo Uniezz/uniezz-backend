@@ -10,7 +10,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,7 +20,7 @@ type mediaStore interface {
 	getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*mediaRow, error)
 	markReady(ctx context.Context, id, ownerUserID uuid.UUID) error
 	getReady(ctx context.Context, id uuid.UUID) (*mediaRow, error)
-	markDeleting(ctx context.Context, tx pgx.Tx, id uuid.UUID) error
+	markDeleting(ctx context.Context, id uuid.UUID) error
 	getDeleting(ctx context.Context, id uuid.UUID) (*mediaRow, error)
 	deleteDeleting(ctx context.Context, id uuid.UUID) error
 }

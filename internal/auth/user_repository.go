@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,11 +24,11 @@ type User struct {
 }
 
 type UserRepository struct {
-	db *pgxpool.Pool
+	db database.DB
 }
 
 func NewUserRepository(db *pgxpool.Pool) *UserRepository {
-	return &UserRepository{db: db}
+	return &UserRepository{db: database.New(db)}
 }
 
 const userColumns = `id,
@@ -60,17 +61,17 @@ const upsertByEmailQuery = `
 							RETURNING ` + userColumns + `, (xmax = 0)`
 
 func (r *UserRepository) Upsert(ctx context.Context, id Identity) (*User, error) {
-	u, _, err := r.upsert(ctx, r.db, id)
+	u, _, err := r.upsert(ctx, id)
 	return u, err
 }
 
-func (r *UserRepository) upsert(ctx context.Context, q pgxQuerier, id Identity) (*User, bool, error) {
+func (r *UserRepository) upsert(ctx context.Context, id Identity) (*User, bool, error) {
 	var row pgx.Row
 	if id.UsosUserID != "" {
-		row = q.QueryRow(ctx, upsertByUsosIDQuery,
+		row = r.db.Conn(ctx).QueryRow(ctx, upsertByUsosIDQuery,
 			id.UniversityID, id.UsosUserID, nullIfEmpty(id.Email), nullIfEmpty(id.FirstName), nullIfEmpty(id.LastName))
 	} else {
-		row = q.QueryRow(ctx, upsertByEmailQuery,
+		row = r.db.Conn(ctx).QueryRow(ctx, upsertByEmailQuery,
 			id.UniversityID, id.Email, nullIfEmpty(id.FirstName), nullIfEmpty(id.LastName))
 	}
 
@@ -93,10 +94,6 @@ func (r *UserRepository) upsert(ctx context.Context, q pgxQuerier, id Identity) 
 	}
 
 	return &u, created, nil
-}
-
-type pgxQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 func nullIfEmpty(s string) *string {

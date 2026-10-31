@@ -3,10 +3,10 @@ package profile
 import (
 	"context"
 	"encoding/json"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
-	"github.com/jackc/pgx/v5"
 )
 
 func TestInitProfile(t *testing.T) {
@@ -15,9 +15,9 @@ func TestInitProfile(t *testing.T) {
 	u := e.otpUser(t)
 
 	var afterCommit func()
-	err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+	err := database.New(e.pool).WithTx(ctx, func(ctx context.Context) error {
 		var err error
-		afterCommit, err = e.module.InitProfile(ctx, tx, u.id, auth.InitialProfile{PhotoURL: "https://usos.test/photo.jpg"})
+		afterCommit, err = e.module.InitProfile(ctx, u.id, auth.InitialProfile{PhotoURL: "https://usos.test/photo.jpg"})
 		return err
 	})
 	if err != nil {

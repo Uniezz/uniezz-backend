@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,13 +21,13 @@ var _ mediaService = media.Module{}
 type mediaService interface {
 	Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
 	URL(ctx context.Context, mediaID uuid.UUID) (string, error)
-	MarkDeleting(ctx context.Context, tx pgx.Tx, mediaID uuid.UUID) error
+	MarkDeleting(ctx context.Context, mediaID uuid.UUID) error
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 	Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error)
 }
 
 type Module struct {
-	db         *pgxpool.Pool
+	tx         database.Transactor
 	profiles   *profileRepository
 	programmes *programmeRepository
 	media      mediaService
@@ -36,7 +36,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Module, error) {
 	m := Module{
-		db:         db,
+		tx:         database.New(db),
 		profiles:   newProfileRepository(db),
 		programmes: newProgrammeRepository(db),
 		media:      mediaModule,

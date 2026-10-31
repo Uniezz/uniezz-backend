@@ -72,8 +72,8 @@ func (f *fakeMedia) URL(_ context.Context, mediaID uuid.UUID) (string, error) {
 	return "https://media.test/" + mediaID.String(), nil
 }
 
-func (f *fakeMedia) MarkDeleting(ctx context.Context, tx pgx.Tx, mediaID uuid.UUID) error {
-	result, err := tx.Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'", mediaID)
+func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
+	result, err := database.New(f.pool).Conn(ctx).Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'", mediaID)
 	if err != nil {
 		return err
 	}

@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const defaultSessionTTL = 30 * 24 * time.Hour
 
 type logins struct {
-	db         *pgxpool.Pool
+	tx         database.Transactor
 	users      *UserRepository
 	sessions   *SessionRepository
 	loginCodes *loginCodeRepository
@@ -22,12 +21,12 @@ type logins struct {
 }
 
 type ProfileInitializer interface {
-	InitProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, initial InitialProfile) (afterCommit func(), err error)
+	InitProfile(ctx context.Context, userID uuid.UUID, initial InitialProfile) (afterCommit func(), err error)
 }
 
-func newLogins(db *pgxpool.Pool, users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
+func newLogins(tx database.Transactor, users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
 	return &logins{
-		db:         db,
+		tx:         tx,
 		users:      users,
 		sessions:   sessions,
 		loginCodes: loginCodes,
@@ -76,8 +75,8 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 	}
 	var user *User
 	var afterCommit func()
-	err := pgx.BeginFunc(ctx, l.db, func(tx pgx.Tx) error {
-		u, created, err := l.users.upsert(ctx, tx, id)
+	err := l.tx.WithTx(ctx, func(ctx context.Context) error {
+		u, created, err := l.users.upsert(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -85,7 +84,7 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 		if !created || l.profiles == nil {
 			return nil
 		}
-		afterCommit, err = l.profiles.InitProfile(ctx, tx, u.ID, id.Profile)
+		afterCommit, err = l.profiles.InitProfile(ctx, u.ID, id.Profile)
 		return err
 	})
 	if err != nil {
