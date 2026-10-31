@@ -22,6 +22,22 @@ func (m Module) avatarURL(ctx context.Context, mediaID *uuid.UUID) *string {
 	return &url
 }
 
+func (m Module) avatarURLs(ctx context.Context, profiles []profileRow) map[uuid.UUID]string {
+	var ids []uuid.UUID
+	for _, p := range profiles {
+		if p.AvatarMediaID != nil {
+			ids = append(ids, *p.AvatarMediaID)
+		}
+	}
+
+	urls, err := m.media.URLs(ctx, ids)
+	if err != nil {
+		telemetry.ReportError(ctx, "resolve avatar URLs", err, slog.Int("count", len(ids)))
+		return nil
+	}
+	return urls
+}
+
 func (m Module) claimAvatar(ctx context.Context, userID, mediaID uuid.UUID) (*uuid.UUID, error) {
 	current, err := m.profiles.get(ctx, userID)
 	if err != nil {

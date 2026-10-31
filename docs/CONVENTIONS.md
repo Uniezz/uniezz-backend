@@ -25,8 +25,9 @@ No `DTO` suffix.
 ## Dependencies and transactions
 
 - `New` builds the module's internals; `Register` builds its HTTP handlers.
-- Only repositories touch the database. They hold a `database.DB` and run every query on `r.db.Conn(ctx)`.
-- Logic that needs several writes to be atomic holds a `database.Transactor` and wraps them in `WithTx(ctx, func(ctx) error)`. Repositories called with that `ctx` run inside the transaction, in any module. A nested `WithTx` joins the open one.
+- `New` wraps the pool once, `db := database.New(pool)`, and passes that value to every repository and, as a `database.Transactor`, to the logic.
+- Only repositories touch the database. They run every query on `r.db.Conn(ctx)`.
+- Logic that needs several writes to be atomic holds a `database.Transactor` and wraps them in `WithTx(ctx, func(ctx) error)`. `WithTx` puts the open transaction into the `ctx` it passes to the callback; `Conn(ctx)` returns it, so repositories called with that `ctx` run inside the transaction, in any module. Pass that `ctx` on: a call made with another context (e.g. `context.Background()`) runs outside the transaction. A nested `WithTx` joins the open one.
 
 ## Lists
 

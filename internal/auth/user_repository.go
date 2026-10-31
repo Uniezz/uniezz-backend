@@ -8,7 +8,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type User struct {
@@ -27,8 +26,8 @@ type UserRepository struct {
 	db database.DB
 }
 
-func NewUserRepository(db *pgxpool.Pool) *UserRepository {
-	return &UserRepository{db: database.New(db)}
+func NewUserRepository(db database.DB) *UserRepository {
+	return &UserRepository{db: db}
 }
 
 const userColumns = `id,

@@ -8,15 +8,14 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type usosStateRepository struct {
 	db database.DB
 }
 
-func newUsosStateRepository(db *pgxpool.Pool) *usosStateRepository {
-	return &usosStateRepository{db: database.New(db)}
+func newUsosStateRepository(db database.DB) *usosStateRepository {
+	return &usosStateRepository{db: db}
 }
 
 func (r *usosStateRepository) save(ctx context.Context, s usosState) error {

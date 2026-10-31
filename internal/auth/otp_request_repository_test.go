@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -39,7 +40,7 @@ func execTest(t *testing.T, pool *pgxpool.Pool, query string, args ...any) {
 
 func TestOTPRequestRepository_Integration(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newOTPRequestRepository(pool)
+	repo := newOTPRequestRepository(database.New(pool))
 
 	t.Run("correct code verifies", func(t *testing.T) {
 		email := newTestOTPEmail()

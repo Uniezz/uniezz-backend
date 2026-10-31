@@ -162,6 +162,31 @@ func TestListProfiles(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves every avatar on the page in one batch", func(t *testing.T) {
+		for _, id := range ids[:2] {
+			mediaID := insertMedia(ctx, e.pool, id, "ready")
+			if _, err := e.pool.Exec(ctx, "UPDATE users SET avatar_media_id = $2 WHERE id = $1", id, mediaID); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		before := e.media.urlBatches
+		p := list(t, url.Values{"name": {tag}, "university": {"umcs"}})
+		if calls := e.media.urlBatches - before; calls != 1 {
+			t.Errorf("expected one batch lookup for the page, got %d", calls)
+		}
+
+		withAvatar := 0
+		for _, item := range p.Items {
+			if item.AvatarURL != nil {
+				withAvatar++
+			}
+		}
+		if withAvatar != 2 {
+			t.Errorf("expected 2 profiles with an avatar URL, got %d", withAvatar)
+		}
+	})
+
 	t.Run("rejects a malformed cursor", func(t *testing.T) {
 		expectError(t, e.api.Get("/profiles?cursor=not-a-cursor", viewer.bearer), http.StatusBadRequest, "invalid_cursor")
 	})

@@ -8,7 +8,6 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type otpRequest struct {
@@ -21,8 +20,8 @@ type otpRequestRepository struct {
 	db database.DB
 }
 
-func newOTPRequestRepository(db *pgxpool.Pool) *otpRequestRepository {
-	return &otpRequestRepository{db: database.New(db)}
+func newOTPRequestRepository(db database.DB) *otpRequestRepository {
+	return &otpRequestRepository{db: db}
 }
 
 func (r *otpRequestRepository) create(ctx context.Context, req otpRequest, ttl time.Duration) error {

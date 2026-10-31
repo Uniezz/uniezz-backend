@@ -51,9 +51,9 @@ func TestRequireUniversity(t *testing.T) {
 
 func TestLogins_Integration(t *testing.T) {
 	pool := setupTestDB(t)
-	users := NewUserRepository(pool)
-	sessions := NewSessionRepository(pool)
-	l := newLogins(database.New(pool), users, sessions, newLoginCodeRepository(pool), time.Hour)
+	users := NewUserRepository(database.New(pool))
+	sessions := NewSessionRepository(database.New(pool))
+	l := newLogins(database.New(pool), users, sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
 	ctx := context.Background()
 
 	signInTestUser := func(t *testing.T) *User {
@@ -256,7 +256,7 @@ func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 	ctx := context.Background()
 
 	newLoginsWithProfiles := func(profiles ProfileInitializer) *logins {
-		l := newLogins(database.New(pool), NewUserRepository(pool), NewSessionRepository(pool), newLoginCodeRepository(pool), time.Hour)
+		l := newLogins(database.New(pool), NewUserRepository(database.New(pool)), NewSessionRepository(database.New(pool)), newLoginCodeRepository(database.New(pool)), time.Hour)
 		l.profiles = profiles
 		return l
 	}

@@ -60,11 +60,11 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE usos_user_id = $1", student.ID)
 	})
 
-	sessions := NewSessionRepository(pool)
-	logins := newLogins(database.New(pool), NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
+	sessions := NewSessionRepository(database.New(pool))
+	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
 
 	m := Module{
-		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(pool)),
+		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(database.New(pool))),
 		logins:            logins,
 		webRedirectURL:    testWebRedirectURL,
 		mobileRedirectURL: testMobileRedirectURL,

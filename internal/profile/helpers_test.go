@@ -53,6 +53,8 @@ type fakeMedia struct {
 	imported  []string
 	importErr error
 	onImport  func()
+
+	urlBatches int
 }
 
 func (f *fakeMedia) Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error {
@@ -70,6 +72,15 @@ func (f *fakeMedia) Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, k
 
 func (f *fakeMedia) URL(_ context.Context, mediaID uuid.UUID) (string, error) {
 	return "https://media.test/" + mediaID.String(), nil
+}
+
+func (f *fakeMedia) URLs(_ context.Context, mediaIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	f.urlBatches++
+	urls := make(map[uuid.UUID]string, len(mediaIDs))
+	for _, id := range mediaIDs {
+		urls[id] = "https://media.test/" + id.String()
+	}
+	return urls, nil
 }
 
 func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
@@ -183,7 +194,7 @@ func (e *testEnv) newUser(t *testing.T, university, email string) testUser {
 
 	token := auth.GenerateSessionToken()
 	hash := token.Hash()
-	if _, err := auth.NewSessionRepository(e.pool).CreateSession(ctx, id, hash[:], time.Now().Add(time.Hour)); err != nil {
+	if _, err := auth.NewSessionRepository(database.New(e.pool)).CreateSession(ctx, id, hash[:], time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 	return testUser{id: id, bearer: "Authorization: Bearer " + token.String()}

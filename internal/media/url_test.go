@@ -5,12 +5,13 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 )
 
 func TestURL(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newRepository(pool)
+	repo := newRepository(database.New(pool))
 	ownerID := createTestUser(t, pool)
 	module := Module{storage: newTestStorage(t), repo: repo}
 	ctx := context.Background()
@@ -56,9 +57,35 @@ func TestURL(t *testing.T) {
 
 func TestURLOfUnknownMedia(t *testing.T) {
 	pool := setupTestDB(t)
-	module := Module{storage: newTestStorage(t), repo: newRepository(pool)}
+	module := Module{storage: newTestStorage(t), repo: newRepository(database.New(pool))}
 
 	if _, err := module.URL(context.Background(), uuid.New()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("URL() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestURLs(t *testing.T) {
+	pool := setupTestDB(t)
+	repo := newRepository(database.New(pool))
+	ownerID := createTestUser(t, pool)
+	module := Module{storage: newTestStorage(t), repo: repo}
+	ctx := context.Background()
+
+	ready := readyMedia(t, repo, ownerID)
+	pending, err := repo.createPending(ctx, ownerID, KindAvatar, objectKey(KindAvatar, "image/jpeg"), "image/jpeg", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	urls, err := module.URLs(ctx, []uuid.UUID{ready.ID, pending.ID, uuid.New()})
+	if err != nil {
+		t.Fatalf("URLs() error = %v", err)
+	}
+	if want := "https://media.uniezz.pl/" + ready.ObjectKey; len(urls) != 1 || urls[ready.ID] != want {
+		t.Errorf("URLs() = %v, want only %s -> %s", urls, ready.ID, want)
+	}
+
+	if urls, err := module.URLs(ctx, nil); err != nil || len(urls) != 0 {
+		t.Errorf("URLs(nil) = %v, %v; want an empty map", urls, err)
 	}
 }

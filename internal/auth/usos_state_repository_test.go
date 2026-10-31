@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 )
 
@@ -45,7 +46,7 @@ func countUsosStates(t *testing.T, pool *pgxpool.Pool, requestToken string) int 
 
 func TestUsosStateRepository_Integration(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newUsosStateRepository(pool)
+	repo := newUsosStateRepository(database.New(pool))
 	ctx := context.Background()
 
 	t.Run("take returns what save stored", func(t *testing.T) {

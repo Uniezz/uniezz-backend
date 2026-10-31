@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -75,7 +76,7 @@ func TestCreateUploadRejectsInvalidInputBeforeStorage(t *testing.T) {
 func TestCreateUpload(t *testing.T) {
 	pool := setupTestDB(t)
 	ownerID := createTestUser(t, pool)
-	module := Module{storage: newTestStorage(t), repo: newRepository(pool)}
+	module := Module{storage: newTestStorage(t), repo: newRepository(database.New(pool))}
 
 	upload, err := module.CreateUpload(context.Background(), ownerID, KindAvatar, "image/jpeg", 1024)
 	if err != nil {
@@ -89,7 +90,7 @@ func TestCreateUpload(t *testing.T) {
 		t.Errorf("ExpiresAt in %v, want about 10 minutes", until)
 	}
 
-	item, err := newRepository(pool).getOwnedPending(context.Background(), upload.MediaID, ownerID, KindAvatar)
+	item, err := newRepository(database.New(pool)).getOwnedPending(context.Background(), upload.MediaID, ownerID, KindAvatar)
 	if err != nil {
 		t.Fatalf("get pending media: %v", err)
 	}

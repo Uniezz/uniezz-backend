@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Session struct {
@@ -25,8 +24,8 @@ type SessionRepository struct {
 	db database.DB
 }
 
-func NewSessionRepository(db *pgxpool.Pool) *SessionRepository {
-	return &SessionRepository{db: database.New(db)}
+func NewSessionRepository(db database.DB) *SessionRepository {
+	return &SessionRepository{db: db}
 }
 
 func (r *SessionRepository) CreateSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*Session, error) {

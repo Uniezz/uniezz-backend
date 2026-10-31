@@ -8,15 +8,14 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type loginCodeRepository struct {
 	db database.DB
 }
 
-func newLoginCodeRepository(db *pgxpool.Pool) *loginCodeRepository {
-	return &loginCodeRepository{db: database.New(db)}
+func newLoginCodeRepository(db database.DB) *loginCodeRepository {
+	return &loginCodeRepository{db: db}
 }
 
 func (r *loginCodeRepository) create(ctx context.Context, userID uuid.UUID, codeHash []byte) error {

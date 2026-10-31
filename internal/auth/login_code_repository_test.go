@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -35,7 +36,7 @@ func countLoginCodes(t *testing.T, pool *pgxpool.Pool, codeHash []byte) int {
 
 func TestLoginCodeRepository_Integration(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newLoginCodeRepository(pool)
+	repo := newLoginCodeRepository(database.New(pool))
 	ctx := context.Background()
 
 	t.Run("consume returns the code's user", func(t *testing.T) {

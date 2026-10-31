@@ -23,14 +23,15 @@ type Module struct {
 	mobileRedirectURL string
 }
 
-func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles ProfileInitializer) (Module, error) {
+func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles ProfileInitializer) (Module, error) {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
 		return Module{}, err
 	}
 
+	db := database.New(pool)
 	sessions := NewSessionRepository(db)
-	logins := newLogins(database.New(db), NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
+	logins := newLogins(db, NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
 	logins.profiles = profiles
 
 	return Module{
@@ -39,7 +40,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles Profil
 		otp: newOTPLogin(
 			newOTPRequestRepository(db),
 			sender,
-			ratelimit.New(db, "otp-send", otpSendLimit, otpSendWindow),
+			ratelimit.New(pool, "otp-send", otpSendLimit, otpSendWindow),
 			newOTPHasher([]byte(cfg.OTPHashKey)),
 			cfg.OTPTestEmails,
 		),

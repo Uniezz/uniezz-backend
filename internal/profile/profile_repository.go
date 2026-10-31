@@ -10,7 +10,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type profileRow struct {
@@ -41,8 +40,8 @@ type profileRepository struct {
 	db database.DB
 }
 
-func newProfileRepository(db *pgxpool.Pool) *profileRepository {
-	return &profileRepository{db: database.New(db)}
+func newProfileRepository(db database.DB) *profileRepository {
+	return &profileRepository{db: db}
 }
 
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {

@@ -9,7 +9,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type mediaRow struct {
@@ -29,8 +28,8 @@ type repository struct {
 	db database.DB
 }
 
-func newRepository(db *pgxpool.Pool) *repository {
-	return &repository{db: database.New(db)}
+func newRepository(db database.DB) *repository {
+	return &repository{db: db}
 }
 
 func (r *repository) createPending(ctx context.Context, ownerUserID uuid.UUID, kind Kind, objectKey, contentType string, sizeBytes int64) (*mediaRow, error) {
@@ -92,6 +91,27 @@ func (r *repository) getReady(ctx context.Context, id uuid.UUID) (*mediaRow, err
 		return nil, fmt.Errorf("get ready media: %w", err)
 	}
 	return item, nil
+}
+
+func (r *repository) listReady(ctx context.Context, ids []uuid.UUID) ([]mediaRow, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `SELECT `+mediaColumns+` FROM media WHERE id = ANY($1) AND status = 'ready'`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list ready media: %w", err)
+	}
+	defer rows.Close()
+
+	var items []mediaRow
+	for rows.Next() {
+		item, err := scanMedia(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan media: %w", err)
+		}
+		items = append(items, *item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list ready media: %w", err)
+	}
+	return items, nil
 }
 
 func (r *repository) markDeleting(ctx context.Context, id uuid.UUID) error {

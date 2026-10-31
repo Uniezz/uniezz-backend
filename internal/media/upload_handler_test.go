@@ -10,6 +10,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
@@ -37,7 +38,7 @@ func bearerFor(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) string {
 
 	token := auth.GenerateSessionToken()
 	hash := token.Hash()
-	if _, err := auth.NewSessionRepository(pool).CreateSession(context.Background(), userID, hash[:], time.Now().Add(time.Hour)); err != nil {
+	if _, err := auth.NewSessionRepository(database.New(pool)).CreateSession(context.Background(), userID, hash[:], time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 	return "Authorization: Bearer " + token.String()
@@ -47,7 +48,7 @@ func TestUploadHandler(t *testing.T) {
 	pool := setupTestDB(t)
 	ownerID := createTestUser(t, pool)
 	api := newGuardedAPI(t, pool)
-	m := Module{storage: newTestStorage(t), repo: newRepository(pool)}
+	m := Module{storage: newTestStorage(t), repo: newRepository(database.New(pool))}
 	m.Register(api)
 	bearer := bearerFor(t, pool, ownerID)
 
@@ -69,7 +70,7 @@ func TestUploadHandler(t *testing.T) {
 			t.Errorf("unexpected upload %+v", body)
 		}
 
-		item, err := newRepository(pool).getOwnedPending(context.Background(), uuid.MustParse(body.MediaID), ownerID, KindAvatar)
+		item, err := newRepository(database.New(pool)).getOwnedPending(context.Background(), uuid.MustParse(body.MediaID), ownerID, KindAvatar)
 		if err != nil {
 			t.Fatalf("expected a pending media row owned by the caller: %v", err)
 		}

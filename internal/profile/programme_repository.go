@@ -9,7 +9,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type programmeRow struct {
@@ -37,8 +36,8 @@ type programmeRepository struct {
 	db database.DB
 }
 
-func newProgrammeRepository(db *pgxpool.Pool) *programmeRepository {
-	return &programmeRepository{db: database.New(db)}
+func newProgrammeRepository(db database.DB) *programmeRepository {
+	return &programmeRepository{db: db}
 }
 
 const programmeColumns = `id, faculty_name, programme_name, level, mode_of_studies, year_of_study, status, is_primary`

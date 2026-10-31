@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -49,7 +50,7 @@ func strOrNil(p *string) string {
 
 func TestUserRepository_Integration(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := NewUserRepository(pool)
+	repo := NewUserRepository(database.New(pool))
 	ctx := context.Background()
 
 	t.Run("USOS first login creates user", func(t *testing.T) {
