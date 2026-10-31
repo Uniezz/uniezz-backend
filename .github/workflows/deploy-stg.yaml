@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  API_URL: https://api.stg.uniezz.pl
+  API_URL: https://api-stg.uniezz.pl
   DEPLOY_DIR: uniezz-stg
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://api.stg.uniezz.pl/docs
+      url: https://api-stg.uniezz.pl/docs
 
     steps:
       - name: Checkout repository
