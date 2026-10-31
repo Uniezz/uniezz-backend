@@ -21,7 +21,7 @@ var _ mediaStore = (*repository)(nil)
 type mediaStore interface {
 	createPending(ctx context.Context, ownerUserID uuid.UUID, kind Kind, objectKey, contentType string, sizeBytes int64) (*mediaRow, error)
 	getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*mediaRow, error)
-	markReady(ctx context.Context, id, ownerUserID uuid.UUID) error
+	markReady(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) error
 	getReady(ctx context.Context, id uuid.UUID) (*mediaRow, error)
 	markDeleting(ctx context.Context, id uuid.UUID) error
 	getDeleting(ctx context.Context, id uuid.UUID) (*mediaRow, error)

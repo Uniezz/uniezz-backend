@@ -61,13 +61,13 @@ func (r *repository) getOwnedPending(ctx context.Context, id, ownerUserID uuid.U
 	return item, nil
 }
 
-func (r *repository) markReady(ctx context.Context, id, ownerUserID uuid.UUID) error {
+func (r *repository) markReady(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) error {
 	const query = `
         UPDATE media
         SET status = 'ready'
-        WHERE id = $1 AND owner_user_id = $2 AND status = 'pending'`
+        WHERE id = $1 AND owner_user_id = $2 AND kind = $3 AND status = 'pending'`
 
-	result, err := r.db.Conn(ctx).Exec(ctx, query, id, ownerUserID)
+	result, err := r.db.Conn(ctx).Exec(ctx, query, id, ownerUserID, kind)
 	if err != nil {
 		return fmt.Errorf("mark media ready: %w", err)
 	}

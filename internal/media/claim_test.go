@@ -19,7 +19,7 @@ func (f *fakePendingStore) getOwnedPending(context.Context, uuid.UUID, uuid.UUID
 	return f.item, f.getErr
 }
 
-func (f *fakePendingStore) markReady(context.Context, uuid.UUID, uuid.UUID) error {
+func (f *fakePendingStore) markReady(context.Context, uuid.UUID, uuid.UUID, Kind) error {
 	f.markedReady = true
 	return nil
 }

@@ -120,6 +120,7 @@ Every finished attempt is logged with `job_kind`, `job_id` and `attempt`. Retrie
 |------|-------|--------------|
 | `profile.import-avatar.v1` | profile | Copies the USOS photo of a new account into our storage and sets it as the avatar, unless the student already chose one. |
 | `media.cleanup.v1` (hourly) | media | Marks uploads still `pending` after an hour as `deleting`, then deletes the object and row of every `deleting` media. Failures stay `deleting` for the next run. |
+| `feed.prune-request-keys.v1` (daily) | feed | Deletes idempotency keys older than 24 hours, so a key is honoured for 24 to 48 hours. |
 | `jobs.prune.v1` (daily) | jobs | Deletes `succeeded` jobs older than 7 days and `failed` jobs older than 30 days. |
 
 ## Operations

@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +26,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		Programmes:   make([]Programme, 0, len(programmes)),
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		Bio:          p.Bio,
-		Interests:    nonNil(p.Interests),
+		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
 		CreatedAt:    p.CreatedAt,
 	}
@@ -101,18 +102,11 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 	return nil
 }
 
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
 func trimmedName(name *string) (*string, error) {
 	if name == nil {
 		return nil, nil
 	}
-	trimmed := plainText(*name, false)
+	trimmed := text.Plain(*name, false)
 	if trimmed == "" {
 		return nil, ErrInvalidInput
 	}

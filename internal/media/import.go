@@ -36,7 +36,7 @@ func (m Module) Import(ctx context.Context, ownerUserID uuid.UUID, kind Kind, so
 	if err := m.storage.putObject(ctx, key, contentType, body); err != nil {
 		return uuid.Nil, err
 	}
-	if err := m.repo.markReady(ctx, item.ID, ownerUserID); err != nil {
+	if err := m.repo.markReady(ctx, item.ID, ownerUserID, kind); err != nil {
 		return uuid.Nil, err
 	}
 	return item.ID, nil

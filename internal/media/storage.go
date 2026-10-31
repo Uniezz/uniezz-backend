@@ -101,6 +101,7 @@ func (s *objectStorage) presignPut(ctx context.Context, key, contentType string,
 		Key:           aws.String(key),
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(size),
+		IfNoneMatch:   aws.String("*"),
 	}, s3.WithPresignExpires(uploadURLTTL))
 	if err != nil {
 		return "", fmt.Errorf("presign media upload: %w", err)

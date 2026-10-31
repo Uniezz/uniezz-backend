@@ -9,19 +9,23 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/mail"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/moderation"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Modules struct {
-	Auth    auth.Module
-	Media   media.Module
-	Profile profile.Module
-	Jobs    *jobs.Runner
+	Auth       auth.Module
+	Media      media.Module
+	Profile    profile.Module
+	Feed       feed.Module
+	Moderation moderation.Module
+	Jobs       *jobs.Runner
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, error) {
@@ -36,13 +40,20 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
+	feedModule, err := feed.New(db, mediaModule, runner)
+	if err != nil {
+		return Modules{}, err
+	}
+
+	moderationModule := moderation.New(db, feedModule, profileModule)
+
 	mailModule := mail.NewResendSender(cfg)
 	authModule, err := auth.New(db, cfg, mailModule, profileModule)
 	if err != nil {
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Jobs: runner}, nil
+	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, Moderation: moderationModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -50,4 +61,6 @@ func (m Modules) Register(api huma.API) {
 	m.Auth.Register(api)
 	m.Media.Register(api)
 	m.Profile.Register(api)
+	m.Feed.Register(api)
+	m.Moderation.Register(api)
 }

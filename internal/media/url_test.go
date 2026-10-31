@@ -33,7 +33,7 @@ func TestURL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("create pending media: %v", err)
 			}
-			if err := repo.markReady(ctx, item.ID, ownerID); err != nil {
+			if err := repo.markReady(ctx, item.ID, ownerID, item.Kind); err != nil {
 				t.Fatalf("mark media ready: %v", err)
 			}
 
