@@ -87,8 +87,13 @@ jobs:
 
       - name: Smoke test
         run: |
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_URL/healthz/ready"
-          version="$(curl -fsS "$API_URL/openapi.json" | jq -r .info.version)"
+          host="${API_URL#https://}"
+          origin() {
+            ssh "$SSH_TARGET" curl -fsS --retry 10 --retry-delay 3 --retry-all-errors \
+              --resolve "$host:443:127.0.0.1" "https://$host$1"
+          }
+          origin /healthz/ready
+          version="$(origin /openapi.json | jq -r .info.version)"
           if [ "$version" != "${GITHUB_SHA::7}" ]; then
             echo "::error::Expected API version ${GITHUB_SHA::7}, got $version"
             exit 1
