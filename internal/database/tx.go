@@ -35,6 +35,11 @@ func (db DB) Conn(ctx context.Context) Querier {
 	return db.pool
 }
 
+func InTx(ctx context.Context) bool {
+	_, ok := ctx.Value(txKey{}).(pgx.Tx)
+	return ok
+}
+
 func (db DB) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if _, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
 		return fn(ctx)
