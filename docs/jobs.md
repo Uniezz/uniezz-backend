@@ -31,28 +31,38 @@ Register the handler in the module's `New`; registering the same task twice fail
 err := jobs.Register(runner, m.sendDigest, jobs.Options{Timeout: 30 * time.Second, MaxAttempts: 5})
 ```
 
-Enqueue inside the transaction that makes the job necessary, then wake the runner after the commit:
+Enqueue inside the transaction that makes the job necessary, then wake the runner after the commit. `Enqueue` joins the transaction carried by `ctx` (see [conventions](CONVENTIONS.md#dependencies-and-transactions)):
 
 ```go
-err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+err := m.tx.WithTx(ctx, func(ctx context.Context) error {
     // ... your writes ...
-    return jobs.Enqueue(ctx, tx, SendDigestArgs{UserID: id})
+    return runner.Enqueue(ctx, SendDigestArgs{UserID: id})
 })
 if err == nil {
     runner.Wake()
 }
 ```
 
-The type parameter ties the three together: the compiler rejects a payload of the wrong type in `Enqueue` and a handler with the wrong argument type in `Register`. Changing the payload in a way old rows cannot decode needs a new task name (`.v2`).
+`Register` takes the args type from the handler, so a handler with the wrong argument type does not compile. Changing the payload in a way old rows cannot decode needs a new task name (`.v2`).
 
 Handlers must be safe to run twice (delivery is at least once): a worker can finish the work and crash before it records success.
+
+## Scheduling
+
+Run a task on a fixed interval by registering it, then scheduling it in the module's `New`:
+
+```go
+err := jobs.Schedule(runner, CleanupArgs{}, time.Hour)
+```
+
+Every poll interval the runner computes the current slot (`now` truncated to the interval) and inserts one job with `unique_key = <kind>@<slot>`. The unique index makes the insert a no-op when the slot already has a job, so the task runs once per slot however many API instances run, and a restart does not repeat it. The job then goes through the normal queue: retries, leases and Sentry reports apply. A slot can start up to one poll interval late.
 
 ## How the runner works
 
 ```mermaid
 flowchart LR
     P[Producer: Enqueue in tx, commit] -- Wake --> C[(wake channel, buffer 1)]
-    T[Ticker, every 30 s] --> L
+    T[Ticker, every JOB_POLL_INTERVAL] --> L
     C --> L{Worker loop}
     L -- drain --> Q[(jobs table)]
     Q -- claimed job --> H[Handler with timeout]
@@ -67,7 +77,9 @@ flowchart LR
 2. **Wait** for whichever comes first:
    - the context is cancelled (shutdown): return;
    - a value on the wake channel: drain again;
-   - the ticker fires (every 30 s): drain again. This catches due retries and expired leases.
+   - the ticker fires (every `JOB_POLL_INTERVAL`, default 30 s): drain again. This catches due retries, expired leases and jobs enqueued by another instance.
+
+Each poll touches the database, so a short interval keeps a scale-to-zero database (Neon) awake. Set a longer `JOB_POLL_INTERVAL` (e.g. `5m`) where idle cost matters more than pickup delay; wakeups still start new jobs immediately.
 
 The wake channel has a buffer of one, and `Wake` never blocks: if a wakeup is already waiting, another one adds nothing. A wakeup only means "look at the table"; the job itself is always read from PostgreSQL. A worker that claims a job also calls `Wake`, so an idle second worker joins in when there is more work.
 
@@ -107,6 +119,8 @@ Every finished attempt is logged with `job_kind`, `job_id` and `attempt`. Retrie
 | Kind | Owner | What it does |
 |------|-------|--------------|
 | `profile.import-avatar.v1` | profile | Copies the USOS photo of a new account into our storage and sets it as the avatar, unless the student already chose one. |
+| `media.cleanup.v1` (hourly) | media | Marks uploads still `pending` after an hour as `deleting`, then deletes the object and row of every `deleting` media. Failures stay `deleting` for the next run. |
+| `jobs.prune.v1` (daily) | jobs | Deletes `succeeded` jobs older than 7 days and `failed` jobs older than 30 days. |
 
 ## Operations
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // minOTPHashKeyLength keeps the HMAC key at least as long as the SHA-256 output.
@@ -47,7 +48,8 @@ type Config struct {
 	S3ForcePathStyle  bool
 	MediaPublicURL    string
 
-	JobWorkers int
+	JobWorkers      int
+	JobPollInterval time.Duration
 }
 
 func Load() (*Config, error) {
@@ -59,6 +61,11 @@ func Load() (*Config, error) {
 	jobWorkers, err := strconv.Atoi(getEnv("JOB_WORKERS", "1"))
 	if err != nil || jobWorkers < 1 {
 		return nil, fmt.Errorf("JOB_WORKERS must be a positive integer")
+	}
+
+	jobPollInterval, err := time.ParseDuration(getEnv("JOB_POLL_INTERVAL", "30s"))
+	if err != nil || jobPollInterval < time.Second {
+		return nil, fmt.Errorf("JOB_POLL_INTERVAL must be a duration of at least 1s, e.g. 30s or 5m")
 	}
 
 	cfg := &Config{
@@ -85,6 +92,7 @@ func Load() (*Config, error) {
 		S3ForcePathStyle:   s3ForcePathStyle,
 		MediaPublicURL:     os.Getenv("MEDIA_PUBLIC_URL"),
 		JobWorkers:         jobWorkers,
+		JobPollInterval:    jobPollInterval,
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",

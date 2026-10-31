@@ -2,12 +2,12 @@ package profile
 
 import (
 	"context"
-	"github.com/Uniezz/uniezz-backend/internal/database"
 	"net/http"
 	"slices"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 )
 

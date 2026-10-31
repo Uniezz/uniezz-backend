@@ -3,9 +3,9 @@ package media
 import (
 	"context"
 	"errors"
-	"github.com/Uniezz/uniezz-backend/internal/database"
 	"testing"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )

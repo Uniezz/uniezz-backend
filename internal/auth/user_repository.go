@@ -3,9 +3,9 @@ package auth
 import (
 	"context"
 	"fmt"
-	"github.com/Uniezz/uniezz-backend/internal/database"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

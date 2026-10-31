@@ -3,10 +3,10 @@ package profile
 import (
 	"context"
 	"encoding/json"
-	"github.com/Uniezz/uniezz-backend/internal/database"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 )
 
 func TestInitProfile(t *testing.T) {

@@ -61,7 +61,7 @@ func cleanJobs(t *testing.T, pool *pgxpool.Pool) {
 
 func enqueue(t *testing.T, pool *pgxpool.Pool, args testArgs) {
 	t.Helper()
-	if err := NewRunner(pool, 1).Enqueue(context.Background(), args); err != nil {
+	if err := NewRunner(pool, 1, 0).Enqueue(context.Background(), args); err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
 }
@@ -109,7 +109,7 @@ func TestRunNext(t *testing.T) {
 	pool := setupTestDB(t)
 
 	t.Run("a successful job is marked succeeded and gets its typed payload", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		var got testArgs
 		register(t, r, quick, func(_ context.Context, a testArgs) error { got = a; return nil })
@@ -130,7 +130,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("a temporary failure goes back to pending with a delay and the error", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return errors.New("storage down") })
 		enqueue(t, pool, testArgs{})
@@ -150,7 +150,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("a permanent failure stops retrying", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return Permanent(errors.New("bad image")) })
 		enqueue(t, pool, testArgs{})
@@ -163,7 +163,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("the last allowed attempt fails the job", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, Options{Timeout: time.Second, MaxAttempts: 2}, func(context.Context, testArgs) error { return errors.New("down") })
 		enqueue(t, pool, testArgs{})
@@ -180,7 +180,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("a malformed payload fails without calling the handler", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		called := false
 		register(t, r, quick, func(context.Context, testArgs) error { called = true; return nil })
@@ -199,7 +199,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("a handler that overruns its timeout gets a cancelled context", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, Options{Timeout: 50 * time.Millisecond, MaxAttempts: 3}, func(ctx context.Context, _ testArgs) error {
 			<-ctx.Done()
@@ -215,7 +215,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("a panicking handler fails the job instead of the process", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { panic("nil map") })
 		enqueue(t, pool, testArgs{})
@@ -228,7 +228,7 @@ func TestRunNext(t *testing.T) {
 	})
 
 	t.Run("jobs of other kinds are left alone", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
 		if err := r.Enqueue(context.Background(), otherArgs{}); err != nil {
@@ -256,7 +256,7 @@ func TestRecovery(t *testing.T) {
 	}
 
 	t.Run("a job whose worker died is claimed again after its lease expires", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
 		enqueue(t, pool, testArgs{})
@@ -278,7 +278,7 @@ func TestRecovery(t *testing.T) {
 	})
 
 	t.Run("an interrupted job with no attempts left fails without running", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		called := false
 		register(t, r, Options{Timeout: time.Second, MaxAttempts: 1}, func(context.Context, testArgs) error { called = true; return nil })
@@ -299,7 +299,7 @@ func TestRecovery(t *testing.T) {
 	})
 
 	t.Run("a stale attempt cannot overwrite the state of a newer one", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
 		enqueue(t, pool, testArgs{})
@@ -331,7 +331,7 @@ func TestEnqueueRollsBackWithTheTransaction(t *testing.T) {
 	cleanJobs(t, pool)
 	boom := errors.New("account creation failed")
 
-	r := NewRunner(pool, 1)
+	r := NewRunner(pool, 1, 0)
 	err := database.New(pool).WithTx(ctx, func(ctx context.Context) error {
 		if err := r.Enqueue(ctx, testArgs{}); err != nil {
 			return err
@@ -393,7 +393,7 @@ func TestRun(t *testing.T) {
 	pool := setupTestDB(t)
 
 	t.Run("jobs committed before start are picked up without a wakeup", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		r.pollInterval = time.Hour
 		cleanJobs(t, pool)
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
@@ -405,7 +405,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("one wakeup drains every due job, and a delayed retry does not block them", func(t *testing.T) {
-		r := NewRunner(pool, 1)
+		r := NewRunner(pool, 1, 0)
 		r.pollInterval = time.Hour
 		cleanJobs(t, pool)
 		register(t, r, quick, func(_ context.Context, a testArgs) error {
@@ -427,7 +427,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("several workers never run the same job twice", func(t *testing.T) {
-		r := NewRunner(pool, 3)
+		r := NewRunner(pool, 3, 0)
 		r.pollInterval = 20 * time.Millisecond
 		cleanJobs(t, pool)
 
@@ -458,7 +458,7 @@ func TestRun(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
-	r := NewRunner(nil, 1)
+	r := NewRunner(nil, 1, 0)
 	noop := func(context.Context, testArgs) error { return nil }
 
 	if err := Register(r, noop, Options{}); err == nil {

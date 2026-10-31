@@ -34,17 +34,23 @@ type Runner struct {
 	workers      int
 	pollInterval time.Duration
 	handlers     map[string]registration
+	schedules    []schedule
 	wake         chan struct{}
 }
 
-func NewRunner(db *pgxpool.Pool, workers int) *Runner {
-	return &Runner{
+func NewRunner(db *pgxpool.Pool, workers int, pollInterval time.Duration) *Runner {
+	if pollInterval <= 0 {
+		pollInterval = defaultPollInterval
+	}
+	r := &Runner{
 		db:           database.New(db),
 		workers:      max(workers, 1),
-		pollInterval: defaultPollInterval,
+		pollInterval: pollInterval,
 		handlers:     make(map[string]registration),
 		wake:         make(chan struct{}, 1),
 	}
+	r.registerPrune()
+	return r
 }
 
 func (r *Runner) Wake() {
@@ -58,6 +64,7 @@ func (r *Runner) Run(ctx context.Context) {
 	r.reportUnknownKinds(ctx)
 
 	var wg sync.WaitGroup
+	wg.Go(func() { r.runSchedules(ctx) })
 	for range r.workers {
 		wg.Go(func() { r.work(ctx) })
 	}

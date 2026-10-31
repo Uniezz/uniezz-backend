@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Uniezz/uniezz-backend/internal/database"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -128,6 +128,29 @@ func (r *repository) deleteDeleting(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("delete media: %w", err)
 	}
 	return nil
+}
+
+func (r *repository) markAbandonedDeleting(ctx context.Context, olderThan time.Duration) error {
+	const query = `
+		UPDATE media SET status = 'deleting'
+		WHERE status = 'pending' AND created_at < NOW() - $1::interval`
+
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, olderThan); err != nil {
+		return fmt.Errorf("mark abandoned uploads deleting: %w", err)
+	}
+	return nil
+}
+
+func (r *repository) listDeleting(ctx context.Context, limit int) ([]uuid.UUID, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `SELECT id FROM media WHERE status = 'deleting' ORDER BY created_at LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list deleting media: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("list deleting media: %w", err)
+	}
+	return ids, nil
 }
 
 func scanMedia(row pgx.Row) (*mediaRow, error) {
