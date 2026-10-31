@@ -12,7 +12,9 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -42,7 +44,7 @@ func (in postInput) clean() (postInput, error) {
 	if in.Tags, err = cleanTags(in.Tags); err != nil {
 		return postInput{}, err
 	}
-	if in.EventDate != nil && in.Type != typeEvent {
+	if (in.Type == typeEvent) != (in.EventDate != nil) {
 		return postInput{}, ErrInvalidInput
 	}
 	if in.EventDate != nil {
@@ -99,10 +101,8 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 	if err := m.checkUniversity(ctx, userID, in.University); err != nil {
 		return nil, false, err
 	}
-	for _, id := range in.MediaIDs {
-		if err := m.media.CheckUpload(ctx, id, userID, media.KindFeed); err != nil {
-			return nil, false, mediaError(err)
-		}
+	if err := m.checkUploads(ctx, userID, in.MediaIDs); err != nil {
+		return nil, false, err
 	}
 
 	postID := uuid.New()
@@ -164,6 +164,18 @@ func (m Module) checkUniversity(ctx context.Context, userID uuid.UUID, universit
 	return nil
 }
 
+// checkUploads asks storage about every file at once; each check is a HEAD
+// request, and a post has up to ten files.
+func (m Module) checkUploads(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) error {
+	g, ctx := errgroup.WithContext(ctx)
+	for _, id := range ids {
+		g.Go(func() error {
+			return mediaError(m.media.CheckUpload(ctx, id, userID, media.KindFeed))
+		})
+	}
+	return g.Wait()
+}
+
 func mediaError(err error) error {
 	if errors.Is(err, media.ErrNotFound) || errors.Is(err, media.ErrUploadMismatch) {
 		return errors.Join(ErrInvalidMedia, err)
@@ -205,7 +217,7 @@ func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, er
 
 	filter := postFilter{ViewerID: q.ViewerID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To, Limit: q.Limit + 1}
 	if q.Cursor != "" {
-		var after postCursor
+		var after pageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
 			return nil, nil, err
 		}
@@ -221,7 +233,7 @@ func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, er
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
 		last := rows[len(rows)-1]
-		cursor, err := httpapi.EncodeCursor(postCursor{CreatedAt: last.CreatedAt, ID: last.ID})
+		cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: last.CreatedAt, ID: last.ID})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -259,7 +271,7 @@ func (m Module) toPosts(ctx context.Context, rows []postRow) ([]Post, error) {
 			University:    row.UniversityID,
 			Title:         row.Title,
 			Content:       row.Content,
-			Tags:          nonNil(row.Tags),
+			Tags:          text.NonNil(row.Tags),
 			EventDate:     row.EventDate,
 			MediaURLs:     urls,
 			Author:        m.toAuthor(ctx, row.Author),
@@ -293,13 +305,6 @@ func (m Module) mediaURL(ctx context.Context, ref *media.Ref) *string {
 		return nil
 	}
 	return &url
-}
-
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }
 
 type postEdit struct {
@@ -350,8 +355,8 @@ func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit p
 		if err != nil {
 			return err
 		}
-		if locked.AuthorID != userID {
-			return ErrForbidden
+		if err := onlyAuthor(userID)(locked.AuthorID); err != nil {
+			return err
 		}
 		if change.EventDate != nil && locked.Type != typeEvent {
 			return ErrInvalidInput
@@ -368,12 +373,16 @@ func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit p
 }
 
 func (m Module) deletePost(ctx context.Context, userID, postID uuid.UUID) error {
-	return m.removePost(ctx, postID, func(authorID uuid.UUID) error {
+	return m.removePost(ctx, postID, onlyAuthor(userID))
+}
+
+func onlyAuthor(userID uuid.UUID) func(authorID uuid.UUID) error {
+	return func(authorID uuid.UUID) error {
 		if authorID != userID {
 			return ErrForbidden
 		}
 		return nil
-	})
+	}
 }
 
 // removePost deletes the post with its comments and likes, and hands its media

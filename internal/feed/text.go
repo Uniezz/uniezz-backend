@@ -1,7 +1,6 @@
 package feed
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -27,21 +26,8 @@ func cleanText(s string, keepNewlines bool, minLength, maxLength int) (string, e
 }
 
 func cleanTags(tags []string) ([]string, error) {
-	clean := make([]string, 0, len(tags))
-	seen := map[string]bool{}
-	for _, raw := range tags {
-		tag := text.Plain(raw, false)
-		if tag == "" || utf8.RuneCountInString(tag) > maxTagLength {
-			return nil, ErrInvalidInput
-		}
-		key := strings.ToLower(tag)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		clean = append(clean, tag)
-	}
-	if len(clean) > maxTags {
+	clean, err := text.Tags(tags, maxTags, maxTagLength)
+	if err != nil {
 		return nil, ErrInvalidInput
 	}
 	return clean, nil

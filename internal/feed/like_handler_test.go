@@ -149,3 +149,36 @@ func TestConcurrentPostLikes(t *testing.T) {
 		}
 	})
 }
+
+func TestRepeatedLikeDoesNotWrite(t *testing.T) {
+	e := newTestEnv(t)
+	author := e.user(t)
+	post := e.createPost(t, author, nil)
+	path := "/feed/posts/" + post.ID.String() + "/like"
+
+	updatedAt := func() string {
+		var s string
+		if err := e.pool.QueryRow(context.Background(), "SELECT updated_at::text FROM feed_posts WHERE id = $1", post.ID).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	expectStatus(t, e.api.Put(path, author.bearer), 200)
+	before := updatedAt()
+	expectStatus(t, e.api.Put(path, author.bearer), 200)
+	expectStatus(t, e.api.Delete("/feed/posts/"+post.ID.String()+"/like", e.user(t).bearer), 200)
+	if after := updatedAt(); after != before {
+		t.Errorf("updated_at moved from %s to %s on likes that changed nothing", before, after)
+	}
+}
+
+func TestEventPostsNeedADateInTheDatabase(t *testing.T) {
+	e := newTestEnv(t)
+	author := e.user(t)
+	_, err := e.pool.Exec(context.Background(),
+		"INSERT INTO feed_posts (author_id, university_id, type, title, content) VALUES ($1, 'umcs', 'event', 'Party', 'Party at the dorm tonight.')", author.id)
+	if err == nil {
+		t.Fatal("an event without a date must be rejected")
+	}
+}

@@ -128,7 +128,9 @@ func (r *postRepository) get(ctx context.Context, viewerID, postID uuid.UUID) (*
 	return p, nil
 }
 
-type postCursor struct {
+// pageCursor is the keyset position of the last item on a page, for posts
+// and comments alike.
+type pageCursor struct {
 	CreatedAt time.Time `json:"c"`
 	ID        uuid.UUID `json:"i"`
 }
@@ -139,7 +141,7 @@ type postFilter struct {
 	Type         string
 	From         *time.Time
 	To           *time.Time
-	After        *postCursor
+	After        *pageCursor
 	Limit        int
 }
 

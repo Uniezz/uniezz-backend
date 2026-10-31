@@ -68,6 +68,7 @@ func TestCreatePost(t *testing.T) {
 			"short title":              {"title": "<i>ab</i>"},
 			"short content":            {"content": "too short"},
 			"date on non-event":        {"eventDate": time.Now()},
+			"event without a date":     {"type": "event"},
 			"duplicate media":          {"mediaIds": []uuid.UUID{uuid.Nil, uuid.Nil}},
 			"too many tags":            {"tags": []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}},
 			"tag of only HTML":         {"tags": []string{"<b></b>"}},
@@ -341,8 +342,8 @@ func TestListPosts(t *testing.T) {
 	} {
 		var id uuid.UUID
 		err := e.pool.QueryRow(context.Background(), `
-			INSERT INTO feed_posts (author_id, university_id, type, title, content, tags)
-			VALUES ($1, $2, $3, $4, 'Some content for the post.', ARRAY[$5]) RETURNING id`,
+			INSERT INTO feed_posts (author_id, university_id, type, title, content, tags, event_date)
+			VALUES ($1, $2, $3, $4, 'Some content for the post.', ARRAY[$5], CASE WHEN $3 = 'event' THEN NOW() END) RETURNING id`,
 			author.id, p.university, p.typ, p.name, tag).Scan(&id)
 		if err != nil {
 			t.Fatal(err)

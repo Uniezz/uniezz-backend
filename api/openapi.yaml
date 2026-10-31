@@ -113,7 +113,7 @@ components:
           maxLength: 20000
           type: string
         eventDate:
-          description: Only for event posts
+          description: Required for event posts, not allowed for others
           format: date-time
           type: string
         mediaIds:

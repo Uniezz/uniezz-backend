@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -18,6 +19,6 @@ func (m Module) ReportTarget(ctx context.Context, userID uuid.UUID) (map[string]
 		"lastName":     p.LastName,
 		"universityId": p.UniversityID,
 		"bio":          p.Bio,
-		"interests":    nonNil(p.Interests),
+		"interests":    text.NonNil(p.Interests),
 	}, nil
 }

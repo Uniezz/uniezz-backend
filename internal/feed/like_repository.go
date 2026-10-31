@@ -55,6 +55,15 @@ func (r *likeRepository) count(ctx context.Context, t likeTarget, targetID uuid.
 	return count, nil
 }
 
+func (r *likeRepository) current(ctx context.Context, t likeTarget, targetID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.Conn(ctx).QueryRow(ctx, `SELECT likes_count FROM `+t.counted+` WHERE id = $1`, targetID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("read likes: %w", err)
+	}
+	return count, nil
+}
+
 func (r *likeRepository) postIDsLikedBy(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	return r.likedBy(ctx, postLikes, userID)
 }

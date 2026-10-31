@@ -48,7 +48,7 @@ type createPostInput struct {
 		Title      string      `json:"title" maxLength:"600" doc:"3–150 characters after HTML is stripped"`
 		Content    string      `json:"content" maxLength:"20000" doc:"10–5000 characters after HTML is stripped"`
 		Tags       []string    `json:"tags,omitempty" maxItems:"20" doc:"Up to 10 tags of up to 30 characters"`
-		EventDate  *time.Time  `json:"eventDate,omitempty" doc:"Only for event posts"`
+		EventDate  *time.Time  `json:"eventDate,omitempty" doc:"Required for event posts, not allowed for others"`
 		MediaIDs   []uuid.UUID `json:"mediaIds,omitempty" maxItems:"10" uniqueItems:"true" doc:"Uploads of kind feed, shown in this order"`
 	}
 }

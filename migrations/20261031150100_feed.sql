@@ -6,13 +6,14 @@ CREATE TABLE feed_posts (
     type TEXT NOT NULL CHECK (type IN ('announcement', 'event', 'question')),
     title VARCHAR(150) NOT NULL CHECK (char_length(title) >= 3),
     content TEXT NOT NULL CHECK (char_length(content) BETWEEN 10 AND 5000),
-    event_date TIMESTAMPTZ CHECK (type = 'event' OR event_date IS NULL),
+    event_date TIMESTAMPTZ,
     tags TEXT[] NOT NULL DEFAULT '{}' CHECK (cardinality(tags) <= 10),
     likes_count INT NOT NULL DEFAULT 0 CHECK (likes_count >= 0),
     comments_count INT NOT NULL DEFAULT 0 CHECK (comments_count >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    edited_at TIMESTAMPTZ
+    edited_at TIMESTAMPTZ,
+    CONSTRAINT feed_posts_event_date_check CHECK ((type = 'event') = (event_date IS NOT NULL))
 );
 
 CREATE INDEX idx_feed_posts_created_at_id ON feed_posts (created_at DESC, id DESC);

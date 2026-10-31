@@ -47,10 +47,12 @@ func (m Module) setLike(ctx context.Context, t likeTarget, targetID, userID uuid
 	if err != nil {
 		return nil, err
 	}
-	if !changed {
-		delta = 0
+	var count int
+	if changed {
+		count, err = m.likes.count(ctx, t, targetID, delta)
+	} else {
+		count, err = m.likes.current(ctx, t, targetID)
 	}
-	count, err := m.likes.count(ctx, t, targetID, delta)
 	if err != nil {
 		return nil, err
 	}

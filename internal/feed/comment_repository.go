@@ -74,32 +74,25 @@ func (r *commentRepository) get(ctx context.Context, viewerID, commentID uuid.UU
 	return c, nil
 }
 
-type commentCursor struct {
-	CreatedAt time.Time `json:"c"`
-	ID        uuid.UUID `json:"i"`
-}
-
-func (r *commentRepository) listRoots(ctx context.Context, viewerID, postID uuid.UUID, after *commentCursor, limit int) ([]commentRow, error) {
+func (r *commentRepository) listRoots(ctx context.Context, viewerID, postID uuid.UUID, after *pageCursor, limit int) ([]commentRow, error) {
 	return r.list(ctx, `c.post_id = $2 AND c.parent_id IS NULL`, viewerID, postID, after, limit)
 }
 
-func (r *commentRepository) listReplies(ctx context.Context, viewerID, rootID uuid.UUID, after *commentCursor, limit int) ([]commentRow, error) {
+func (r *commentRepository) listReplies(ctx context.Context, viewerID, rootID uuid.UUID, after *pageCursor, limit int) ([]commentRow, error) {
 	return r.list(ctx, `c.parent_id = $2`, viewerID, rootID, after, limit)
 }
 
-func (r *commentRepository) list(ctx context.Context, where string, viewerID, scopeID uuid.UUID, after *commentCursor, limit int) ([]commentRow, error) {
-	var afterTime *time.Time
-	var afterID *uuid.UUID
+func (r *commentRepository) list(ctx context.Context, where string, viewerID, scopeID uuid.UUID, after *pageCursor, limit int) ([]commentRow, error) {
+	args := []any{viewerID, scopeID, limit}
 	if after != nil {
-		afterTime, afterID = &after.CreatedAt, &after.ID
+		where += ` AND (c.created_at, c.id) > ($4, $5)`
+		args = append(args, after.CreatedAt, after.ID)
 	}
 
 	rows, err := r.db.Conn(ctx).Query(ctx, commentSelect+`
 		WHERE `+where+`
-		  AND ($3::timestamptz IS NULL OR (c.created_at, c.id) > ($3, $4))
 		ORDER BY c.created_at, c.id
-		LIMIT $5`,
-		viewerID, scopeID, afterTime, afterID, limit)
+		LIMIT $3`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list comments: %w", err)
 	}

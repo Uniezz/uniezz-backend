@@ -1,7 +1,6 @@
 package profile
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -31,22 +30,8 @@ func cleanInterests(interests *[]string) ([]string, error) {
 	if interests == nil {
 		return nil, nil
 	}
-
-	clean := make([]string, 0, len(*interests))
-	seen := map[string]bool{}
-	for _, raw := range *interests {
-		tag := text.Plain(raw, false)
-		if tag == "" || utf8.RuneCountInString(tag) > maxInterestLength {
-			return nil, ErrInvalidInput
-		}
-		key := strings.ToLower(tag)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		clean = append(clean, tag)
-	}
-	if len(clean) > maxInterests {
+	clean, err := text.Tags(*interests, maxInterests, maxInterestLength)
+	if err != nil {
 		return nil, ErrInvalidInput
 	}
 	return clean, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +26,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 		UniversityID: p.UniversityID,
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		Bio:          p.Bio,
-		Interests:    nonNil(p.Interests),
+		Interests:    text.NonNil(p.Interests),
 		Programmes:   make([]PublicProgramme, 0, len(programmes)),
 	}
 	for _, row := range programmes {

@@ -104,7 +104,7 @@ func (m Module) listComments(ctx context.Context, viewerID, postID uuid.UUID, cu
 	if err := m.posts.exists(ctx, postID); err != nil {
 		return nil, nil, err
 	}
-	return m.commentPage(ctx, cursor, limit, func(after *commentCursor) ([]commentRow, error) {
+	return m.commentPage(ctx, cursor, limit, func(after *pageCursor) ([]commentRow, error) {
 		return m.comments.listRoots(ctx, viewerID, postID, after, limit+1)
 	})
 }
@@ -113,15 +113,15 @@ func (m Module) listReplies(ctx context.Context, viewerID, rootID uuid.UUID, cur
 	if err := m.comments.isRoot(ctx, rootID); err != nil {
 		return nil, nil, err
 	}
-	return m.commentPage(ctx, cursor, limit, func(after *commentCursor) ([]commentRow, error) {
+	return m.commentPage(ctx, cursor, limit, func(after *pageCursor) ([]commentRow, error) {
 		return m.comments.listReplies(ctx, viewerID, rootID, after, limit+1)
 	})
 }
 
-func (m Module) commentPage(ctx context.Context, cursor string, limit int, list func(after *commentCursor) ([]commentRow, error)) ([]Comment, *string, error) {
-	var after *commentCursor
+func (m Module) commentPage(ctx context.Context, cursor string, limit int, list func(after *pageCursor) ([]commentRow, error)) ([]Comment, *string, error) {
+	var after *pageCursor
 	if cursor != "" {
-		after = &commentCursor{}
+		after = &pageCursor{}
 		if err := httpapi.DecodeCursor(cursor, after); err != nil {
 			return nil, nil, err
 		}
@@ -136,7 +136,7 @@ func (m Module) commentPage(ctx context.Context, cursor string, limit int, list 
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
-		encoded, err := httpapi.EncodeCursor(commentCursor{CreatedAt: last.CreatedAt, ID: last.ID})
+		encoded, err := httpapi.EncodeCursor(pageCursor{CreatedAt: last.CreatedAt, ID: last.ID})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -182,8 +182,8 @@ func (m Module) updateComment(ctx context.Context, userID, commentID uuid.UUID, 
 		if err != nil {
 			return err
 		}
-		if locked.AuthorID != userID {
-			return ErrForbidden
+		if err := onlyAuthor(userID)(locked.AuthorID); err != nil {
+			return err
 		}
 		return m.comments.update(ctx, commentID, content)
 	})
@@ -194,12 +194,7 @@ func (m Module) updateComment(ctx context.Context, userID, commentID uuid.UUID, 
 }
 
 func (m Module) deleteComment(ctx context.Context, userID, commentID uuid.UUID) error {
-	return m.removeComment(ctx, commentID, func(authorID uuid.UUID) error {
-		if authorID != userID {
-			return ErrForbidden
-		}
-		return nil
-	})
+	return m.removeComment(ctx, commentID, onlyAuthor(userID))
 }
 
 // removeComment locks top-down — post, root, the comment — then deletes the
