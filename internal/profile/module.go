@@ -1,5 +1,5 @@
-// Package profile owns what a student shows about themselves: names, avatar and
-// study programmes. Every field is editable by the student; USOS only prefills
+// Package profile owns what a student shows about themselves: names, avatar,
+// bio, interests, study programmes and who may see them. Every field is editable by the student; USOS only prefills
 // the profile when the account is created.
 package profile
 
@@ -53,6 +53,7 @@ func New(db *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Modul
 func (m Module) Register(api huma.API) {
 	profiles := &profileHandler{profile: m}
 	programmes := &programmeHandler{programmes: m.programmes}
+	public := &publicProfileHandler{profile: m}
 
 	huma.Register(api, getMeOperation, profiles.getMe)
 	huma.Register(api, updateMeOperation, profiles.updateMe)
@@ -61,4 +62,6 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, createProgrammeOperation, programmes.createProgramme)
 	huma.Register(api, replaceProgrammeOperation, programmes.replaceProgramme)
 	huma.Register(api, deleteProgrammeOperation, programmes.deleteProgramme)
+	huma.Register(api, listProfilesOperation, public.listProfiles)
+	huma.Register(api, getProfileOperation, public.getProfile)
 }
