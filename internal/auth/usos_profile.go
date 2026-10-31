@@ -14,10 +14,10 @@ var usosLevels = map[string]bool{
 	"phd_school":   true,
 }
 
-func usosSeed(u usos.User) AccountSeed {
-	seed := AccountSeed{}
+func initialProfileFromUSOS(u usos.User) InitialProfile {
+	initial := InitialProfile{}
 	if u.HasPhoto {
-		seed.PhotoURL = u.PhotoURLs["400x400"]
+		initial.PhotoURL = u.PhotoURLs["400x400"]
 	}
 
 	for _, sp := range u.Programmes {
@@ -39,7 +39,7 @@ func usosSeed(u usos.User) AccountSeed {
 			level = p.Level
 		}
 
-		seed.Programmes = append(seed.Programmes, ProgrammeSeed{
+		initial.Programmes = append(initial.Programmes, InitialProgramme{
 			Faculty:       faculty,
 			Programme:     name,
 			Level:         level,
@@ -48,11 +48,11 @@ func usosSeed(u usos.User) AccountSeed {
 		})
 	}
 
-	ensureOnePrimary(seed.Programmes)
-	return seed
+	ensureOnePrimary(initial.Programmes)
+	return initial
 }
 
-func ensureOnePrimary(programmes []ProgrammeSeed) {
+func ensureOnePrimary(programmes []InitialProgramme) {
 	primary := -1
 	for i := range programmes {
 		if programmes[i].IsPrimary && primary == -1 {

@@ -3,14 +3,16 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,9 +23,11 @@ type mediaStore interface {
 	getOwnedPending(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) (*mediaRow, error)
 	markReady(ctx context.Context, id, ownerUserID uuid.UUID) error
 	getReady(ctx context.Context, id uuid.UUID) (*mediaRow, error)
-	markDeleting(ctx context.Context, tx pgx.Tx, id uuid.UUID) error
+	markDeleting(ctx context.Context, id uuid.UUID) error
 	getDeleting(ctx context.Context, id uuid.UUID) (*mediaRow, error)
 	deleteDeleting(ctx context.Context, id uuid.UUID) error
+	markAbandonedDeleting(ctx context.Context, olderThan time.Duration) error
+	listDeleting(ctx context.Context, limit int) ([]uuid.UUID, error)
 }
 
 var _ objectStore = (*objectStorage)(nil)
@@ -41,10 +45,9 @@ type Module struct {
 	storage    objectStore
 	repo       mediaStore
 	httpClient *http.Client
-	uploads    *uploadHandler
 }
 
-func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, error) {
+func New(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, runner *jobs.Runner) (Module, error) {
 	storage, err := newObjectStorage(ctx, cfg)
 	if err != nil {
 		return Module{}, err
@@ -54,11 +57,17 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, err
 		slog.WarnContext(ctx, "media storage bucket is unavailable", "error", err)
 	}
 
-	m := Module{storage: storage, repo: newRepository(db), httpClient: &http.Client{Timeout: 10 * time.Second}}
-	m.uploads = &uploadHandler{media: m}
+	m := Module{storage: storage, repo: newRepository(database.New(pool)), httpClient: &http.Client{Timeout: 10 * time.Second}}
+	if err := jobs.Register(runner, m.cleanup, jobs.Options{Timeout: 5 * time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("media: %w", err)
+	}
+	if err := jobs.Schedule(runner, CleanupArgs{}, time.Hour); err != nil {
+		return Module{}, fmt.Errorf("media: %w", err)
+	}
 	return m, nil
 }
 
 func (m Module) Register(api huma.API) {
-	huma.Register(api, createUploadOperation, m.uploads.createUpload)
+	uploads := &uploadHandler{media: m}
+	huma.Register(api, createUploadOperation, uploads.createUpload)
 }

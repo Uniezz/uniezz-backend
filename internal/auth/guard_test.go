@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/humatest"
@@ -161,8 +162,8 @@ func TestGuard_SlidingExpiry(t *testing.T) {
 func TestSessionRepository_ExtendSession(t *testing.T) {
 	pool := setupTestDB(t)
 	ctx := context.Background()
-	repo := NewSessionRepository(pool)
-	user := upsertTestUser(t, pool, NewUserRepository(pool), Identity{UniversityID: UniversityKUL, Email: testEmail()})
+	repo := NewSessionRepository(database.New(pool))
+	user := upsertTestUser(t, pool, NewUserRepository(database.New(pool)), Identity{UniversityID: UniversityKUL, Email: testEmail()})
 
 	token := GenerateSessionToken()
 	hash := token.Hash()

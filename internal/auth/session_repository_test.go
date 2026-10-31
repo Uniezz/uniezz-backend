@@ -70,7 +70,7 @@ func createTestUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 
 func TestSessionRepository_Integration(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := NewSessionRepository(pool)
+	repo := NewSessionRepository(database.New(pool))
 	userID := createTestUser(t, pool)
 
 	ctx := context.Background()

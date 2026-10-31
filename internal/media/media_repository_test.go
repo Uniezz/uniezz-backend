@@ -71,7 +71,7 @@ func createTestUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 
 func TestRepositoryLifecycle(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newRepository(pool)
+	repo := newRepository(database.New(pool))
 	ownerID := createTestUser(t, pool)
 
 	ctx := context.Background()

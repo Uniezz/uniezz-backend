@@ -25,12 +25,12 @@ type Modules struct {
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, error) {
-	mediaModule, err := media.New(ctx, db, cfg)
+	runner := jobs.NewRunner(db, cfg.JobWorkers, cfg.JobPollInterval)
+	mediaModule, err := media.New(ctx, db, cfg, runner)
 	if err != nil {
 		return Modules{}, fmt.Errorf("initialize media: %w", err)
 	}
 
-	runner := jobs.NewRunner(db, cfg.JobWorkers)
 	profileModule, err := profile.New(db, mediaModule, runner)
 	if err != nil {
 		return Modules{}, err

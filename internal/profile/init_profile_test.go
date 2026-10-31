@@ -6,22 +6,22 @@ import (
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
-	"github.com/jackc/pgx/v5"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 )
 
-func TestSeedAccount(t *testing.T) {
+func TestInitProfile(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	u := e.otpUser(t)
 
 	var afterCommit func()
-	err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+	err := database.New(e.pool).WithTx(ctx, func(ctx context.Context) error {
 		var err error
-		afterCommit, err = e.module.SeedAccount(ctx, tx, u.id, auth.AccountSeed{PhotoURL: "https://usos.test/photo.jpg"})
+		afterCommit, err = e.module.InitProfile(ctx, u.id, auth.InitialProfile{PhotoURL: "https://usos.test/photo.jpg"})
 		return err
 	})
 	if err != nil {
-		t.Fatalf("SeedAccount failed: %v", err)
+		t.Fatalf("InitProfile failed: %v", err)
 	}
 	if afterCommit == nil {
 		t.Error("expected a wakeup to run after commit")
@@ -29,7 +29,7 @@ func TestSeedAccount(t *testing.T) {
 
 	var payload ImportAvatarArgs
 	var raw []byte
-	err = e.pool.QueryRow(ctx, "SELECT payload FROM jobs WHERE kind = $1 AND payload->>'userId' = $2", ImportAvatar.Kind(), u.id.String()).Scan(&raw)
+	err = e.pool.QueryRow(ctx, "SELECT payload FROM jobs WHERE kind = $1 AND payload->>'userId' = $2", ImportAvatarArgs{}.Kind(), u.id.String()).Scan(&raw)
 	if err != nil {
 		t.Fatalf("expected an import job: %v", err)
 	}

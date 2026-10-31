@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type usosStateRepository struct {
-	db *pgxpool.Pool
+	db database.DB
 }
 
-func newUsosStateRepository(db *pgxpool.Pool) *usosStateRepository {
+func newUsosStateRepository(db database.DB) *usosStateRepository {
 	return &usosStateRepository{db: db}
 }
 
@@ -24,7 +24,7 @@ func (r *usosStateRepository) save(ctx context.Context, s usosState) error {
 		VALUES ($1, $2, $3, $4);
 	`
 
-	_, err := r.db.Exec(ctx, query, s.RequestToken.Token, s.RequestToken.Secret, s.UniversityID, s.Platform)
+	_, err := r.db.Conn(ctx).Exec(ctx, query, s.RequestToken.Token, s.RequestToken.Secret, s.UniversityID, s.Platform)
 	if err != nil {
 		return fmt.Errorf("failed to save usos state: %w", err)
 	}
@@ -40,7 +40,7 @@ func (r *usosStateRepository) take(ctx context.Context, requestToken string) (us
 
 	s := usosState{RequestToken: usos.RequestToken{Token: requestToken}}
 	var active bool
-	err := r.db.QueryRow(ctx, query, requestToken).Scan(
+	err := r.db.Conn(ctx).QueryRow(ctx, query, requestToken).Scan(
 		&s.RequestToken.Secret,
 		&s.UniversityID,
 		&s.Platform,

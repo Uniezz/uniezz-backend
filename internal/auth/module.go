@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 	"github.com/danielgtaylor/huma/v2"
@@ -13,53 +14,59 @@ import (
 )
 
 type Module struct {
-	usos         *usosHandler
-	session      *sessionHandler
-	universities *universitiesHandler
-	otp          *otpHandler
-	guard        *guard
+	logins *logins
+	usos   *usosLogin
+	otp    *otpLogin
+	guard  *guard
+
+	webRedirectURL    string
+	mobileRedirectURL string
 }
 
-func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender, seeder AccountSeeder) (Module, error) {
+func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles ProfileInitializer) (Module, error) {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
 		return Module{}, err
 	}
 
+	db := database.New(pool)
 	sessions := NewSessionRepository(db)
-	logins := newLogins(NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
-	logins.seeder = seeder
+	logins := newLogins(db, NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
+	logins.profiles = profiles
 
 	return Module{
-		usos: &usosHandler{
-			usos:              newUsosLogin(clients, newUsosStateRepository(db)),
-			logins:            logins,
-			webRedirectURL:    cfg.AppWebURL + "/auth/done",
-			mobileRedirectURL: cfg.AppMobileScheme,
-		},
-		session:      &sessionHandler{logins: logins},
-		universities: &universitiesHandler{},
-		guard:        &guard{sessions: sessions, sessionTTL: defaultSessionTTL, now: time.Now},
-		otp: &otpHandler{
-			otp: newOTPLogin(
-				newOTPRequestRepository(db),
-				sender,
-				ratelimit.New(db, "otp-send", otpSendLimit, otpSendWindow),
-				newOTPHasher([]byte(cfg.OTPHashKey)),
-				cfg.OTPTestEmails,
-			),
-			logins: logins,
-		},
+		logins: logins,
+		usos:   newUsosLogin(clients, newUsosStateRepository(db)),
+		otp: newOTPLogin(
+			newOTPRequestRepository(db),
+			sender,
+			ratelimit.New(pool, "otp-send", otpSendLimit, otpSendWindow),
+			newOTPHasher([]byte(cfg.OTPHashKey)),
+			cfg.OTPTestEmails,
+		),
+		guard:             &guard{sessions: sessions, sessionTTL: defaultSessionTTL, now: time.Now},
+		webRedirectURL:    cfg.AppWebURL + "/auth/done",
+		mobileRedirectURL: cfg.AppMobileScheme,
 	}, nil
 }
 
 func (m Module) Register(api huma.API) {
-	huma.Register(api, usosStartOperation, m.usos.start)
-	huma.Register(api, usosCallbackOperation, m.usos.callback)
-	huma.Register(api, exchangeOperation, m.session.exchange)
-	huma.Register(api, universitiesOperation, m.universities.list)
-	huma.Register(api, otpRequestOperation, m.otp.request)
-	huma.Register(api, otpVerifyOperation, m.otp.verify)
+	usos := &usosHandler{
+		usos:              m.usos,
+		logins:            m.logins,
+		webRedirectURL:    m.webRedirectURL,
+		mobileRedirectURL: m.mobileRedirectURL,
+	}
+	sessions := &sessionHandler{logins: m.logins}
+	universities := &universitiesHandler{}
+	otp := &otpHandler{otp: m.otp, logins: m.logins}
+
+	huma.Register(api, usosStartOperation, usos.start)
+	huma.Register(api, usosCallbackOperation, usos.callback)
+	huma.Register(api, exchangeOperation, sessions.exchange)
+	huma.Register(api, universitiesOperation, universities.list)
+	huma.Register(api, otpRequestOperation, otp.request)
+	huma.Register(api, otpVerifyOperation, otp.verify)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {

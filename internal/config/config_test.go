@@ -3,6 +3,7 @@ package config
 import (
 	"slices"
 	"testing"
+	"time"
 )
 
 const testOTPHashKey = "0123456789abcdef0123456789abcdef"
@@ -203,6 +204,28 @@ func TestLoad_RequiresS3Credentials(t *testing.T) {
 
 		if _, err := Load(); err == nil {
 			t.Errorf("expected an error for S3 key %q and secret %q, got nil", tc.key, tc.secret)
+		}
+	}
+}
+
+func TestLoad_JobPollInterval(t *testing.T) {
+	if got := loadWith(t, nil).JobPollInterval; got != 30*time.Second {
+		t.Errorf("expected the 30s default, got %v", got)
+	}
+	if got := loadWith(t, map[string]string{"JOB_POLL_INTERVAL": "5m"}).JobPollInterval; got != 5*time.Minute {
+		t.Errorf("expected 5m, got %v", got)
+	}
+
+	for _, bad := range []string{"soon", "500ms"} {
+		t.Setenv("JOB_POLL_INTERVAL", bad)
+		t.Setenv("DATABASE_URL", "postgres://test")
+		t.Setenv("RESEND_API_KEY", "re_test")
+		t.Setenv("OTP_EMAIL_TEMPLATE_ID", "tmpl_test")
+		t.Setenv("OTP_HASH_KEY", testOTPHashKey)
+		t.Setenv("S3_ACCESS_KEY_ID", "test-access-key")
+		t.Setenv("S3_SECRET_ACCESS_KEY", "test-secret-key")
+		if _, err := Load(); err == nil {
+			t.Errorf("expected an error for JOB_POLL_INTERVAL=%q", bad)
 		}
 	}
 }

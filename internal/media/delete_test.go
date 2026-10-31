@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -50,7 +51,7 @@ func status(t *testing.T, repo *repository, id uuid.UUID) string {
 	t.Helper()
 
 	var s string
-	err := repo.db.QueryRow(context.Background(), "SELECT status FROM media WHERE id = $1", id).Scan(&s)
+	err := repo.db.Conn(context.Background()).QueryRow(context.Background(), "SELECT status FROM media WHERE id = $1", id).Scan(&s)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "gone"
 	}
@@ -62,13 +63,13 @@ func status(t *testing.T, repo *repository, id uuid.UUID) string {
 
 func TestDelete(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newRepository(pool)
+	repo := newRepository(database.New(pool))
 	ownerID := createTestUser(t, pool)
 	ctx := context.Background()
 
 	markDeleting := func(t *testing.T, m Module, id uuid.UUID) error {
 		t.Helper()
-		return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return m.MarkDeleting(ctx, tx, id) })
+		return database.New(pool).WithTx(ctx, func(ctx context.Context) error { return m.MarkDeleting(ctx, id) })
 	}
 
 	t.Run("deletes the object, then the row", func(t *testing.T) {

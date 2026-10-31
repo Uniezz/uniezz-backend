@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Uniezz/uniezz-backend/internal/database"
 )
 
 func newImageServer(t *testing.T, contentType string, body []byte) *httptest.Server {
@@ -22,7 +24,7 @@ func newImageServer(t *testing.T, contentType string, body []byte) *httptest.Ser
 
 func TestImport(t *testing.T) {
 	pool := setupTestDB(t)
-	repo := newRepository(pool)
+	repo := newRepository(database.New(pool))
 	ownerID := createTestUser(t, pool)
 	ctx := context.Background()
 

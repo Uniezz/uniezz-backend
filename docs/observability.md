@@ -68,7 +68,7 @@ At about 5 spans per request, 5M spans cover about 1M traced requests per month,
 
 **Alerts → Create Alert → Uptime Monitor** (in newer UIs, **Monitors → Uptime**):
 
-- URL `https://api.stg.uniezz.pl/healthz/ready`, method `GET`, interval 1 minute
+- URL `https://api-stg.uniezz.pl/healthz/ready`, method `GET`, interval 1 minute
 - Expected: HTTP 200 (`/healthz/ready` answers 503 while shutting down or without a database)
 - Environment `staging`; notify on downtime and on recovery
 

@@ -8,7 +8,6 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type ImportAvatarArgs struct {
@@ -16,7 +15,7 @@ type ImportAvatarArgs struct {
 	SourceURL string    `json:"sourceUrl"`
 }
 
-var ImportAvatar = jobs.Define[ImportAvatarArgs]("profile.import-avatar.v1")
+func (ImportAvatarArgs) Kind() string { return "profile.import-avatar.v1" }
 
 func (m Module) importAvatar(ctx context.Context, args ImportAvatarArgs) error {
 	p, err := m.profiles.get(ctx, args.UserID)
@@ -40,10 +39,7 @@ func (m Module) importAvatar(ctx context.Context, args ImportAvatarArgs) error {
 		return err
 	}
 
-	err = m.profiles.inTx(ctx, func(tx pgx.Tx) error {
-		return m.media.MarkDeleting(ctx, tx, mediaID)
-	})
-	if err != nil {
+	if err := m.media.MarkDeleting(ctx, mediaID); err != nil {
 		slog.WarnContext(ctx, "discard imported avatar", slog.String("media_id", mediaID.String()), slog.Any("error", err))
 		return nil
 	}

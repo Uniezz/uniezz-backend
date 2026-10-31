@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,11 +42,11 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 	})
 
 	sender := &fakeOTPSender{}
-	sessions := NewSessionRepository(pool)
-	logins := newLogins(NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
-	otpH := &otpHandler{
+	sessions := NewSessionRepository(database.New(pool))
+	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
+	m := Module{
 		otp: newOTPLogin(
-			newOTPRequestRepository(pool),
+			newOTPRequestRepository(database.New(pool)),
 			sender,
 			ratelimit.New(pool, "otp-send-test", otpSendLimit, otpSendWindow),
 			newOTPHasher([]byte("test-key")),
@@ -55,7 +56,7 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 	}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	Module{otp: otpH}.Register(api)
+	m.Register(api)
 
 	return &otpTestServer{api: api, sender: sender, sessions: sessions, pool: pool, email: email}
 }

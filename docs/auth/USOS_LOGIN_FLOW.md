@@ -68,9 +68,9 @@ sequenceDiagram
    - `services/progs/student`: each programme's `status`, `is_primary`, name, `level`, mode of studies and faculty.
 
    A login is refused unless `student_status` is active. If the programmes request fails, the login still succeeds without programmes and a warning is logged.
-3. **Sign in.** The user upsert and the profile seed run in one transaction (`logins.signIn`):
+3. **Sign in.** The user upsert and the initial profile run in one transaction (`logins.signIn`):
    - The upsert returns `xmax = 0` only when the row was inserted, so the API knows the account is new.
-   - Only for a new account, `profile.SeedAccount` inserts the active programmes (names in Polish, English as a fallback; exactly one is primary) and enqueues `profile.import-avatar.v1` if USOS shares a photo.
+   - Only for a new account, `profile.InitProfile` inserts the active programmes (names in Polish, English as a fallback; exactly one is primary) and enqueues `profile.import-avatar.v1` if USOS shares a photo.
    - Later logins update `last_login_at` and fill names that are still empty; they never overwrite what the student edited and never import programmes again.
    - If anything fails, nothing is kept: no user, no programmes, no job.
 4. **Wake the worker.** After the commit, the API wakes the job worker. Login does not wait for the import.
@@ -84,8 +84,8 @@ sequenceDiagram
 |------|------|
 | Start and callback handlers | `internal/auth/usos_handler.go` |
 | USOS state and token exchange | `internal/auth/usos_login.go`, `internal/usos/usos.go` |
-| USOS data to profile seed | `internal/auth/usos_seed.go` |
+| USOS data to initial profile | `internal/auth/usos_profile.go` |
 | Transactional sign-in | `internal/auth/login.go`, `internal/auth/user_repository.go` |
-| Seed and import task | `internal/profile/seed.go`, `internal/profile/import_avatar_task.go` |
+| Initial profile and import task | `internal/profile/init_profile.go`, `internal/profile/import_avatar_task.go` |
 | Download and store the photo | `internal/media/import.go` |
 | Session guard | `internal/auth/guard.go` |

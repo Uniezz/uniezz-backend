@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,19 +60,18 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE usos_user_id = $1", student.ID)
 	})
 
-	sessions := NewSessionRepository(pool)
-	logins := newLogins(NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
+	sessions := NewSessionRepository(database.New(pool))
+	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
 
-	usosH := &usosHandler{
-		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(pool)),
+	m := Module{
+		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(database.New(pool))),
 		logins:            logins,
 		webRedirectURL:    testWebRedirectURL,
 		mobileRedirectURL: testMobileRedirectURL,
 	}
-	sessionH := &sessionHandler{logins: logins}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	Module{usos: usosH, session: sessionH}.Register(api)
+	m.Register(api)
 
 	return &authTestServer{api: api, usos: client, sessions: sessions, pool: pool}
 }

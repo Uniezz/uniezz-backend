@@ -22,6 +22,9 @@ type Profile struct {
 	UniversityID string      `json:"universityId" example:"umcs"`
 	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
 	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
+	Bio          *string     `json:"bio" nullable:"true" doc:"Plain text, up to 500 characters" example:"Second-year CS student, into climbing."`
+	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
+	Privacy      Privacy     `json:"privacy"`
 	CreatedAt    time.Time   `json:"createdAt"`
 }
 
@@ -55,6 +58,9 @@ type updateMeInput struct {
 	Body struct {
 		FirstName     *string    `json:"firstName,omitempty" minLength:"1" maxLength:"100"`
 		LastName      *string    `json:"lastName,omitempty" minLength:"1" maxLength:"100"`
+		Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
+		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
+		Privacy       Privacy    `json:"privacy,omitempty"`
 		AvatarMediaID *uuid.UUID `json:"avatarMediaId,omitempty" format:"uuid" doc:"mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted"`
 	}
 }
@@ -82,6 +88,9 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	err := h.profile.updateProfile(ctx, userID, profileChange{
 		FirstName:     in.Body.FirstName,
 		LastName:      in.Body.LastName,
+		Bio:           in.Body.Bio,
+		Interests:     in.Body.Interests,
+		Privacy:       in.Body.Privacy,
 		AvatarMediaID: in.Body.AvatarMediaID,
 	})
 	if err != nil {

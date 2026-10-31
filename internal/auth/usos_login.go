@@ -109,6 +109,6 @@ func (l *usosLogin) finish(ctx context.Context, requestToken, verifier string) (
 		Email:        email,
 		FirstName:    user.FirstName,
 		LastName:     user.LastName,
-		Seed:         usosSeed(user),
+		Profile:      initialProfileFromUSOS(user),
 	}, us.Platform, nil
 }

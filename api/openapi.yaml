@@ -103,6 +103,24 @@ components:
         - token
         - expiresAt
       type: object
+    ListProfilesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/ProfileSummary"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
     ListProgrammesOutputBody:
       additionalProperties: false
       properties:
@@ -170,6 +188,13 @@ components:
           type:
             - string
             - "null"
+        bio:
+          description: Plain text, up to 500 characters
+          examples:
+            - Second-year CS student, into climbing.
+          type:
+            - string
+            - "null"
         createdAt:
           format: date-time
           type: string
@@ -190,12 +215,39 @@ components:
           description: User ID
           format: uuid
           type: string
+        interests:
+          description: Up to 10 tags
+          examples:
+            - - climbing
+              - go
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         lastName:
           examples:
             - Kowalski
           type:
             - string
             - "null"
+        privacy:
+          additionalProperties: false
+          description: Which profile fields other students see. A missing setting keeps its current value.
+          properties:
+            showEmail:
+              default: false
+              description: Show the university email to other students
+              type: boolean
+            showFaculty:
+              default: true
+              description: Show the faculty of each study programme
+              type: boolean
+            showYear:
+              default: true
+              description: Show the year of study of each study programme
+              type: boolean
+          type: object
         programmes:
           description: Study programmes, primary first; empty when the student has none
           items:
@@ -215,7 +267,43 @@ components:
         - universityId
         - programmes
         - avatarUrl
+        - bio
+        - interests
+        - privacy
         - createdAt
+      type: object
+    ProfileSummary:
+      additionalProperties: false
+      properties:
+        avatarUrl:
+          type:
+            - string
+            - "null"
+        firstName:
+          examples:
+            - Jan
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        lastName:
+          examples:
+            - Kowalski
+          type:
+            - string
+            - "null"
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - id
+        - firstName
+        - lastName
+        - universityId
+        - avatarUrl
       type: object
     Programme:
       additionalProperties: false
@@ -320,6 +408,118 @@ components:
         - faculty
         - programme
       type: object
+    PublicProfile:
+      additionalProperties: false
+      properties:
+        avatarUrl:
+          type:
+            - string
+            - "null"
+        bio:
+          type:
+            - string
+            - "null"
+        email:
+          description: Null unless the student shows it
+          type:
+            - string
+            - "null"
+        firstName:
+          examples:
+            - Jan
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        interests:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        lastName:
+          examples:
+            - Kowalski
+          type:
+            - string
+            - "null"
+        programmes:
+          description: Primary first
+          items:
+            $ref: "#/components/schemas/PublicProgramme"
+          type:
+            - array
+            - "null"
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - id
+        - email
+        - firstName
+        - lastName
+        - universityId
+        - avatarUrl
+        - bio
+        - interests
+        - programmes
+      type: object
+    PublicProgramme:
+      additionalProperties: false
+      properties:
+        faculty:
+          description: Null when the student hides it
+          type:
+            - string
+            - "null"
+        isPrimary:
+          type: boolean
+        level:
+          enum:
+            - first_cycle
+            - second_cycle
+            - long_cycle
+            - third_cycle
+            - phd_school
+          type:
+            - string
+            - "null"
+        modeOfStudies:
+          enum:
+            - full_time
+            - part_time
+          type:
+            - string
+            - "null"
+        programme:
+          examples:
+            - Informatyka
+          type: string
+        status:
+          enum:
+            - active
+            - graduated
+            - suspended
+            - cancelled
+          type: string
+        yearOfStudy:
+          description: Null when unknown or hidden by the student
+          format: int64
+          type:
+            - integer
+            - "null"
+      required:
+        - faculty
+        - programme
+        - level
+        - modeOfStudies
+        - yearOfStudy
+        - status
+        - isPrimary
+      type: object
     UniversityDTO:
       additionalProperties: false
       properties:
@@ -367,14 +567,41 @@ components:
           description: mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted
           format: uuid
           type: string
+        bio:
+          description: Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it.
+          maxLength: 2000
+          type: string
         firstName:
           maxLength: 100
           minLength: 1
           type: string
+        interests:
+          description: "Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"
+          items:
+            type: string
+          maxItems: 10
+          type: array
         lastName:
           maxLength: 100
           minLength: 1
           type: string
+        privacy:
+          additionalProperties: false
+          description: Which profile fields other students see. A missing setting keeps its current value.
+          properties:
+            showEmail:
+              default: false
+              description: Show the university email to other students
+              type: boolean
+            showFaculty:
+              default: true
+              description: Show the faculty of each study programme
+              type: boolean
+            showYear:
+              default: true
+              description: Show the year of study of each study programme
+              type: boolean
+          type: object
       type: object
     Upload:
       additionalProperties: false
@@ -978,5 +1205,132 @@ paths:
       security:
         - bearer: []
       summary: Replace a study programme
+      tags:
+        - profile
+  /profiles:
+    get:
+      description: Newest accounts first, paginated by cursor.
+      operationId: listProfiles
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - description: Only students of this university
+          explode: false
+          in: query
+          name: university
+          schema:
+            description: Only students of this university
+            examples:
+              - umcs
+            maxLength: 32
+            type: string
+        - description: Case-insensitive match on first and last name
+          explode: false
+          in: query
+          name: name
+          schema:
+            description: Case-insensitive match on first and last name
+            examples:
+              - kowal
+            maxLength: 100
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListProfilesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List students
+      tags:
+        - profile
+  /profiles/{id}:
+    get:
+      description: Fields the student hides through privacy settings are null.
+      operationId: getProfile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProfile"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get a student's public profile
       tags:
         - profile

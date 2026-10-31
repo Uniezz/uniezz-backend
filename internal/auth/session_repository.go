@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Session struct {
@@ -21,10 +21,10 @@ type Session struct {
 }
 
 type SessionRepository struct {
-	db *pgxpool.Pool
+	db database.DB
 }
 
-func NewSessionRepository(db *pgxpool.Pool) *SessionRepository {
+func NewSessionRepository(db database.DB) *SessionRepository {
 	return &SessionRepository{db: db}
 }
 
@@ -36,7 +36,7 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID uuid.UUID,
 		`
 
 	var s Session
-	err := r.db.QueryRow(ctx, query, userID, tokenHash, expiresAt).Scan(
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, tokenHash, expiresAt).Scan(
 		&s.ID,
 		&s.UserID,
 		&s.TokenHash,
@@ -65,7 +65,7 @@ func (r *SessionRepository) GetActiveSessionByHash(
 	`
 
 	var s Session
-	err := r.db.QueryRow(ctx, query, tokenHash).Scan(
+	err := r.db.Conn(ctx).QueryRow(ctx, query, tokenHash).Scan(
 		&s.ID,
 		&s.UserID,
 		&s.TokenHash,
@@ -85,7 +85,7 @@ func (r *SessionRepository) GetActiveSessionByHash(
 func (r *SessionRepository) ExtendSession(ctx context.Context, id uuid.UUID, expiresAt time.Time) error {
 	const query = `UPDATE sessions SET expires_at = $2 WHERE id = $1 AND expires_at < $2`
 
-	if _, err := r.db.Exec(ctx, query, id, expiresAt); err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id, expiresAt); err != nil {
 		return fmt.Errorf("failed to extend session: %w", err)
 	}
 	return nil

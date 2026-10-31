@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func TestGetMe(t *testing.T) {
@@ -24,7 +24,7 @@ func TestGetMe(t *testing.T) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		want := []string{"avatarUrl", "createdAt", "email", "firstName", "id", "lastName", "programmes", "universityId"}
+		want := []string{"avatarUrl", "bio", "createdAt", "email", "firstName", "id", "interests", "lastName", "privacy", "programmes", "universityId"}
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
 		}
@@ -43,15 +43,15 @@ func TestGetMe(t *testing.T) {
 		u := e.newUser(t, "umcs", "profile-"+uuid.NewString()+"@umcs.pl")
 		ctx := context.Background()
 
-		err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
-			_, err := e.module.SeedAccount(ctx, tx, u.id, auth.AccountSeed{Programmes: []auth.ProgrammeSeed{
+		err := database.New(e.pool).WithTx(ctx, func(ctx context.Context) error {
+			_, err := e.module.InitProfile(ctx, u.id, auth.InitialProfile{Programmes: []auth.InitialProgramme{
 				{Faculty: "Wydział Prawa", Programme: "Prawo", Level: "long_cycle"},
 				{Faculty: "Wydział Matematyki, Fizyki i Informatyki", Programme: "Informatyka", ModeOfStudies: "full_time", IsPrimary: true},
 			}})
 			return err
 		})
 		if err != nil {
-			t.Fatalf("SeedAccount failed: %v", err)
+			t.Fatalf("InitProfile failed: %v", err)
 		}
 		avatarID := insertMedia(ctx, e.pool, u.id, "ready")
 		if _, err := e.pool.Exec(ctx, "UPDATE users SET avatar_media_id = $2 WHERE id = $1", u.id, avatarID); err != nil {
@@ -67,7 +67,7 @@ func TestGetMe(t *testing.T) {
 		if second.Faculty != "Wydział Prawa" || second.Level == nil || *second.Level != "long_cycle" || second.Status != "active" || second.YearOfStudy != nil {
 			t.Errorf("unexpected second programme %+v", second)
 		}
-		if body.AvatarURL == nil || *body.AvatarURL != "https://media.test/"+avatarID.String() {
+		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(avatarID) {
 			t.Errorf("expected the avatar URL, got %v", body.AvatarURL)
 		}
 	})
@@ -102,12 +102,12 @@ func TestUpdateMe(t *testing.T) {
 		second := insertMedia(ctx, e.pool, u.id, "pending")
 
 		body := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"avatarMediaId": first.String()}), http.StatusOK)
-		if body.AvatarURL == nil || *body.AvatarURL != "https://media.test/"+first.String() {
+		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(first) {
 			t.Fatalf("expected the first avatar, got %v", body.AvatarURL)
 		}
 
 		body = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"avatarMediaId": second.String()}), http.StatusOK)
-		if body.AvatarURL == nil || *body.AvatarURL != "https://media.test/"+second.String() {
+		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(second) {
 			t.Fatalf("expected the second avatar, got %v", body.AvatarURL)
 		}
 		if !slices.Contains(e.media.deleted, first) || mediaStatus(t, e.pool, first) != "gone" {

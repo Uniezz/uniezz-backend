@@ -21,6 +21,7 @@ var errorResponses = []struct {
 	{ErrNotFound, http.StatusNotFound, "not_found"},
 	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
 	{ErrInvalidAvatar, http.StatusBadRequest, "invalid_avatar"},
+	{httpapi.ErrInvalidCursor, http.StatusBadRequest, "invalid_cursor"},
 }
 
 func apiError(err error) error {

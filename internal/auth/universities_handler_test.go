@@ -13,7 +13,7 @@ import (
 
 func TestUniversitiesHandler_ReturnsFacultiesWithLocations(t *testing.T) {
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	Module{universities: &universitiesHandler{}}.Register(api)
+	Module{}.Register(api)
 
 	resp := api.Get("/auth/universities")
 	if resp.Code != http.StatusOK {
@@ -48,7 +48,7 @@ func TestUniversitiesHandler_ReturnsFacultiesWithLocations(t *testing.T) {
 
 func TestUniversitiesHandler_LocationJSONShape(t *testing.T) {
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{BackendPublicURL: "https://api.test"}))
-	Module{universities: &universitiesHandler{}}.Register(api)
+	Module{}.Register(api)
 
 	resp := api.Get("/auth/universities")
 

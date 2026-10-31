@@ -68,12 +68,16 @@ func (f *fakeMedia) Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, k
 	return nil
 }
 
-func (f *fakeMedia) URL(_ context.Context, mediaID uuid.UUID) (string, error) {
-	return "https://media.test/" + mediaID.String(), nil
+func (f *fakeMedia) URLOf(_ context.Context, ref media.Ref) (string, error) {
+	return "https://media.test/" + ref.ObjectKey, nil
 }
 
-func (f *fakeMedia) MarkDeleting(ctx context.Context, tx pgx.Tx, mediaID uuid.UUID) error {
-	result, err := tx.Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'", mediaID)
+func avatarURL(mediaID uuid.UUID) string {
+	return "https://media.test/avatars/" + mediaID.String() + ".jpg"
+}
+
+func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
+	result, err := database.New(f.pool).Conn(ctx).Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'", mediaID)
 	if err != nil {
 		return err
 	}
@@ -102,11 +106,10 @@ func (f *fakeMedia) Import(ctx context.Context, ownerUserID uuid.UUID, kind medi
 }
 
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
-	var id uuid.UUID
-	err := pool.QueryRow(ctx, `
-		INSERT INTO media (owner_user_id, kind, object_key, content_type, size_bytes, status)
-		VALUES ($1, 'avatar', 'avatars/' || gen_random_uuid() || '.jpg', 'image/jpeg', 10, $2)
-		RETURNING id`, ownerID, status).Scan(&id)
+	id := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO media (id, owner_user_id, kind, object_key, content_type, size_bytes, status)
+		VALUES ($1, $2, 'avatar', $3, 'image/jpeg', 10, $4)`, id, ownerID, "avatars/"+id.String()+".jpg", status)
 	if err != nil {
 		panic(err)
 	}
@@ -139,7 +142,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	fm := &fakeMedia{pool: pool}
-	runner := jobs.NewRunner(pool, 1)
+	runner := jobs.NewRunner(pool, 1, 0)
 	m, err := New(pool, fm, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
@@ -183,7 +186,7 @@ func (e *testEnv) newUser(t *testing.T, university, email string) testUser {
 
 	token := auth.GenerateSessionToken()
 	hash := token.Hash()
-	if _, err := auth.NewSessionRepository(e.pool).CreateSession(ctx, id, hash[:], time.Now().Add(time.Hour)); err != nil {
+	if _, err := auth.NewSessionRepository(database.New(e.pool)).CreateSession(ctx, id, hash[:], time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 	return testUser{id: id, bearer: "Authorization: Bearer " + token.String()}
