@@ -155,6 +155,35 @@ components:
         - title
         - content
       type: object
+    CreateReportInputBody:
+      additionalProperties: false
+      properties:
+        details:
+          description: Up to 1000 characters after HTML is stripped
+          maxLength: 4000
+          type: string
+        reason:
+          enum:
+            - spam
+            - harassment
+            - inappropriate
+            - hate_speech
+            - other
+          type: string
+        targetId:
+          format: uuid
+          type: string
+        targetType:
+          enum:
+            - post
+            - comment
+            - user
+          type: string
+      required:
+        - targetType
+        - targetId
+        - reason
+      type: object
     CreateUploadInputBody:
       additionalProperties: false
       properties:
@@ -794,6 +823,51 @@ components:
         - yearOfStudy
         - status
         - isPrimary
+      type: object
+    Report:
+      additionalProperties: false
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        details:
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        reason:
+          enum:
+            - spam
+            - harassment
+            - inappropriate
+            - hate_speech
+            - other
+          type: string
+        status:
+          enum:
+            - pending
+            - reviewed
+            - dismissed
+          type: string
+        targetId:
+          format: uuid
+          type: string
+        targetType:
+          enum:
+            - post
+            - comment
+            - user
+          type: string
+      required:
+        - id
+        - targetType
+        - targetId
+        - reason
+        - details
+        - status
+        - createdAt
       type: object
     UniversityDTO:
       additionalProperties: false
@@ -2478,3 +2552,67 @@ paths:
       summary: Get a student's public profile
       tags:
         - profile
+  /reports:
+    post:
+      description: One report per target and reporter; at most 5 reports per clock hour (UTC).
+      operationId: createReport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Report a post, comment or student
+      tags:
+        - moderation
