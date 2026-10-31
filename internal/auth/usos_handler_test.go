@@ -60,7 +60,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	})
 
 	sessions := NewSessionRepository(pool)
-	logins := newLogins(NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
+	logins := newLogins(pool, NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
 
 	usosH := &usosHandler{
 		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(pool)),

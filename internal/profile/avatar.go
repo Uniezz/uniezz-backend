@@ -44,7 +44,7 @@ func (m Module) claimAvatar(ctx context.Context, userID, mediaID uuid.UUID) (*uu
 
 func (m Module) removeAvatar(ctx context.Context, userID uuid.UUID) error {
 	var previous *uuid.UUID
-	err := m.profiles.inTx(ctx, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, m.db, func(tx pgx.Tx) error {
 		var err error
 		previous, err = m.swapAvatar(ctx, tx, userID, nil)
 		return err

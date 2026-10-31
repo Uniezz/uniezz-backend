@@ -48,7 +48,6 @@ func TestUploadHandler(t *testing.T) {
 	ownerID := createTestUser(t, pool)
 	api := newGuardedAPI(t, pool)
 	m := Module{storage: newTestStorage(t), repo: newRepository(pool)}
-	m.uploads = &uploadHandler{media: m}
 	m.Register(api)
 	bearer := bearerFor(t, pool, ownerID)
 

@@ -4,7 +4,7 @@
 
 ## Words
 
-- **Task**: a named operation with a typed payload, e.g. `profile.import-avatar.v1` with `ImportAvatarArgs`.
+- **Task**: a named operation with a typed payload. The args struct names it through `Kind()`, e.g. `ImportAvatarArgs` is `profile.import-avatar.v1`.
 - **Handler**: the function that performs a task.
 - **Job**: one row in `jobs`, i.e. one request to run a task with a payload.
 - **Worker**: a goroutine that claims jobs and runs their handlers. `JOB_WORKERS` (default 1) sets how many run at once.
@@ -18,7 +18,7 @@ type SendDigestArgs struct {
     UserID uuid.UUID `json:"userId"`
 }
 
-var SendDigest = jobs.Define[SendDigestArgs]("feed.send-digest.v1")
+func (SendDigestArgs) Kind() string { return "feed.send-digest.v1" }
 
 func (m Module) sendDigest(ctx context.Context, args SendDigestArgs) error {
     // Return nil on success, an error to retry, jobs.Permanent(err) to give up.
@@ -28,7 +28,7 @@ func (m Module) sendDigest(ctx context.Context, args SendDigestArgs) error {
 Register the handler in the module's `New`; registering the same task twice fails startup:
 
 ```go
-err := jobs.Register(runner, SendDigest, m.sendDigest, jobs.Options{Timeout: 30 * time.Second, MaxAttempts: 5})
+err := jobs.Register(runner, m.sendDigest, jobs.Options{Timeout: 30 * time.Second, MaxAttempts: 5})
 ```
 
 Enqueue inside the transaction that makes the job necessary, then wake the runner after the commit:
@@ -36,7 +36,7 @@ Enqueue inside the transaction that makes the job necessary, then wake the runne
 ```go
 err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
     // ... your writes ...
-    return jobs.Enqueue(ctx, tx, SendDigest, SendDigestArgs{UserID: id})
+    return jobs.Enqueue(ctx, tx, SendDigestArgs{UserID: id})
 })
 if err == nil {
     runner.Wake()

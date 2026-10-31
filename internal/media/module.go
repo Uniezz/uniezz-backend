@@ -41,7 +41,6 @@ type Module struct {
 	storage    objectStore
 	repo       mediaStore
 	httpClient *http.Client
-	uploads    *uploadHandler
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, error) {
@@ -54,11 +53,10 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Module, err
 		slog.WarnContext(ctx, "media storage bucket is unavailable", "error", err)
 	}
 
-	m := Module{storage: storage, repo: newRepository(db), httpClient: &http.Client{Timeout: 10 * time.Second}}
-	m.uploads = &uploadHandler{media: m}
-	return m, nil
+	return Module{storage: storage, repo: newRepository(db), httpClient: &http.Client{Timeout: 10 * time.Second}}, nil
 }
 
 func (m Module) Register(api huma.API) {
-	huma.Register(api, createUploadOperation, m.uploads.createUpload)
+	uploads := &uploadHandler{media: m}
+	huma.Register(api, createUploadOperation, uploads.createUpload)
 }

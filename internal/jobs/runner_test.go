@@ -42,28 +42,34 @@ type testArgs struct {
 	N int `json:"n"`
 }
 
-func newTestTask(t *testing.T, pool *pgxpool.Pool) Task[testArgs] {
+func (testArgs) Kind() string { return "test.job" }
+
+type otherArgs struct{}
+
+func (otherArgs) Kind() string { return "test.other" }
+
+func cleanJobs(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
-	task := Define[testArgs]("test." + uuid.NewString())
-	t.Cleanup(func() {
+	clean := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_, _ = pool.Exec(ctx, "DELETE FROM jobs WHERE kind = $1", task.Kind())
-	})
-	return task
+		_, _ = pool.Exec(ctx, "DELETE FROM jobs WHERE kind LIKE 'test.%'")
+	}
+	clean()
+	t.Cleanup(clean)
 }
 
-func enqueue(t *testing.T, pool *pgxpool.Pool, task Task[testArgs], args testArgs) {
+func enqueue(t *testing.T, pool *pgxpool.Pool, args testArgs) {
 	t.Helper()
-	if err := Enqueue(context.Background(), pool, task, args); err != nil {
+	if err := Enqueue(context.Background(), pool, args); err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
 }
 
-func register(t *testing.T, r *Runner, task Task[testArgs], opts Options, handle func(context.Context, testArgs) error) {
+func register(t *testing.T, r *Runner, opts Options, handle func(context.Context, testArgs) error) {
 	t.Helper()
-	if err := Register(r, task, handle, opts); err != nil {
+	if err := Register(r, handle, opts); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 }
@@ -105,10 +111,10 @@ func TestRunNext(t *testing.T) {
 
 	t.Run("a successful job is marked succeeded and gets its typed payload", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
+		cleanJobs(t, pool)
 		var got testArgs
-		register(t, r, task, quick, func(_ context.Context, a testArgs) error { got = a; return nil })
-		enqueue(t, pool, task, testArgs{N: 7})
+		register(t, r, quick, func(_ context.Context, a testArgs) error { got = a; return nil })
+		enqueue(t, pool, testArgs{N: 7})
 
 		if !runNext(t, r) {
 			t.Fatal("expected a job to run")
@@ -116,7 +122,7 @@ func TestRunNext(t *testing.T) {
 		if got.N != 7 {
 			t.Errorf("handler got %+v, want N=7", got)
 		}
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "succeeded" || j.Attempts != 1 || j.Token != nil {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "succeeded" || j.Attempts != 1 || j.Token != nil {
 			t.Errorf("job = %+v, want succeeded after 1 attempt without a token", j)
 		}
 		if runNext(t, r) {
@@ -126,13 +132,13 @@ func TestRunNext(t *testing.T) {
 
 	t.Run("a temporary failure goes back to pending with a delay and the error", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(context.Context, testArgs) error { return errors.New("storage down") })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { return errors.New("storage down") })
+		enqueue(t, pool, testArgs{})
 
 		runNext(t, r)
 
-		j := onlyJob(t, pool, task.Kind())
+		j := onlyJob(t, pool, testArgs{}.Kind())
 		if j.Status != "pending" || j.Attempts != 1 || j.LastError == nil || *j.LastError != "storage down" {
 			t.Fatalf("job = %+v, want pending after 1 attempt with the error saved", j)
 		}
@@ -146,40 +152,40 @@ func TestRunNext(t *testing.T) {
 
 	t.Run("a permanent failure stops retrying", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(context.Context, testArgs) error { return Permanent(errors.New("bad image")) })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { return Permanent(errors.New("bad image")) })
+		enqueue(t, pool, testArgs{})
 
 		runNext(t, r)
 
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "failed" || j.Attempts != 1 {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "failed" || j.Attempts != 1 {
 			t.Errorf("job = %+v, want failed after 1 attempt", j)
 		}
 	})
 
 	t.Run("the last allowed attempt fails the job", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, Options{Timeout: time.Second, MaxAttempts: 2}, func(context.Context, testArgs) error { return errors.New("down") })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, Options{Timeout: time.Second, MaxAttempts: 2}, func(context.Context, testArgs) error { return errors.New("down") })
+		enqueue(t, pool, testArgs{})
 
 		runNext(t, r)
-		if _, err := pool.Exec(context.Background(), "UPDATE jobs SET available_at = NOW() WHERE kind = $1", task.Kind()); err != nil {
+		if _, err := pool.Exec(context.Background(), "UPDATE jobs SET available_at = NOW() WHERE kind = $1", testArgs{}.Kind()); err != nil {
 			t.Fatal(err)
 		}
 		runNext(t, r)
 
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "failed" || j.Attempts != 2 {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "failed" || j.Attempts != 2 {
 			t.Errorf("job = %+v, want failed after 2 attempts", j)
 		}
 	})
 
 	t.Run("a malformed payload fails without calling the handler", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
+		cleanJobs(t, pool)
 		called := false
-		register(t, r, task, quick, func(context.Context, testArgs) error { called = true; return nil })
-		if _, err := pool.Exec(context.Background(), `INSERT INTO jobs (kind, payload) VALUES ($1, '{"n":"x"}')`, task.Kind()); err != nil {
+		register(t, r, quick, func(context.Context, testArgs) error { called = true; return nil })
+		if _, err := pool.Exec(context.Background(), `INSERT INTO jobs (kind, payload) VALUES ($1, '{"n":"x"}')`, testArgs{}.Kind()); err != nil {
 			t.Fatal(err)
 		}
 
@@ -188,51 +194,52 @@ func TestRunNext(t *testing.T) {
 		if called {
 			t.Error("handler must not run for a payload that does not decode")
 		}
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "failed" {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "failed" {
 			t.Errorf("job = %+v, want failed", j)
 		}
 	})
 
 	t.Run("a handler that overruns its timeout gets a cancelled context", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, Options{Timeout: 50 * time.Millisecond, MaxAttempts: 3}, func(ctx context.Context, _ testArgs) error {
+		cleanJobs(t, pool)
+		register(t, r, Options{Timeout: 50 * time.Millisecond, MaxAttempts: 3}, func(ctx context.Context, _ testArgs) error {
 			<-ctx.Done()
 			return ctx.Err()
 		})
-		enqueue(t, pool, task, testArgs{})
+		enqueue(t, pool, testArgs{})
 
 		runNext(t, r)
 
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "pending" || j.LastError == nil {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "pending" || j.LastError == nil {
 			t.Errorf("job = %+v, want pending for a retry after the timeout", j)
 		}
 	})
 
 	t.Run("a panicking handler fails the job instead of the process", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(context.Context, testArgs) error { panic("nil map") })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { panic("nil map") })
+		enqueue(t, pool, testArgs{})
 
 		runNext(t, r)
 
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "failed" || j.LastError == nil {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "failed" || j.LastError == nil {
 			t.Errorf("job = %+v, want failed with the panic saved", j)
 		}
 	})
 
 	t.Run("jobs of other kinds are left alone", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		mine := newTestTask(t, pool)
-		other := newTestTask(t, pool)
-		register(t, r, mine, quick, func(context.Context, testArgs) error { return nil })
-		enqueue(t, pool, other, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { return nil })
+		if err := Enqueue(context.Background(), pool, otherArgs{}); err != nil {
+			t.Fatalf("Enqueue failed: %v", err)
+		}
 
 		if runNext(t, r) {
 			t.Error("runner must not claim a job it has no handler for")
 		}
-		if j := onlyJob(t, pool, other.Kind()); j.Status != "pending" {
+		if j := onlyJob(t, pool, otherArgs{}.Kind()); j.Status != "pending" {
 			t.Errorf("other job = %+v, want pending", j)
 		}
 	})
@@ -251,9 +258,9 @@ func TestRecovery(t *testing.T) {
 
 	t.Run("a job whose worker died is claimed again after its lease expires", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(context.Context, testArgs) error { return nil })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { return nil })
+		enqueue(t, pool, testArgs{})
 
 		if _, err := r.claim(ctx); err != nil {
 			t.Fatalf("claim failed: %v", err)
@@ -262,47 +269,47 @@ func TestRecovery(t *testing.T) {
 			t.Fatal("a job with a live lease must not be claimed twice")
 		}
 
-		expireLease(t, task.Kind())
+		expireLease(t, testArgs{}.Kind())
 		if !runNext(t, r) {
 			t.Fatal("expected the interrupted job to be recovered")
 		}
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "succeeded" || j.Attempts != 2 {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "succeeded" || j.Attempts != 2 {
 			t.Errorf("job = %+v, want succeeded on attempt 2", j)
 		}
 	})
 
 	t.Run("an interrupted job with no attempts left fails without running", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
+		cleanJobs(t, pool)
 		called := false
-		register(t, r, task, Options{Timeout: time.Second, MaxAttempts: 1}, func(context.Context, testArgs) error { called = true; return nil })
-		enqueue(t, pool, task, testArgs{})
+		register(t, r, Options{Timeout: time.Second, MaxAttempts: 1}, func(context.Context, testArgs) error { called = true; return nil })
+		enqueue(t, pool, testArgs{})
 
 		if _, err := r.claim(ctx); err != nil {
 			t.Fatalf("claim failed: %v", err)
 		}
-		expireLease(t, task.Kind())
+		expireLease(t, testArgs{}.Kind())
 		runNext(t, r)
 
 		if called {
 			t.Error("handler must not run past the attempt limit")
 		}
-		if j := onlyJob(t, pool, task.Kind()); j.Status != "failed" {
+		if j := onlyJob(t, pool, testArgs{}.Kind()); j.Status != "failed" {
 			t.Errorf("job = %+v, want failed", j)
 		}
 	})
 
 	t.Run("a stale attempt cannot overwrite the state of a newer one", func(t *testing.T) {
 		r := NewRunner(pool, 1)
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(context.Context, testArgs) error { return nil })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { return nil })
+		enqueue(t, pool, testArgs{})
 
 		stale, err := r.claim(ctx)
 		if err != nil {
 			t.Fatalf("claim failed: %v", err)
 		}
-		expireLease(t, task.Kind())
+		expireLease(t, testArgs{}.Kind())
 		current, err := r.claim(ctx)
 		if err != nil {
 			t.Fatalf("second claim failed: %v", err)
@@ -312,7 +319,7 @@ func TestRecovery(t *testing.T) {
 			t.Fatalf("succeed failed: %v", err)
 		}
 
-		j := onlyJob(t, pool, task.Kind())
+		j := onlyJob(t, pool, testArgs{}.Kind())
 		if j.Status != "running" || j.Token == nil || *j.Token != current.token {
 			t.Errorf("job = %+v, want still running under the newer token", j)
 		}
@@ -322,11 +329,11 @@ func TestRecovery(t *testing.T) {
 func TestEnqueueRollsBackWithTheTransaction(t *testing.T) {
 	pool := setupTestDB(t)
 	ctx := context.Background()
-	task := newTestTask(t, pool)
+	cleanJobs(t, pool)
 	boom := errors.New("account creation failed")
 
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		if err := Enqueue(ctx, tx, task, testArgs{}); err != nil {
+		if err := Enqueue(ctx, tx, testArgs{}); err != nil {
 			return err
 		}
 		return boom
@@ -336,7 +343,7 @@ func TestEnqueueRollsBackWithTheTransaction(t *testing.T) {
 	}
 
 	var n int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM jobs WHERE kind = $1", task.Kind()).Scan(&n); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM jobs WHERE kind = $1", testArgs{}.Kind()).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
@@ -388,20 +395,20 @@ func TestRun(t *testing.T) {
 	t.Run("jobs committed before start are picked up without a wakeup", func(t *testing.T) {
 		r := NewRunner(pool, 1)
 		r.pollInterval = time.Hour
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(context.Context, testArgs) error { return nil })
-		enqueue(t, pool, task, testArgs{})
+		cleanJobs(t, pool)
+		register(t, r, quick, func(context.Context, testArgs) error { return nil })
+		enqueue(t, pool, testArgs{})
 
 		runInBackground(t, r)
 
-		waitFor(t, "the job to succeed", func() bool { return countSucceeded(t, pool, task.Kind()) == 1 })
+		waitFor(t, "the job to succeed", func() bool { return countSucceeded(t, pool, testArgs{}.Kind()) == 1 })
 	})
 
 	t.Run("one wakeup drains every due job, and a delayed retry does not block them", func(t *testing.T) {
 		r := NewRunner(pool, 1)
 		r.pollInterval = time.Hour
-		task := newTestTask(t, pool)
-		register(t, r, task, quick, func(_ context.Context, a testArgs) error {
+		cleanJobs(t, pool)
+		register(t, r, quick, func(_ context.Context, a testArgs) error {
 			if a.N == 0 {
 				return errors.New("always fails")
 			}
@@ -412,21 +419,21 @@ func TestRun(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 
 		for i := range 10 {
-			enqueue(t, pool, task, testArgs{N: i})
+			enqueue(t, pool, testArgs{N: i})
 		}
 		r.Wake()
 
-		waitFor(t, "nine jobs to succeed", func() bool { return countSucceeded(t, pool, task.Kind()) == 9 })
+		waitFor(t, "nine jobs to succeed", func() bool { return countSucceeded(t, pool, testArgs{}.Kind()) == 9 })
 	})
 
 	t.Run("several workers never run the same job twice", func(t *testing.T) {
 		r := NewRunner(pool, 3)
 		r.pollInterval = 20 * time.Millisecond
-		task := newTestTask(t, pool)
+		cleanJobs(t, pool)
 
 		var mu sync.Mutex
 		runs := map[int]int{}
-		register(t, r, task, quick, func(_ context.Context, a testArgs) error {
+		register(t, r, quick, func(_ context.Context, a testArgs) error {
 			mu.Lock()
 			runs[a.N]++
 			mu.Unlock()
@@ -434,11 +441,11 @@ func TestRun(t *testing.T) {
 			return nil
 		})
 		for i := range 30 {
-			enqueue(t, pool, task, testArgs{N: i})
+			enqueue(t, pool, testArgs{N: i})
 		}
 
 		runInBackground(t, r)
-		waitFor(t, "all jobs to succeed", func() bool { return countSucceeded(t, pool, task.Kind()) == 30 })
+		waitFor(t, "all jobs to succeed", func() bool { return countSucceeded(t, pool, testArgs{}.Kind()) == 30 })
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -452,16 +459,15 @@ func TestRun(t *testing.T) {
 
 func TestRegister(t *testing.T) {
 	r := NewRunner(nil, 1)
-	task := Define[testArgs]("test.register")
 	noop := func(context.Context, testArgs) error { return nil }
 
-	if err := Register(r, task, noop, Options{}); err == nil {
+	if err := Register(r, noop, Options{}); err == nil {
 		t.Error("expected an error for zero timeout and attempts")
 	}
-	if err := Register(r, task, noop, quick); err != nil {
+	if err := Register(r, noop, quick); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	if err := Register(r, task, noop, quick); err == nil {
+	if err := Register(r, noop, quick); err == nil {
 		t.Error("expected an error for a duplicate registration")
 	}
 }

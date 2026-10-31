@@ -29,10 +29,6 @@ func newProfileRepository(db *pgxpool.Pool) *profileRepository {
 	return &profileRepository{db: db}
 }
 
-func (r *profileRepository) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
-	return pgx.BeginFunc(ctx, r.db, fn)
-}
-
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
 	const query = `
 		SELECT id, university_id, email, first_name, last_name, avatar_media_id, created_at

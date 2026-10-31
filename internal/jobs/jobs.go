@@ -1,6 +1,6 @@
 // Package jobs runs durable background tasks stored in PostgreSQL. A feature
-// module defines a typed task, registers its handler at startup and enqueues
-// jobs inside its own transaction; workers in the API process claim due jobs,
+// module defines an args type with a Kind, registers its handler at startup
+// and enqueues jobs inside its own transaction; workers in the API process claim due jobs,
 // retry failures with backoff and recover jobs whose worker died.
 package jobs
 
@@ -14,16 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type Task[T any] struct {
-	kind string
-}
-
-func Define[T any](kind string) Task[T] {
-	return Task[T]{kind: kind}
-}
-
-func (t Task[T]) Kind() string {
-	return t.kind
+type Args interface {
+	Kind() string
 }
 
 type Options struct {
@@ -35,27 +27,30 @@ type execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-func Enqueue[T any](ctx context.Context, tx execer, task Task[T], args T) error {
+func Enqueue[T Args](ctx context.Context, tx execer, args T) error {
+	kind := args.Kind()
 	payload, err := json.Marshal(args)
 	if err != nil {
-		return fmt.Errorf("encode %s payload: %w", task.kind, err)
+		return fmt.Errorf("encode %s payload: %w", kind, err)
 	}
 
-	if _, err := tx.Exec(ctx, `INSERT INTO jobs (kind, payload) VALUES ($1, $2)`, task.kind, payload); err != nil {
-		return fmt.Errorf("enqueue %s: %w", task.kind, err)
+	if _, err := tx.Exec(ctx, `INSERT INTO jobs (kind, payload) VALUES ($1, $2)`, kind, payload); err != nil {
+		return fmt.Errorf("enqueue %s: %w", kind, err)
 	}
 	return nil
 }
 
-func Register[T any](r *Runner, task Task[T], handle func(context.Context, T) error, opts Options) error {
+func Register[T Args](r *Runner, handle func(context.Context, T) error, opts Options) error {
+	var zero T
+	kind := zero.Kind()
 	if opts.Timeout <= 0 || opts.MaxAttempts <= 0 {
-		return fmt.Errorf("register %s: timeout and max attempts must be positive", task.kind)
+		return fmt.Errorf("register %s: timeout and max attempts must be positive", kind)
 	}
-	if _, ok := r.handlers[task.kind]; ok {
-		return fmt.Errorf("register %s: task is already registered", task.kind)
+	if _, ok := r.handlers[kind]; ok {
+		return fmt.Errorf("register %s: task is already registered", kind)
 	}
 
-	r.handlers[task.kind] = registration{
+	r.handlers[kind] = registration{
 		opts: opts,
 		run: func(ctx context.Context, payload []byte) error {
 			var args T

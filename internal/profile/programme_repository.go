@@ -137,14 +137,14 @@ func (r *programmeRepository) delete(ctx context.Context, userID, id uuid.UUID) 
 	return nil
 }
 
-func (r *programmeRepository) insertSeeded(ctx context.Context, tx pgx.Tx, userID uuid.UUID, seeds []auth.ProgrammeSeed) error {
-	for _, s := range seeds {
+func (r *programmeRepository) insertInitial(ctx context.Context, tx pgx.Tx, userID uuid.UUID, programmes []auth.InitialProgramme) error {
+	for _, p := range programmes {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO student_programmes (user_id, faculty_name, programme_name, level, mode_of_studies, is_primary)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
-			userID, s.Faculty, s.Programme, nullIfEmpty(s.Level), nullIfEmpty(s.ModeOfStudies), s.IsPrimary)
+			userID, p.Faculty, p.Programme, nullIfEmpty(p.Level), nullIfEmpty(p.ModeOfStudies), p.IsPrimary)
 		if err != nil {
-			return fmt.Errorf("insert seeded programme: %w", err)
+			return fmt.Errorf("insert initial programme: %w", err)
 		}
 	}
 	return nil

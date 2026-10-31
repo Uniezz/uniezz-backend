@@ -11,15 +11,15 @@ type Identity struct {
 	Email        string
 	FirstName    string
 	LastName     string
-	Seed         AccountSeed
+	Profile      InitialProfile
 }
 
-type AccountSeed struct {
-	Programmes []ProgrammeSeed
+type InitialProfile struct {
+	Programmes []InitialProgramme
 	PhotoURL   string
 }
 
-type ProgrammeSeed struct {
+type InitialProgramme struct {
 	Faculty       string
 	Programme     string
 	Level         string

@@ -20,15 +20,15 @@ type Module struct {
 	guard        *guard
 }
 
-func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender, seeder AccountSeeder) (Module, error) {
+func New(db *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles ProfileInitializer) (Module, error) {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
 		return Module{}, err
 	}
 
 	sessions := NewSessionRepository(db)
-	logins := newLogins(NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
-	logins.seeder = seeder
+	logins := newLogins(db, NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
+	logins.profiles = profiles
 
 	return Module{
 		usos: &usosHandler{

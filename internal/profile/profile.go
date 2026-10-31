@@ -58,7 +58,7 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 	}
 
 	var previous *uuid.UUID
-	err = m.profiles.inTx(ctx, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, m.db, func(tx pgx.Tx) error {
 		if err := m.profiles.updateNames(ctx, tx, userID, firstName, lastName); err != nil {
 			return err
 		}

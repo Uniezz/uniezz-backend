@@ -53,7 +53,7 @@ func TestLogins_Integration(t *testing.T) {
 	pool := setupTestDB(t)
 	users := NewUserRepository(pool)
 	sessions := NewSessionRepository(pool)
-	l := newLogins(users, sessions, newLoginCodeRepository(pool), time.Hour)
+	l := newLogins(pool, users, sessions, newLoginCodeRepository(pool), time.Hour)
 	ctx := context.Background()
 
 	signInTestUser := func(t *testing.T) *User {
@@ -235,34 +235,34 @@ func TestLogins_Integration(t *testing.T) {
 	})
 }
 
-type recordingSeeder struct {
-	seeded      []uuid.UUID
+type recordingProfiles struct {
+	initialized []uuid.UUID
 	err         error
 	afterCommit int
 }
 
-func (s *recordingSeeder) SeedAccount(ctx context.Context, tx pgx.Tx, userID uuid.UUID, _ AccountSeed) (func(), error) {
+func (s *recordingProfiles) InitProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, _ InitialProfile) (func(), error) {
 	var n int
 	if err := tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", userID).Scan(&n); err != nil || n != 1 {
-		return nil, fmt.Errorf("seeder must see the new user in its transaction: n=%d err=%v", n, err)
+		return nil, fmt.Errorf("profiles must see the new user in its transaction: n=%d err=%v", n, err)
 	}
-	s.seeded = append(s.seeded, userID)
+	s.initialized = append(s.initialized, userID)
 	return func() { s.afterCommit++ }, s.err
 }
 
-func TestLogins_SeedsOnlyNewAccounts(t *testing.T) {
+func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 	pool := setupTestDB(t)
 	ctx := context.Background()
 
-	newSeededLogins := func(seeder AccountSeeder) *logins {
-		l := newLogins(NewUserRepository(pool), NewSessionRepository(pool), newLoginCodeRepository(pool), time.Hour)
-		l.seeder = seeder
+	newLoginsWithProfiles := func(profiles ProfileInitializer) *logins {
+		l := newLogins(pool, NewUserRepository(pool), NewSessionRepository(pool), newLoginCodeRepository(pool), time.Hour)
+		l.profiles = profiles
 		return l
 	}
 
-	t.Run("the first login seeds the account, later logins do not", func(t *testing.T) {
-		seeder := &recordingSeeder{}
-		l := newSeededLogins(seeder)
+	t.Run("the first login initializes the profile, later logins do not", func(t *testing.T) {
+		profiles := &recordingProfiles{}
+		l := newLoginsWithProfiles(profiles)
 		id := Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
 
 		first, err := l.signIn(ctx, id)
@@ -275,23 +275,23 @@ func TestLogins_SeedsOnlyNewAccounts(t *testing.T) {
 			t.Fatalf("second signIn failed: %v", err)
 		}
 
-		if len(seeder.seeded) != 1 || seeder.seeded[0] != first.ID {
-			t.Errorf("expected one seed for %v, got %v", first.ID, seeder.seeded)
+		if len(profiles.initialized) != 1 || profiles.initialized[0] != first.ID {
+			t.Errorf("expected one initialization for %v, got %v", first.ID, profiles.initialized)
 		}
-		if seeder.afterCommit != 1 {
-			t.Errorf("expected afterCommit to run once, ran %d times", seeder.afterCommit)
+		if profiles.afterCommit != 1 {
+			t.Errorf("expected afterCommit to run once, ran %d times", profiles.afterCommit)
 		}
 	})
 
-	t.Run("a failed seed rolls back the new account", func(t *testing.T) {
+	t.Run("a failed profile initialization rolls back the new account", func(t *testing.T) {
 		boom := errors.New("programme insert failed")
-		seeder := &recordingSeeder{err: boom}
-		l := newSeededLogins(seeder)
+		profiles := &recordingProfiles{err: boom}
+		l := newLoginsWithProfiles(profiles)
 		usosID := testUsosUserID()
 
 		_, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: usosID})
 		if !errors.Is(err, boom) {
-			t.Fatalf("expected the seed error, got %v", err)
+			t.Fatalf("expected the initialization error, got %v", err)
 		}
 
 		var n int
@@ -299,9 +299,9 @@ func TestLogins_SeedsOnlyNewAccounts(t *testing.T) {
 			t.Fatal(err)
 		}
 		if n != 0 {
-			t.Errorf("expected no user after a failed seed, got %d", n)
+			t.Errorf("expected no user after a failed initialization, got %d", n)
 		}
-		if seeder.afterCommit != 0 {
+		if profiles.afterCommit != 0 {
 			t.Error("afterCommit must not run when the transaction rolls back")
 		}
 	})

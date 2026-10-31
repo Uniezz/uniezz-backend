@@ -42,7 +42,7 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 
 	sender := &fakeOTPSender{}
 	sessions := NewSessionRepository(pool)
-	logins := newLogins(NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
+	logins := newLogins(pool, NewUserRepository(pool), sessions, newLoginCodeRepository(pool), time.Hour)
 	otpH := &otpHandler{
 		otp: newOTPLogin(
 			newOTPRequestRepository(pool),

@@ -44,14 +44,14 @@ func TestGetMe(t *testing.T) {
 		ctx := context.Background()
 
 		err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
-			_, err := e.module.SeedAccount(ctx, tx, u.id, auth.AccountSeed{Programmes: []auth.ProgrammeSeed{
+			_, err := e.module.InitProfile(ctx, tx, u.id, auth.InitialProfile{Programmes: []auth.InitialProgramme{
 				{Faculty: "Wydział Prawa", Programme: "Prawo", Level: "long_cycle"},
 				{Faculty: "Wydział Matematyki, Fizyki i Informatyki", Programme: "Informatyka", ModeOfStudies: "full_time", IsPrimary: true},
 			}})
 			return err
 		})
 		if err != nil {
-			t.Fatalf("SeedAccount failed: %v", err)
+			t.Fatalf("InitProfile failed: %v", err)
 		}
 		avatarID := insertMedia(ctx, e.pool, u.id, "ready")
 		if _, err := e.pool.Exec(ctx, "UPDATE users SET avatar_media_id = $2 WHERE id = $1", u.id, avatarID); err != nil {

@@ -16,7 +16,7 @@ type ImportAvatarArgs struct {
 	SourceURL string    `json:"sourceUrl"`
 }
 
-var ImportAvatar = jobs.Define[ImportAvatarArgs]("profile.import-avatar.v1")
+func (ImportAvatarArgs) Kind() string { return "profile.import-avatar.v1" }
 
 func (m Module) importAvatar(ctx context.Context, args ImportAvatarArgs) error {
 	p, err := m.profiles.get(ctx, args.UserID)
@@ -40,7 +40,7 @@ func (m Module) importAvatar(ctx context.Context, args ImportAvatarArgs) error {
 		return err
 	}
 
-	err = m.profiles.inTx(ctx, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, m.db, func(tx pgx.Tx) error {
 		return m.media.MarkDeleting(ctx, tx, mediaID)
 	})
 	if err != nil {

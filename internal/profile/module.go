@@ -27,39 +27,38 @@ type mediaService interface {
 }
 
 type Module struct {
+	db         *pgxpool.Pool
 	profiles   *profileRepository
 	programmes *programmeRepository
 	media      mediaService
 	jobs       *jobs.Runner
-
-	profileHandler   *profileHandler
-	programmeHandler *programmeHandler
 }
 
 func New(db *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Module, error) {
 	m := Module{
+		db:         db,
 		profiles:   newProfileRepository(db),
 		programmes: newProgrammeRepository(db),
 		media:      mediaModule,
 		jobs:       runner,
 	}
 
-	err := jobs.Register(runner, ImportAvatar, m.importAvatar, jobs.Options{Timeout: 30 * time.Second, MaxAttempts: 5})
+	err := jobs.Register(runner, m.importAvatar, jobs.Options{Timeout: 30 * time.Second, MaxAttempts: 5})
 	if err != nil {
 		return Module{}, fmt.Errorf("profile: %w", err)
 	}
-
-	m.profileHandler = &profileHandler{profile: m}
-	m.programmeHandler = &programmeHandler{programmes: m.programmes}
 	return m, nil
 }
 
 func (m Module) Register(api huma.API) {
-	huma.Register(api, getMeOperation, m.profileHandler.getMe)
-	huma.Register(api, updateMeOperation, m.profileHandler.updateMe)
-	huma.Register(api, deleteAvatarOperation, m.profileHandler.deleteAvatar)
-	huma.Register(api, listProgrammesOperation, m.programmeHandler.listProgrammes)
-	huma.Register(api, createProgrammeOperation, m.programmeHandler.createProgramme)
-	huma.Register(api, replaceProgrammeOperation, m.programmeHandler.replaceProgramme)
-	huma.Register(api, deleteProgrammeOperation, m.programmeHandler.deleteProgramme)
+	profiles := &profileHandler{profile: m}
+	programmes := &programmeHandler{programmes: m.programmes}
+
+	huma.Register(api, getMeOperation, profiles.getMe)
+	huma.Register(api, updateMeOperation, profiles.updateMe)
+	huma.Register(api, deleteAvatarOperation, profiles.deleteAvatar)
+	huma.Register(api, listProgrammesOperation, programmes.listProgrammes)
+	huma.Register(api, createProgrammeOperation, programmes.createProgramme)
+	huma.Register(api, replaceProgrammeOperation, programmes.replaceProgramme)
+	huma.Register(api, deleteProgrammeOperation, programmes.deleteProgramme)
 }

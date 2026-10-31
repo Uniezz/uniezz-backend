@@ -224,9 +224,9 @@ func TestUsosLogin_Finish(t *testing.T) {
 			Email:        "jan@umcs.pl",
 			FirstName:    "Jan",
 			LastName:     "Kowalski",
-			Seed: AccountSeed{
+			Profile: InitialProfile{
 				PhotoURL: "https://usos.test/photos/123456.jpg",
-				Programmes: []ProgrammeSeed{{
+				Programmes: []InitialProgramme{{
 					Faculty:       "Wydział Matematyki, Fizyki i Informatyki",
 					Programme:     "Informatyka",
 					Level:         "first_cycle",
