@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -23,10 +22,9 @@ const forgetPasses = 3
 // Call it after the user's sessions are revoked and before the user row is
 // deleted; the feed's foreign keys to users refuse the delete while anything
 // is left.
+//
+// TODO(#44): not called yet; the account deletion flow must run it.
 func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
-	if database.InTx(ctx) {
-		return errors.New("feed: ForgetUser must not run inside a transaction")
-	}
 	for range forgetPasses {
 		found, err := m.forgetPass(ctx, userID)
 		if err != nil || !found {

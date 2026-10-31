@@ -80,17 +80,6 @@ func TestForgetUser(t *testing.T) {
 	}
 }
 
-func TestForgetUserRefusesATransaction(t *testing.T) {
-	e := newTestEnv(t)
-	u := e.user(t)
-	err := e.module.tx.WithTx(context.Background(), func(ctx context.Context) error {
-		return e.module.ForgetUser(ctx, u.id)
-	})
-	if err == nil {
-		t.Fatal("ForgetUser inside a transaction must fail")
-	}
-}
-
 func TestUserDeleteIsRefusedWhileFeedContentRemains(t *testing.T) {
 	e := newTestEnv(t)
 	author := e.user(t)

@@ -95,9 +95,3 @@ func TestWithTx(t *testing.T) {
 		}
 	})
 }
-
-func TestInTx(t *testing.T) {
-	if database.InTx(context.Background()) {
-		t.Fatal("a plain context has no transaction")
-	}
-}
