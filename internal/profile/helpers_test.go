@@ -53,8 +53,6 @@ type fakeMedia struct {
 	imported  []string
 	importErr error
 	onImport  func()
-
-	urlBatches int
 }
 
 func (f *fakeMedia) Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error {
@@ -70,17 +68,12 @@ func (f *fakeMedia) Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, k
 	return nil
 }
 
-func (f *fakeMedia) URL(_ context.Context, mediaID uuid.UUID) (string, error) {
-	return "https://media.test/" + mediaID.String(), nil
+func (f *fakeMedia) URLOf(_ context.Context, ref media.Ref) (string, error) {
+	return "https://media.test/" + ref.ObjectKey, nil
 }
 
-func (f *fakeMedia) URLs(_ context.Context, mediaIDs []uuid.UUID) (map[uuid.UUID]string, error) {
-	f.urlBatches++
-	urls := make(map[uuid.UUID]string, len(mediaIDs))
-	for _, id := range mediaIDs {
-		urls[id] = "https://media.test/" + id.String()
-	}
-	return urls, nil
+func avatarURL(mediaID uuid.UUID) string {
+	return "https://media.test/avatars/" + mediaID.String() + ".jpg"
 }
 
 func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
@@ -113,11 +106,10 @@ func (f *fakeMedia) Import(ctx context.Context, ownerUserID uuid.UUID, kind medi
 }
 
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
-	var id uuid.UUID
-	err := pool.QueryRow(ctx, `
-		INSERT INTO media (owner_user_id, kind, object_key, content_type, size_bytes, status)
-		VALUES ($1, 'avatar', 'avatars/' || gen_random_uuid() || '.jpg', 'image/jpeg', 10, $2)
-		RETURNING id`, ownerID, status).Scan(&id)
+	id := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO media (id, owner_user_id, kind, object_key, content_type, size_bytes, status)
+		VALUES ($1, $2, 'avatar', $3, 'image/jpeg', 10, $4)`, id, ownerID, "avatars/"+id.String()+".jpg", status)
 	if err != nil {
 		panic(err)
 	}

@@ -9,37 +9,22 @@ import (
 
 const privateURLTTL = 10 * time.Minute
 
+type Ref struct {
+	Kind      Kind
+	ObjectKey string
+}
+
 func (m Module) URL(ctx context.Context, mediaID uuid.UUID) (string, error) {
 	item, err := m.repo.getReady(ctx, mediaID)
 	if err != nil {
 		return "", err
 	}
-	return m.urlOf(ctx, item)
+	return m.URLOf(ctx, Ref{Kind: item.Kind, ObjectKey: item.ObjectKey})
 }
 
-func (m Module) URLs(ctx context.Context, mediaIDs []uuid.UUID) (map[uuid.UUID]string, error) {
-	urls := make(map[uuid.UUID]string, len(mediaIDs))
-	if len(mediaIDs) == 0 {
-		return urls, nil
+func (m Module) URLOf(ctx context.Context, ref Ref) (string, error) {
+	if kindRules[ref.Kind].public {
+		return m.storage.publicURL(ref.ObjectKey)
 	}
-
-	items, err := m.repo.listReady(ctx, mediaIDs)
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range items {
-		url, err := m.urlOf(ctx, &item)
-		if err != nil {
-			return nil, err
-		}
-		urls[item.ID] = url
-	}
-	return urls, nil
-}
-
-func (m Module) urlOf(ctx context.Context, item *mediaRow) (string, error) {
-	if kindRules[item.Kind].public {
-		return m.storage.publicURL(item.ObjectKey)
-	}
-	return m.storage.presignGet(ctx, item.ObjectKey)
+	return m.storage.presignGet(ctx, ref.ObjectKey)
 }

@@ -20,8 +20,7 @@ var _ mediaService = media.Module{}
 
 type mediaService interface {
 	Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
-	URL(ctx context.Context, mediaID uuid.UUID) (string, error)
-	URLs(ctx context.Context, mediaIDs []uuid.UUID) (map[uuid.UUID]string, error)
+	URLOf(ctx context.Context, ref media.Ref) (string, error)
 	MarkDeleting(ctx context.Context, mediaID uuid.UUID) error
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 	Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error)

@@ -64,11 +64,28 @@ func TestURLOfUnknownMedia(t *testing.T) {
 	}
 }
 
-func TestURLs(t *testing.T) {
+func TestURLOf(t *testing.T) {
+	module := Module{storage: newTestStorage(t)}
+	ctx := context.Background()
+
+	got, err := module.URLOf(ctx, Ref{Kind: KindAvatar, ObjectKey: "avatars/a.jpg"})
+	if err != nil || got != "https://media.uniezz.pl/avatars/a.jpg" {
+		t.Errorf("URLOf(avatar) = %q, %v; want the public URL", got, err)
+	}
+
+	got, err = module.URLOf(ctx, Ref{Kind: KindChat, ObjectKey: "chat/a.jpg"})
+	if err != nil {
+		t.Fatalf("URLOf(chat) error = %v", err)
+	}
+	if host := mustParseURL(t, got).Host; host != "localhost:9000" {
+		t.Errorf("presigned URL host = %q, want localhost:9000", host)
+	}
+}
+
+func TestReadyMediaView(t *testing.T) {
 	pool := setupTestDB(t)
 	repo := newRepository(database.New(pool))
 	ownerID := createTestUser(t, pool)
-	module := Module{storage: newTestStorage(t), repo: repo}
 	ctx := context.Background()
 
 	ready := readyMedia(t, repo, ownerID)
@@ -76,16 +93,23 @@ func TestURLs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	urls, err := module.URLs(ctx, []uuid.UUID{ready.ID, pending.ID, uuid.New()})
-	if err != nil {
-		t.Fatalf("URLs() error = %v", err)
-	}
-	if want := "https://media.uniezz.pl/" + ready.ObjectKey; len(urls) != 1 || urls[ready.ID] != want {
-		t.Errorf("URLs() = %v, want only %s -> %s", urls, ready.ID, want)
+	deleting := readyMedia(t, repo, ownerID)
+	if err := repo.markDeleting(ctx, deleting.ID); err != nil {
+		t.Fatal(err)
 	}
 
-	if urls, err := module.URLs(ctx, nil); err != nil || len(urls) != 0 {
-		t.Errorf("URLs(nil) = %v, %v; want an empty map", urls, err)
+	var kind Kind
+	var key string
+	err = pool.QueryRow(ctx, "SELECT kind, object_key FROM ready_media WHERE id = $1", ready.ID).Scan(&kind, &key)
+	if err != nil || kind != KindAvatar || key != ready.ObjectKey {
+		t.Errorf("ready media = %q %q %v, want %q %q", kind, key, err, KindAvatar, ready.ObjectKey)
+	}
+
+	var hidden int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM ready_media WHERE id = ANY($1)", []uuid.UUID{pending.ID, deleting.ID}).Scan(&hidden); err != nil {
+		t.Fatal(err)
+	}
+	if hidden != 0 {
+		t.Errorf("pending and deleting media must not be in ready_media, found %d", hidden)
 	}
 }

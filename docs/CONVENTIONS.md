@@ -32,3 +32,7 @@ No `DTO` suffix.
 ## Lists
 
 Every list endpoint paginates by cursor: embed `httpapi.PageQuery` (`cursor`, `limit` 1–50, default 20) in the input and return `{"items": [...], "nextCursor": "..." | null}`. The cursor is an opaque `httpapi.EncodeCursor` of the last item's sort key; query with keyset (`(created_at, id) < (...)`), fetch `limit + 1` rows to know whether a next page exists. No offset pagination.
+
+## Reading another module's data
+
+A module reads only its own tables. When a query needs another module's data, that module publishes a view in its migrations (e.g. `ready_media`: `id, kind, object_key` of media that may be shown), and the reader JOINs the view, never the table. The view is the owner's contract: change its columns only together with its readers. Anything that needs code, such as building a URL, stays a Go call to the owner (`media.URLOf`), not a database function.

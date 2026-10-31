@@ -23,7 +23,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
 		UniversityID: p.UniversityID,
-		AvatarURL:    m.avatarURL(ctx, p.AvatarMediaID),
+		AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		Bio:          p.Bio,
 		Interests:    nonNil(p.Interests),
 		Programmes:   make([]PublicProgramme, 0, len(programmes)),
@@ -76,21 +76,15 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 		next = &cursor
 	}
 
-	avatars := m.avatarURLs(ctx, rows)
 	items := make([]ProfileSummary, 0, len(rows))
 	for _, p := range rows {
-		item := ProfileSummary{
+		items = append(items, ProfileSummary{
 			ID:           p.ID,
 			FirstName:    p.FirstName,
 			LastName:     p.LastName,
 			UniversityID: p.UniversityID,
-		}
-		if p.AvatarMediaID != nil {
-			if url, ok := avatars[*p.AvatarMediaID]; ok {
-				item.AvatarURL = &url
-			}
-		}
-		items = append(items, item)
+			AvatarURL:    m.avatarURL(ctx, p.Avatar),
+		})
 	}
 	return items, next, nil
 }

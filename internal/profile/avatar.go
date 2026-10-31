@@ -10,32 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) avatarURL(ctx context.Context, mediaID *uuid.UUID) *string {
-	if mediaID == nil {
+func (m Module) avatarURL(ctx context.Context, avatar *media.Ref) *string {
+	if avatar == nil {
 		return nil
 	}
-	url, err := m.media.URL(ctx, *mediaID)
+	url, err := m.media.URLOf(ctx, *avatar)
 	if err != nil {
-		telemetry.ReportError(ctx, "resolve avatar URL", err, slog.String("media_id", mediaID.String()))
+		telemetry.ReportError(ctx, "resolve avatar URL", err, slog.String("object_key", avatar.ObjectKey))
 		return nil
 	}
 	return &url
-}
-
-func (m Module) avatarURLs(ctx context.Context, profiles []profileRow) map[uuid.UUID]string {
-	var ids []uuid.UUID
-	for _, p := range profiles {
-		if p.AvatarMediaID != nil {
-			ids = append(ids, *p.AvatarMediaID)
-		}
-	}
-
-	urls, err := m.media.URLs(ctx, ids)
-	if err != nil {
-		telemetry.ReportError(ctx, "resolve avatar URLs", err, slog.Int("count", len(ids)))
-		return nil
-	}
-	return urls
 }
 
 func (m Module) claimAvatar(ctx context.Context, userID, mediaID uuid.UUID) (*uuid.UUID, error) {

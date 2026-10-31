@@ -162,28 +162,28 @@ func TestListProfiles(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves every avatar on the page in one batch", func(t *testing.T) {
-		for _, id := range ids[:2] {
-			mediaID := insertMedia(ctx, e.pool, id, "ready")
-			if _, err := e.pool.Exec(ctx, "UPDATE users SET avatar_media_id = $2 WHERE id = $1", id, mediaID); err != nil {
+	t.Run("returns the avatar URL of ready avatars only", func(t *testing.T) {
+		avatars := map[uuid.UUID]uuid.UUID{}
+		for i, status := range []string{"ready", "deleting"} {
+			mediaID := insertMedia(ctx, e.pool, ids[i], status)
+			if _, err := e.pool.Exec(ctx, "UPDATE users SET avatar_media_id = $2 WHERE id = $1", ids[i], mediaID); err != nil {
 				t.Fatal(err)
 			}
+			avatars[ids[i]] = mediaID
 		}
 
-		before := e.media.urlBatches
 		p := list(t, url.Values{"name": {tag}, "university": {"umcs"}})
-		if calls := e.media.urlBatches - before; calls != 1 {
-			t.Errorf("expected one batch lookup for the page, got %d", calls)
-		}
-
-		withAvatar := 0
 		for _, item := range p.Items {
-			if item.AvatarURL != nil {
-				withAvatar++
+			switch item.ID {
+			case ids[0]:
+				if item.AvatarURL == nil || *item.AvatarURL != avatarURL(avatars[ids[0]]) {
+					t.Errorf("ready avatar: got %v, want %s", item.AvatarURL, avatarURL(avatars[ids[0]]))
+				}
+			default:
+				if item.AvatarURL != nil {
+					t.Errorf("profile %v: expected no avatar URL, got %s", item.ID, *item.AvatarURL)
+				}
 			}
-		}
-		if withAvatar != 2 {
-			t.Errorf("expected 2 profiles with an avatar URL, got %d", withAvatar)
 		}
 	})
 

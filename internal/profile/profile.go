@@ -23,7 +23,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		LastName:     p.LastName,
 		UniversityID: p.UniversityID,
 		Programmes:   make([]Programme, 0, len(programmes)),
-		AvatarURL:    m.avatarURL(ctx, p.AvatarMediaID),
+		AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		Bio:          p.Bio,
 		Interests:    nonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),

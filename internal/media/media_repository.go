@@ -93,27 +93,6 @@ func (r *repository) getReady(ctx context.Context, id uuid.UUID) (*mediaRow, err
 	return item, nil
 }
 
-func (r *repository) listReady(ctx context.Context, ids []uuid.UUID) ([]mediaRow, error) {
-	rows, err := r.db.Conn(ctx).Query(ctx, `SELECT `+mediaColumns+` FROM media WHERE id = ANY($1) AND status = 'ready'`, ids)
-	if err != nil {
-		return nil, fmt.Errorf("list ready media: %w", err)
-	}
-	defer rows.Close()
-
-	var items []mediaRow
-	for rows.Next() {
-		item, err := scanMedia(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan media: %w", err)
-		}
-		items = append(items, *item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list ready media: %w", err)
-	}
-	return items, nil
-}
-
 func (r *repository) markDeleting(ctx context.Context, id uuid.UUID) error {
 	const query = `UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'`
 

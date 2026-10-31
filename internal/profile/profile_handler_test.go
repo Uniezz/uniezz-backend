@@ -67,7 +67,7 @@ func TestGetMe(t *testing.T) {
 		if second.Faculty != "Wydział Prawa" || second.Level == nil || *second.Level != "long_cycle" || second.Status != "active" || second.YearOfStudy != nil {
 			t.Errorf("unexpected second programme %+v", second)
 		}
-		if body.AvatarURL == nil || *body.AvatarURL != "https://media.test/"+avatarID.String() {
+		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(avatarID) {
 			t.Errorf("expected the avatar URL, got %v", body.AvatarURL)
 		}
 	})
@@ -102,12 +102,12 @@ func TestUpdateMe(t *testing.T) {
 		second := insertMedia(ctx, e.pool, u.id, "pending")
 
 		body := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"avatarMediaId": first.String()}), http.StatusOK)
-		if body.AvatarURL == nil || *body.AvatarURL != "https://media.test/"+first.String() {
+		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(first) {
 			t.Fatalf("expected the first avatar, got %v", body.AvatarURL)
 		}
 
 		body = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"avatarMediaId": second.String()}), http.StatusOK)
-		if body.AvatarURL == nil || *body.AvatarURL != "https://media.test/"+second.String() {
+		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(second) {
 			t.Fatalf("expected the second avatar, got %v", body.AvatarURL)
 		}
 		if !slices.Contains(e.media.deleted, first) || mediaStatus(t, e.pool, first) != "gone" {

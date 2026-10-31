@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -19,19 +20,29 @@ type profileRow struct {
 	FirstName     *string
 	LastName      *string
 	AvatarMediaID *uuid.UUID
+	Avatar        *media.Ref
 	Bio           *string
 	Interests     []string
 	Privacy       Privacy
 	CreatedAt     time.Time
 }
 
-const profileColumns = `id, university_id, email, first_name, last_name, avatar_media_id, bio, interests, privacy, created_at`
+const profileSelect = `
+	SELECT u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id,
+		u.bio, u.interests, u.privacy, u.created_at, avatar.kind, avatar.object_key
+	FROM users u
+	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id`
 
 func scanProfile(row pgx.Row) (*profileRow, error) {
 	var p profileRow
-	err := row.Scan(&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID, &p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt)
+	var avatarKind, avatarKey *string
+	err := row.Scan(&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID,
+		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &avatarKind, &avatarKey)
 	if err != nil {
 		return nil, err
+	}
+	if avatarKind != nil && avatarKey != nil {
+		p.Avatar = &media.Ref{Kind: media.Kind(*avatarKind), ObjectKey: *avatarKey}
 	}
 	return &p, nil
 }
@@ -45,7 +56,7 @@ func newProfileRepository(db database.DB) *profileRepository {
 }
 
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
-	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, `SELECT `+profileColumns+` FROM users WHERE id = $1`, userID))
+	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, profileSelect+` WHERE u.id = $1`, userID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -75,12 +86,11 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 	}
 
 	rows, err := r.db.Conn(ctx).Query(ctx, `
-		SELECT `+profileColumns+`
-		FROM users
-		WHERE ($1 = '' OR university_id = $1)
-		  AND ($2 = '' OR concat_ws(' ', first_name, last_name) ILIKE '%' || $2 || '%')
-		  AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))
-		ORDER BY created_at DESC, id DESC
+		`+profileSelect+`
+		WHERE ($1 = '' OR u.university_id = $1)
+		  AND ($2 = '' OR concat_ws(' ', u.first_name, u.last_name) ILIKE '%' || $2 || '%')
+		  AND ($3::timestamptz IS NULL OR (u.created_at, u.id) < ($3, $4))
+		ORDER BY u.created_at DESC, u.id DESC
 		LIMIT $5`,
 		f.UniversityID, escapeLike(f.Name), afterTime, afterID, f.Limit)
 	if err != nil {
