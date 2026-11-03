@@ -105,6 +105,16 @@ components:
       required:
         - content
       type: object
+    CreateMessageInputBody:
+      additionalProperties: false
+      properties:
+        content:
+          maxLength: 4000
+          minLength: 1
+          type: string
+      required:
+        - content
+      type: object
     CreatePostInputBody:
       additionalProperties: false
       properties:
@@ -317,6 +327,18 @@ components:
         - items
         - nextCursor
       type: object
+    ListMessagesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/MessageResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - items
+      type: object
     ListPostsOutputBody:
       additionalProperties: false
       properties:
@@ -364,6 +386,30 @@ components:
             - "null"
       required:
         - programmes
+      type: object
+    MessageResponse:
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        senderId:
+          format: uuid
+          type: string
+        threadId:
+          format: uuid
+          type: string
+      required:
+        - id
+        - threadId
+        - senderId
+        - content
+        - createdAt
       type: object
     OtpRequestInputBody:
       additionalProperties: false
@@ -869,6 +915,28 @@ components:
         - status
         - createdAt
       type: object
+    StartChatInputBody:
+      additionalProperties: false
+      properties:
+        otherUserId:
+          format: uuid
+          type: string
+      required:
+        - otherUserId
+      type: object
+    ThreadResponse:
+      additionalProperties: false
+      properties:
+        id:
+          format: uuid
+          type: string
+        otherUserId:
+          format: uuid
+          type: string
+      required:
+        - id
+        - otherUserId
+      type: object
     UniversityDTO:
       additionalProperties: false
       properties:
@@ -1276,6 +1344,162 @@ paths:
       summary: Start a USOS login
       tags:
         - auth
+  /chats:
+    post:
+      operationId: startChat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartChatInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadResponse"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Start a one-to-one chat or return the existing thread
+      tags:
+        - chat
+  /chats/{id}/messages:
+    get:
+      description: Messages are returned oldest first. Only thread participants may read them.
+      operationId: listChatMessages
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMessagesOutputBody"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List messages in a chat thread
+      tags:
+        - chat
+    post:
+      description: Only thread participants may send messages.
+      operationId: createChatMessage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Send a message to a chat thread
+      tags:
+        - chat
   /feed/comments/{id}:
     delete:
       description: A root comment with replies stays in the thread as deleted, without content or author.
