@@ -63,6 +63,9 @@ func createTestUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cleanupCancel()
 
+		if _, err := pool.Exec(cleanupCtx, "DELETE FROM media WHERE owner_user_id = $1", userID); err != nil {
+			t.Errorf("delete test media: %v", err)
+		}
 		if _, err := pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID); err != nil {
 			t.Errorf("delete test user: %v", err)
 		}

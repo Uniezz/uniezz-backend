@@ -180,6 +180,7 @@ func (e *testEnv) newUser(t *testing.T, university, email string) testUser {
 		t.Fatalf("create user: %v", err)
 	}
 	t.Cleanup(func() {
+		_, _ = e.pool.Exec(context.Background(), "DELETE FROM media WHERE owner_user_id = $1", id)
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id)
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM jobs WHERE payload->>'userId' = $1", id.String())
 	})

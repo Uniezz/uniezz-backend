@@ -95,6 +95,15 @@ func TestGetProfile(t *testing.T) {
 			t.Errorf("expected 401, got %d", rec.Code)
 		}
 	})
+
+	t.Run("a student being deleted is 404", func(t *testing.T) {
+		deleted := e.newUser(t, "umcs", "deleted-"+uuid.NewString()+"@umcs.pl")
+		if _, err := e.pool.Exec(ctx, "UPDATE users SET deleted_at = NOW() WHERE id = $1", deleted.id); err != nil {
+			t.Fatal(err)
+		}
+
+		expectError(t, e.api.Get("/profiles/"+deleted.id.String(), viewer.bearer), http.StatusNotFound, "not_found")
+	})
 }
 
 func TestListProfiles(t *testing.T) {
@@ -190,4 +199,22 @@ func TestListProfiles(t *testing.T) {
 	t.Run("rejects a malformed cursor", func(t *testing.T) {
 		expectError(t, e.api.Get("/profiles?cursor=not-a-cursor", viewer.bearer), http.StatusBadRequest, "invalid_cursor")
 	})
+
+	t.Run("leaves out students being deleted", func(t *testing.T) {
+		deleted := e.newUser(t, "umcs", "list-"+uuid.NewString()+"@umcs.pl")
+		if _, err := e.pool.Exec(ctx, "UPDATE users SET last_name = $2, deleted_at = NOW() WHERE id = $1", deleted.id, tag); err != nil {
+			t.Fatal(err)
+		}
+
+		p := list(t, url.Values{"name": {tag}, "university": {"umcs"}})
+		for _, item := range p.Items {
+			if item.ID == deleted.id {
+				t.Errorf("profile %v is being deleted and must not be listed", deleted.id)
+			}
+		}
+		if len(p.Items) != len(ids) {
+			t.Errorf("got %d profiles, want %d", len(p.Items), len(ids))
+		}
+	})
+
 }

@@ -31,7 +31,8 @@ const profileSelect = `
 	SELECT u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id,
 		u.bio, u.interests, u.privacy, u.created_at, avatar.kind, avatar.object_key
 	FROM users u
-	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id`
+	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id
+	WHERE u.deleted_at IS NULL`
 
 func scanProfile(row pgx.Row) (*profileRow, error) {
 	var p profileRow
@@ -56,7 +57,7 @@ func newProfileRepository(db database.DB) *profileRepository {
 }
 
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
-	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, profileSelect+` WHERE u.id = $1`, userID))
+	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, profileSelect+` AND u.id = $1`, userID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -87,7 +88,7 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 
 	rows, err := r.db.Conn(ctx).Query(ctx, `
 		`+profileSelect+`
-		WHERE ($1 = '' OR u.university_id = $1)
+		AND ($1 = '' OR u.university_id = $1)
 		  AND ($2 = '' OR concat_ws(' ', u.first_name, u.last_name) ILIKE '%' || $2 || '%')
 		  AND ($3::timestamptz IS NULL OR (u.created_at, u.id) < ($3, $4))
 		ORDER BY u.created_at DESC, u.id DESC
