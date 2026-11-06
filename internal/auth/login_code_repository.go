@@ -49,3 +49,10 @@ func (r *loginCodeRepository) consume(ctx context.Context, codeHash []byte) (uui
 
 	return userID, nil
 }
+
+func (r *loginCodeRepository) deleteForUser(ctx context.Context, userID uuid.UUID) error {
+	if _, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM login_codes WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("failed to delete login codes of user: %w", err)
+	}
+	return nil
+}

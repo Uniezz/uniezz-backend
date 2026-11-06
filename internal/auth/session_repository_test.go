@@ -125,4 +125,52 @@ func TestSessionRepository_Integration(t *testing.T) {
 			t.Fatalf("Expected ErrSessionNotFound for unknown hash, got: %v", err)
 		}
 	})
+
+	t.Run("Session of a user being deleted is not returned", func(t *testing.T) {
+		deletingID := createTestUser(t, pool)
+		token := GenerateSessionToken()
+		hash := token.Hash()
+
+		if _, err := repo.CreateSession(ctx, deletingID, hash[:], time.Now().Add(24*time.Hour)); err != nil {
+			t.Fatalf("Failed to create session: %v", err)
+		}
+		if _, err := pool.Exec(ctx, "UPDATE users SET deleted_at = NOW() WHERE id = $1", deletingID); err != nil {
+			t.Fatalf("Failed to mark user as deleting: %v", err)
+		}
+
+		_, err := repo.GetActiveSessionByHash(ctx, hash[:])
+		if !errors.Is(err, ErrSessionNotFound) {
+			t.Fatalf("Expected ErrSessionNotFound for a user being deleted, got: %v", err)
+		}
+	})
+
+	t.Run("deleteForUser removes every session of that user only", func(t *testing.T) {
+		leavingID := createTestUser(t, pool)
+		stayingID := createTestUser(t, pool)
+
+		createSession := func(userID uuid.UUID) []byte {
+			t.Helper()
+			token := GenerateSessionToken()
+			hash := token.Hash()
+			if _, err := repo.CreateSession(ctx, userID, hash[:], time.Now().Add(24*time.Hour)); err != nil {
+				t.Fatalf("Failed to create session: %v", err)
+			}
+			return hash[:]
+		}
+		leaving := [][]byte{createSession(leavingID), createSession(leavingID)}
+		staying := createSession(stayingID)
+
+		if err := repo.deleteForUser(ctx, leavingID); err != nil {
+			t.Fatalf("Failed to delete sessions: %v", err)
+		}
+
+		for i, hash := range leaving {
+			if _, err := repo.GetActiveSessionByHash(ctx, hash); !errors.Is(err, ErrSessionNotFound) {
+				t.Errorf("Session %d of the leaving user: expected ErrSessionNotFound, got: %v", i, err)
+			}
+		}
+		if _, err := repo.GetActiveSessionByHash(ctx, staying); err != nil {
+			t.Errorf("Session of another user must stay, got: %v", err)
+		}
+	})
 }

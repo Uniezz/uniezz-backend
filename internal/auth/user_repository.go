@@ -101,3 +101,16 @@ func nullIfEmpty(s string) *string {
 	}
 	return &s
 }
+
+func (r *UserRepository) markDeleting(ctx context.Context, userID uuid.UUID) (bool, error) {
+	const query = `
+		UPDATE users
+		SET deleted_at = NOW(), email = NULL, usos_user_id = NULL
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	result, err := r.db.Conn(ctx).Exec(ctx, query, userID)
+	if err != nil {
+		return false, fmt.Errorf("failed to mark user as deleting: %w", err)
+	}
+	return result.RowsAffected() == 1, nil
+}
