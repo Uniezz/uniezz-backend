@@ -18,12 +18,12 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 	}
 
 	out := &Profile{
-		Language:     p.Language,
 		ID:           p.ID,
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
 		Gender:       p.Gender,
+		Language:     p.Language,
 		UniversityID: p.UniversityID,
 		Programmes:   make([]Programme, 0, len(programmes)),
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
@@ -45,11 +45,20 @@ const (
 	GenderFemale Gender = "female"
 )
 
+type Language string
+
+const (
+	LanguageEnglish   Language = "en"
+	LanguagePolish    Language = "pl"
+	LanguageUkrainian Language = "uk"
+	LanguageRussian   Language = "ru"
+)
+
 type profileChange struct {
-	Language      *string
 	FirstName     *string
 	LastName      *string
 	Gender        *Gender
+	Language      *Language
 	Bio           *string
 	Interests     *[]string
 	Privacy       Privacy
@@ -73,13 +82,6 @@ func (c profileChange) fields() (profileFields, error) {
 	}
 	for name := range c.Privacy {
 		if _, ok := privacySettings[name]; !ok {
-			return profileFields{}, ErrInvalidInput
-		}
-	}
-	if c.Language != nil {
-		switch *c.Language {
-		case "en", "pl", "uk", "ru":
-		default:
 			return profileFields{}, ErrInvalidInput
 		}
 	}

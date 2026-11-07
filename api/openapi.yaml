@@ -638,12 +638,12 @@ components:
             - umcs
           type: string
       required:
-        - language
         - id
         - email
         - firstName
         - lastName
         - gender
+        - language
         - universityId
         - programmes
         - avatarUrl
@@ -1684,12 +1684,12 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
-        - description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+        - description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
           explode: false
           in: query
           name: q
           schema:
-            description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+            description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
             maxLength: 200
             type: string
         - description: Only posts by this user
@@ -2264,7 +2264,7 @@ paths:
         - feed
   /feed/posts/{id}/navigation:
     get:
-      description: Uses the regular feed visibility and createdAt/ID descending order. Pass the active feed q, university, type, from and to filters; omit them to navigate the whole feed. Returns 404 if the current post is deleted, inaccessible, or outside these filters. Both IDs are null for a single matching post.
+      description: Uses the regular feed visibility and createdAt/ID descending order. Pass the active feed q, authorId, university, type, from and to filters; omit them to navigate the whole feed. Returns 404 if the current post is deleted, inaccessible, or outside these filters. Both IDs are null for a single matching post.
       operationId: getFeedPostNavigation
       parameters:
         - in: path
@@ -2273,12 +2273,12 @@ paths:
           schema:
             format: uuid
             type: string
-        - description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+        - description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
           explode: false
           in: query
           name: q
           schema:
-            description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+            description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
             maxLength: 200
             type: string
         - description: Only posts by this user

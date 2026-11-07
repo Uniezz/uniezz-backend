@@ -95,12 +95,24 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 }
 
 type PostFilters struct {
-	Search     string    `query:"q" maxLength:"200" doc:"Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search"`
+	Search     string    `query:"q" maxLength:"200" doc:"Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search"`
 	AuthorID   string    `query:"authorId" format:"uuid" doc:"Only posts by this user"`
 	University string    `query:"university" maxLength:"32" doc:"Posts targeted to this university or to all; all alone returns only posts targeted to everyone" example:"umcs"`
 	Type       string    `query:"type" enum:"announcement,event,question"`
 	From       time.Time `query:"from" doc:"Created at or after this time"`
 	To         time.Time `query:"to" doc:"Created before this time"`
+}
+
+func (f PostFilters) query(viewerID uuid.UUID) postQuery {
+	return postQuery{
+		Search:     f.Search,
+		ViewerID:   viewerID,
+		AuthorID:   f.AuthorID,
+		University: f.University,
+		Type:       f.Type,
+		From:       optionalTime(f.From),
+		To:         optionalTime(f.To),
+	}
 }
 
 type listPostsInput struct {
@@ -131,17 +143,9 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 		return nil, unauthorized()
 	}
 
-	items, next, err := h.feed.listPosts(ctx, postQuery{
-		Search:     in.Search,
-		ViewerID:   userID,
-		AuthorID:   in.AuthorID,
-		University: in.University,
-		Type:       in.Type,
-		From:       optionalTime(in.From),
-		To:         optionalTime(in.To),
-		Cursor:     in.Cursor,
-		Limit:      in.Limit,
-	})
+	q := in.query(userID)
+	q.Cursor, q.Limit = in.Cursor, in.Limit
+	items, next, err := h.feed.listPosts(ctx, q)
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -274,11 +278,10 @@ var featuredPostsOperation = auth.Protected(huma.Operation{
 })
 
 func (h *postHandler) featuredPosts(ctx context.Context, _ *struct{}) (*featuredPostsOutput, error) {
-	userID, ok := auth.UserIDFrom(ctx)
-	if !ok {
+	if _, ok := auth.UserIDFrom(ctx); !ok {
 		return nil, unauthorized()
 	}
-	cards, err := h.feed.featuredPosts(ctx, userID)
+	cards, err := h.feed.featuredPosts(ctx)
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -306,7 +309,7 @@ var adjacentPostsOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/{id}/navigation",
 	Summary:     "Get previous and next feed post IDs",
-	Description: "Uses the regular feed visibility and createdAt/ID descending order. Pass the active feed q, university, type, from and to filters; omit them to navigate the whole feed. Returns 404 if the current post is deleted, inaccessible, or outside these filters. Both IDs are null for a single matching post.",
+	Description: "Uses the regular feed visibility and createdAt/ID descending order. Pass the active feed q, authorId, university, type, from and to filters; omit them to navigate the whole feed. Returns 404 if the current post is deleted, inaccessible, or outside these filters. Both IDs are null for a single matching post.",
 	Tags:        []string{"feed"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
@@ -316,10 +319,7 @@ func (h *postHandler) adjacentPosts(ctx context.Context, in *adjacentPostsInput)
 	if !ok {
 		return nil, unauthorized()
 	}
-	navigation, err := h.feed.adjacentPosts(ctx, in.ID, postQuery{
-		ViewerID: userID, Search: in.Search, University: in.University, Type: in.Type,
-		From: optionalTime(in.From), To: optionalTime(in.To),
-	})
+	navigation, err := h.feed.adjacentPosts(ctx, in.ID, in.query(userID))
 	if err != nil {
 		return nil, apiError(err)
 	}

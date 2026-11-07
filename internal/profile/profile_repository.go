@@ -14,13 +14,13 @@ import (
 )
 
 type profileRow struct {
-	Language      string
 	ID            uuid.UUID
 	UniversityID  string
 	Email         *string
 	FirstName     *string
 	LastName      *string
 	Gender        *Gender
+	Language      Language
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
 	Bio           *string
@@ -119,9 +119,9 @@ func escapeLike(s string) string {
 }
 
 type profileFields struct {
-	Language  *string
 	FirstName *string
 	LastName  *string
+	Language  *Language
 	SetBio    bool
 	Bio       *string
 	Interests []string

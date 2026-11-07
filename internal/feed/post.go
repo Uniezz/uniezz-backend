@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
@@ -217,7 +218,11 @@ func (q postQuery) filter() (postFilter, error) {
 	if q.From != nil && q.To != nil && !q.From.Before(*q.To) {
 		return postFilter{}, ErrInvalidInput
 	}
-	return postFilter{ViewerID: q.ViewerID, Search: strings.TrimSpace(q.Search), AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
+	search := strings.TrimSpace(q.Search)
+	if search != "" && utf8.RuneCountInString(search) < 3 {
+		return postFilter{}, ErrInvalidInput
+	}
+	return postFilter{ViewerID: q.ViewerID, Search: search, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
 }
 
 func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
@@ -436,22 +441,20 @@ func (m Module) removePost(ctx context.Context, postID uuid.UUID, allow func(aut
 	return nil
 }
 
-func (m Module) featuredPosts(ctx context.Context, viewerID uuid.UUID) ([]FeaturedPost, error) {
-	rows, err := m.posts.list(ctx, postFilter{ViewerID: viewerID, Featured: true, Limit: 5})
+func (m Module) featuredPosts(ctx context.Context) ([]FeaturedPost, error) {
+	rows, err := m.posts.featured(ctx, 5)
 	if err != nil {
 		return nil, err
 	}
-	posts, err := m.toPosts(ctx, rows)
-	if err != nil {
-		return nil, err
-	}
-	cards := make([]FeaturedPost, 0, len(posts))
-	for _, p := range posts {
-		card := FeaturedPost{ID: p.ID, Title: p.Title, University: p.University, EventDate: p.EventDate}
-		if len(p.MediaURLs) > 0 {
-			card.ImageURL = &p.MediaURLs[0]
-		}
-		cards = append(cards, card)
+	cards := make([]FeaturedPost, 0, len(rows))
+	for _, row := range rows {
+		cards = append(cards, FeaturedPost{
+			ID:         row.ID,
+			Title:      row.Title,
+			ImageURL:   m.mediaURL(ctx, row.Image),
+			University: row.UniversityID,
+			EventDate:  row.EventDate,
+		})
 	}
 	return cards, nil
 }

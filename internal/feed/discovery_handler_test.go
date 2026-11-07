@@ -60,11 +60,22 @@ func TestSearchPosts(t *testing.T) {
 			}
 		}
 	}
-	for _, q := range []string{"%", "_", `\`, "％", "＿", "＼", "!", marker + "missing"} {
+	for _, q := range []string{"%%%", "___", `\\\`, "％％％", "＿＿＿", "＼＼＼", "!!!", marker + "missing"} {
 		page := decode[postPage](t, e.api.Get("/feed/posts?"+url.Values{"q": {q}, "from": {"2026-01-01T00:00:00Z"}, "to": {"2026-01-02T00:00:00Z"}}.Encode(), author.bearer), 200)
 		if len(page.Items) != 0 {
 			t.Errorf("literal q=%q returned %d posts", q, len(page.Items))
 		}
+	}
+	for _, q := range []string{"a", " ab ", "żó"} {
+		expectError(t, e.api.Get("/feed/posts?"+url.Values{"q": {q}}.Encode(), author.bearer), 400, "invalid_input")
+	}
+	everyone := e.createPost(t, author, map[string]any{"university": "all", "title": "Open day " + marker})
+	if _, err := e.pool.Exec(ctx, "UPDATE feed_posts SET created_at = '2025-06-01' WHERE id = $1", everyone.ID); err != nil {
+		t.Fatal(err)
+	}
+	page := decode[postPage](t, e.api.Get("/feed/posts?"+url.Values{"q": {"all"}, "from": {"2025-06-01T00:00:00Z"}, "to": {"2025-06-02T00:00:00Z"}}.Encode(), author.bearer), 200)
+	if len(page.Items) != 0 {
+		t.Errorf("q=all matched %d posts targeted to everyone", len(page.Items))
 	}
 	expectError(t, e.api.Get("/feed/posts?q=room"), 401, "unauthorized")
 }

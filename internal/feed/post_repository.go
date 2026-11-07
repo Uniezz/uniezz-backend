@@ -138,7 +138,6 @@ type pageCursor struct {
 
 type postFilter struct {
 	Search       string
-	Featured     bool
 	ViewerID     uuid.UUID
 	AuthorID     string
 	UniversityID string
@@ -147,6 +146,16 @@ type postFilter struct {
 	To           *time.Time
 	After        *pageCursor
 	Limit        int
+}
+
+var universityIDs, universityNames = universityColumns()
+
+func universityColumns() (ids, names []string) {
+	for _, u := range auth.GetUniversities() {
+		ids = append(ids, string(u.ID))
+		names = append(names, u.Name)
+	}
+	return ids, names
 }
 
 func postWhere(f postFilter, args []any) (string, []any) {
@@ -176,25 +185,20 @@ func postWhere(f postFilter, args []any) (string, []any) {
 		where = append(where, "p.created_at < "+arg(*f.To))
 	}
 	if f.Search != "" {
-		normalized := "public.feed_search_text(" + arg(f.Search) + ")"
+		normalized := "public.search_text(" + arg(f.Search) + ")"
 		// Escape after normalization, which also converts fullwidth punctuation.
 		pattern := "('%' || replace(replace(replace(" + normalized + ", '!', '!!'), '%', '!%'), '_', '!_') || '%') ESCAPE '!'"
-		var ids, names []string
-		for _, u := range auth.GetUniversities() {
-			ids = append(ids, string(u.ID))
-			names = append(names, u.Name)
-		}
 		// UNION lets each search branch use its own index; IN avoids duplicate posts.
 		where = append(where, `p.id IN (
 			SELECT id FROM feed_posts
-			WHERE public.feed_search_text(title || ' ' || content || ' ' || university_id) LIKE `+pattern+`
+			WHERE public.search_text(title || ' ' || content) LIKE `+pattern+`
 			UNION ALL
 			SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
-			WHERE public.feed_search_text(COALESCE(author.first_name, '') || ' ' || COALESCE(author.last_name, '')) LIKE `+pattern+`
+			WHERE public.search_text(COALESCE(author.first_name, '') || ' ' || COALESCE(author.last_name, '')) LIKE `+pattern+`
 			UNION ALL
 			SELECT id FROM feed_posts WHERE university_id IN (
-				SELECT id FROM unnest(`+arg(ids)+`::text[], `+arg(names)+`::text[]) AS universities(id, name)
-				WHERE public.feed_search_text(name) LIKE `+pattern+`))`)
+				SELECT id FROM unnest(`+arg(universityIDs)+`::text[], `+arg(universityNames)+`::text[]) AS universities(id, name)
+				WHERE public.search_text(id) LIKE `+pattern+` OR public.search_text(name) LIKE `+pattern+`))`)
 	}
 	if f.After != nil {
 		where = append(where, "(p.created_at, p.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
@@ -208,20 +212,8 @@ func postWhere(f postFilter, args []any) (string, []any) {
 
 func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
 	where, args := postWhere(f, []any{f.ViewerID})
-	order := "p.created_at DESC, p.id DESC"
-	selection := postSelect
-	if f.Featured {
-		selection += ` JOIN (
-			SELECT post_id, count(*) AS likes_count
-			FROM feed_post_likes
-			WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') AT TIME ZONE 'Europe/Warsaw'
-			  AND created_at < (date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') + interval '1 week') AT TIME ZONE 'Europe/Warsaw'
-			GROUP BY post_id
-		) weekly ON weekly.post_id = p.id`
-		order = "weekly.likes_count DESC, p.created_at DESC, p.id DESC"
-	}
 	args = append(args, f.Limit)
-	query := selection + where + " ORDER BY " + order + " LIMIT $" + strconv.Itoa(len(args))
+	query := postSelect + where + " ORDER BY p.created_at DESC, p.id DESC LIMIT $" + strconv.Itoa(len(args))
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -406,4 +398,55 @@ func (r *postRepository) adjacent(ctx context.Context, postID uuid.UUID, f postF
 		return nil, fmt.Errorf("get adjacent posts: %w", err)
 	}
 	return &out, nil
+}
+
+type featuredRow struct {
+	ID           uuid.UUID
+	Title        string
+	UniversityID string
+	EventDate    *time.Time
+	Image        *media.Ref
+}
+
+func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `
+		SELECT p.id, p.title, p.university_id, p.event_date, image.kind, image.object_key
+		FROM (
+			SELECT post_id, count(*) AS likes
+			FROM feed_post_likes
+			WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') AT TIME ZONE 'Europe/Warsaw'
+			  AND created_at < (date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') + interval '1 week') AT TIME ZONE 'Europe/Warsaw'
+			GROUP BY post_id
+		) weekly
+		JOIN feed_posts p ON p.id = weekly.post_id
+		JOIN public_profiles a ON a.id = p.author_id
+		LEFT JOIN LATERAL (
+			SELECT m.kind, m.object_key
+			FROM feed_post_media pm
+			JOIN ready_media m ON m.id = pm.media_id
+			WHERE pm.post_id = p.id
+			ORDER BY pm.position
+			LIMIT 1
+		) image ON true
+		ORDER BY weekly.likes DESC, p.created_at DESC, p.id DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list featured posts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []featuredRow
+	for rows.Next() {
+		var f featuredRow
+		var imageKind, imageKey *string
+		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &imageKind, &imageKey); err != nil {
+			return nil, fmt.Errorf("scan featured post: %w", err)
+		}
+		f.Image = mediaRef(imageKind, imageKey)
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list featured posts: %w", err)
+	}
+	return out, nil
 }

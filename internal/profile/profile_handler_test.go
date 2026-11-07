@@ -177,7 +177,7 @@ func TestProfileLanguage(t *testing.T) {
 	if p.Language != "pl" {
 		t.Fatalf("default language = %q", p.Language)
 	}
-	for _, language := range []string{"en", "pl", "uk", "ru"} {
+	for _, language := range []Language{LanguageEnglish, LanguagePolish, LanguageUkrainian, LanguageRussian} {
 		p = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"language": language}), 200)
 		if p.Language != language {
 			t.Errorf("updated language = %q", p.Language)
