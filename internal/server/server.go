@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Uniezz/uniezz-backend/internal/account"
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
@@ -20,6 +21,7 @@ import (
 )
 
 type Modules struct {
+	Account    account.Module
 	Auth       auth.Module
 	Media      media.Module
 	Profile    profile.Module
@@ -52,11 +54,12 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 
 	mailModule := mail.NewResendSender(cfg)
 	authModule, err := auth.New(db, cfg, mailModule, profileModule)
+	accountModule, err := account.New(db, authModule, feedModule, mediaModule, moderationModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, Moderation: moderationModule, Jobs: runner}, nil
+	return Modules{Account: accountModule, Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, Moderation: moderationModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -66,4 +69,5 @@ func (m Modules) Register(api huma.API) {
 	m.Profile.Register(api)
 	m.Feed.Register(api)
 	m.Moderation.Register(api)
+	m.Account.Register(api)
 }

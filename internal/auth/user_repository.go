@@ -2,12 +2,14 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type User struct {
@@ -113,4 +115,32 @@ func (r *UserRepository) markDeleting(ctx context.Context, userID uuid.UUID) (bo
 		return false, fmt.Errorf("failed to mark user as deleting: %w", err)
 	}
 	return result.RowsAffected() == 1, nil
+}
+
+func (r *UserRepository) deleteDeleting(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM users WHERE id = $1 AND deleted_at IS NOT NULL`, userID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return fmt.Errorf("%w: %w", errStillReferenced, err)
+		}
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) listDeletingSince(ctx context.Context, olderThan time.Duration, limit int) ([]uuid.UUID, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `
+		SELECT id FROM users
+		WHERE deleted_at < NOW() - $1::interval
+		ORDER BY deleted_at
+		LIMIT $2`, olderThan, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users being deleted: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users being deleted: %w", err)
+	}
+	return ids, nil
 }

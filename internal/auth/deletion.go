@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,4 +22,14 @@ func (m Module) BeginDeletion(ctx context.Context, userID uuid.UUID) (bool, erro
 		return m.logins.loginCodes.deleteForUser(ctx, userID)
 	})
 	return started, err
+}
+
+var errStillReferenced = errors.New("the user still has feed content or media; their deletion runs again")
+
+func (m Module) FinishDeletion(ctx context.Context, userID uuid.UUID) error {
+	return m.logins.users.deleteDeleting(ctx, userID)
+}
+
+func (m Module) StuckDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]uuid.UUID, error) {
+	return m.logins.users.listDeletingSince(ctx, olderThan, limit)
 }

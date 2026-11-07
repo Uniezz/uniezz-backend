@@ -2182,6 +2182,35 @@ paths:
       tags:
         - profile
   /profile/me:
+    delete:
+      description: "Signs the student out everywhere and frees their university login, so signing in again creates a new, empty account. Posts, comments, likes, files and the profile are removed in the background. Requires a sign-in within the last 15 minutes: on 403 reauthentication_required, sign in again and retry."
+      operationId: deleteMyAccount
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete the logged-in student's account
+      tags:
+        - profile
     get:
       description: Same shape for every university and login method. Read from our database only.
       operationId: getMyProfile
