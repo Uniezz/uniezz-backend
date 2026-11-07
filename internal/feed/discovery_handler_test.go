@@ -66,7 +66,27 @@ func TestSearchPosts(t *testing.T) {
 			t.Errorf("literal q=%q returned %d posts", q, len(page.Items))
 		}
 	}
-	for _, q := range []string{"a", " ab ", "żó"} {
+	for _, tc := range []struct {
+		q    string
+		want []uuid.UUID
+	}{
+		{"zolc lukasz", ids[:2]},
+		{"lukasz zolc", ids[:2]},
+		{"curie-sklodowskiej unrelated", ids[2:3]},
+		{"zolc unrelated", nil},
+	} {
+		page := decode[postPage](t, e.api.Get("/feed/posts?"+url.Values{"q": {tc.q}, "from": {"2026-01-01T00:00:00Z"}, "to": {"2026-01-02T00:00:00Z"}}.Encode(), author.bearer), 200)
+		var got []uuid.UUID
+		for _, p := range page.Items {
+			got = append(got, p.ID)
+		}
+		want := slices.Clone(tc.want)
+		slices.SortFunc(want, func(a, b uuid.UUID) int { return -strings.Compare(a.String(), b.String()) })
+		if !slices.Equal(got, want) {
+			t.Errorf("q=%q: got %v, want %v", tc.q, got, want)
+		}
+	}
+	for _, q := range []string{"a", " ab ", "żó", "żółć ab", "one two three four five six"} {
 		expectError(t, e.api.Get("/feed/posts?"+url.Values{"q": {q}}.Encode(), author.bearer), 400, "invalid_input")
 	}
 	everyone := e.createPost(t, author, map[string]any{"university": "all", "title": "Open day " + marker})

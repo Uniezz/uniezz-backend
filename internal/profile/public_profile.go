@@ -2,8 +2,6 @@ package profile
 
 import (
 	"context"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -54,25 +52,10 @@ type profileQuery struct {
 	Limit        int
 }
 
-const maxSearchWords = 5
-
-func searchWords(q string) ([]string, error) {
-	words := strings.Fields(q)
-	if len(words) > maxSearchWords {
-		return nil, ErrInvalidInput
-	}
-	for _, word := range words {
-		if utf8.RuneCountInString(word) < 3 {
-			return nil, ErrInvalidInput
-		}
-	}
-	return words, nil
-}
-
 func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSummary, *string, error) {
-	words, err := searchWords(q.Search)
+	words, err := text.SearchWords(q.Search)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, ErrInvalidInput
 	}
 	filter := profileFilter{UniversityID: q.UniversityID, Words: words, Limit: q.Limit + 1}
 	if q.Cursor != "" {

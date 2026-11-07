@@ -6,9 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
@@ -218,11 +216,11 @@ func (q postQuery) filter() (postFilter, error) {
 	if q.From != nil && q.To != nil && !q.From.Before(*q.To) {
 		return postFilter{}, ErrInvalidInput
 	}
-	search := strings.TrimSpace(q.Search)
-	if search != "" && utf8.RuneCountInString(search) < 3 {
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
 		return postFilter{}, ErrInvalidInput
 	}
-	return postFilter{ViewerID: q.ViewerID, Search: search, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
+	return postFilter{ViewerID: q.ViewerID, Words: words, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
 }
 
 func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {

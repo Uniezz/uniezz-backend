@@ -1684,12 +1684,14 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
-        - description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
+        - description: Up to 5 words of at least 3 characters. Every word must match the title, content, author name or target university ID or name, ignoring case and accents; blank means no search
           explode: false
           in: query
           name: q
           schema:
-            description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
+            description: Up to 5 words of at least 3 characters. Every word must match the title, content, author name or target university ID or name, ignoring case and accents; blank means no search
+            examples:
+              - sesja umcs
             maxLength: 200
             type: string
         - description: Only posts by this user
@@ -2273,12 +2275,14 @@ paths:
           schema:
             format: uuid
             type: string
-        - description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
+        - description: Up to 5 words of at least 3 characters. Every word must match the title, content, author name or target university ID or name, ignoring case and accents; blank means no search
           explode: false
           in: query
           name: q
           schema:
-            description: Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search
+            description: Up to 5 words of at least 3 characters. Every word must match the title, content, author name or target university ID or name, ignoring case and accents; blank means no search
+            examples:
+              - sesja umcs
             maxLength: 200
             type: string
         - description: Only posts by this user

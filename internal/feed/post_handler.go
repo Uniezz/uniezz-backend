@@ -95,7 +95,7 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 }
 
 type PostFilters struct {
-	Search     string    `query:"q" maxLength:"200" doc:"Case- and accent-insensitive substring of the title, content, author name or target university name, at least 3 characters; blank means no search"`
+	Search     string    `query:"q" maxLength:"200" doc:"Up to 5 words of at least 3 characters. Every word must match the title, content, author name or target university ID or name, ignoring case and accents; blank means no search" example:"sesja umcs"`
 	AuthorID   string    `query:"authorId" format:"uuid" doc:"Only posts by this user"`
 	University string    `query:"university" maxLength:"32" doc:"Posts targeted to this university or to all; all alone returns only posts targeted to everyone" example:"umcs"`
 	Type       string    `query:"type" enum:"announcement,event,question"`
