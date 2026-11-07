@@ -37,11 +37,17 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 	return out, nil
 }
 
+type Gender string
+
+const (
+	GenderMale   Gender = "male"
+	GenderFemale Gender = "female"
+)
+
 type profileChange struct {
-	Gender        *string
-	SetGender     bool
 	FirstName     *string
 	LastName      *string
+	Gender        *Gender
 	Bio           *string
 	Interests     *[]string
 	Privacy       Privacy
@@ -51,10 +57,6 @@ type profileChange struct {
 func (c profileChange) fields() (profileFields, error) {
 	var f profileFields
 	var err error
-	if c.Gender != nil && *c.Gender != "male" && *c.Gender != "female" {
-		return profileFields{}, ErrInvalidInput
-	}
-	f.Gender, f.SetGender = c.Gender, c.SetGender
 	if f.FirstName, err = trimmedName(c.FirstName); err != nil {
 		return profileFields{}, err
 	}
@@ -91,6 +93,11 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 
 	var previous *uuid.UUID
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if change.Gender != nil {
+			if err := m.profiles.setGender(ctx, userID, *change.Gender); err != nil {
+				return err
+			}
+		}
 		if err := m.profiles.update(ctx, userID, fields); err != nil {
 			return err
 		}

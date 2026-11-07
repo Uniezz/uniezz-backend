@@ -520,7 +520,6 @@ components:
           enum:
             - male
             - female
-            - null
           type:
             - string
             - "null"
@@ -604,7 +603,6 @@ components:
           enum:
             - male
             - female
-            - null
           type:
             - string
             - "null"
@@ -759,7 +757,6 @@ components:
           enum:
             - male
             - female
-            - null
           type:
             - string
             - "null"
@@ -964,14 +961,11 @@ components:
           minLength: 1
           type: string
         gender:
-          description: Accepts male or female only while the saved gender is null. Once set, any supplied gender (including null or the same value) returns 400 gender_immutable. Omit to leave unchanged; null before setting is a no-op. Visible to other students; no privacy toggle.
+          description: "Can be set only once: when a gender is already saved, returns 400 gender_immutable"
           enum:
             - male
             - female
-            - null
-          type:
-            - string
-            - "null"
+          type: string
         interests:
           description: "Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"
           items:

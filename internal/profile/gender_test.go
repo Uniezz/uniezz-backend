@@ -2,56 +2,16 @@ package profile
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 )
 
-func TestGenderInput(t *testing.T) {
-	var empty updateMeInput
-	data, err := json.Marshal(empty.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "{}" {
-		t.Fatalf("empty update must omit gender, got %s", data)
-	}
-
-	for _, tc := range []struct {
-		body  string
-		set   bool
-		value string
-	}{
-		{`{}`, false, ""}, {`{"gender":null}`, true, ""}, {`{"gender":"male"}`, true, "male"}, {`{"gender":"female"}`, true, "female"},
-	} {
-		var in updateMeInput
-		if err := json.Unmarshal([]byte(`{"Body":`+tc.body+`}`), &in); err != nil {
-			t.Fatal(err)
-		}
-		if in.Body.Gender.Set != tc.set {
-			t.Errorf("%s: set = %v", tc.body, in.Body.Gender.Set)
-		}
-		if tc.value == "" {
-			if in.Body.Gender.Value != nil {
-				t.Errorf("%s: expected nil", tc.body)
-			}
-		} else if in.Body.Gender.Value == nil || *in.Body.Gender.Value != tc.value {
-			t.Errorf("%s: unexpected value", tc.body)
-		}
-	}
-	for _, value := range []string{"", "other", "Male", " female "} {
-		if _, err := (profileChange{Gender: &value, SetGender: true}).fields(); !errors.Is(err, ErrInvalidInput) {
-			t.Errorf("%q: expected invalid input, got %v", value, err)
-		}
-	}
-}
-
 func TestGender(t *testing.T) {
 	e := newTestEnv(t)
 	viewer := e.otpUser(t)
-	for _, gender := range []string{"male", "female"} {
-		t.Run(gender, func(t *testing.T) {
+	for _, gender := range []Gender{GenderMale, GenderFemale} {
+		t.Run(string(gender), func(t *testing.T) {
 			u := e.otpUser(t)
 			public := decode[map[string]any](t, e.api.Get("/profiles/"+u.id.String(), viewer.bearer), http.StatusOK)
 			if value, ok := public["gender"]; !ok || value != nil {
@@ -68,7 +28,7 @@ func TestGender(t *testing.T) {
 			if body.Gender == nil || *body.Gender != gender {
 				t.Fatalf("expected %s, got %v", gender, body.Gender)
 			}
-			for _, value := range []any{"male", "female", nil} {
+			for _, value := range []any{"male", "female"} {
 				expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{"gender": value, "firstName": "Changed"}), http.StatusBadRequest, "gender_immutable")
 			}
 			body = decode[Profile](t, e.api.Get("/profile/me", u.bearer), http.StatusOK)
@@ -80,7 +40,7 @@ func TestGender(t *testing.T) {
 				t.Fatal("omitting gender must preserve it")
 			}
 			public = decode[map[string]any](t, e.api.Get("/profiles/"+u.id.String(), viewer.bearer), http.StatusOK)
-			if public["gender"] != gender {
+			if public["gender"] != string(gender) {
 				t.Fatalf("public gender = %v, want %s", public["gender"], gender)
 			}
 			list := decode[struct {
@@ -93,7 +53,7 @@ func TestGender(t *testing.T) {
 				}
 				if item["id"] == u.id.String() {
 					found = true
-					if item["gender"] != gender {
+					if item["gender"] != string(gender) {
 						t.Fatalf("search gender = %v, want %s", item["gender"], gender)
 					}
 				}
@@ -111,10 +71,10 @@ func TestGenderConcurrentSet(t *testing.T) {
 	u := e.otpUser(t)
 	start := make(chan struct{})
 	results := make(chan error, 2)
-	for _, gender := range []string{"male", "female"} {
+	for _, gender := range []Gender{GenderMale, GenderFemale} {
 		go func() {
 			<-start
-			results <- e.module.updateProfile(context.Background(), u.id, profileChange{Gender: &gender, SetGender: true})
+			results <- e.module.updateProfile(context.Background(), u.id, profileChange{Gender: &gender})
 		}()
 	}
 	close(start)

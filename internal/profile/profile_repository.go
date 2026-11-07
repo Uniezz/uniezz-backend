@@ -14,12 +14,12 @@ import (
 )
 
 type profileRow struct {
-	Gender        *string
 	ID            uuid.UUID
 	UniversityID  string
 	Email         *string
 	FirstName     *string
 	LastName      *string
+	Gender        *Gender
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
 	Bio           *string
@@ -118,8 +118,6 @@ func escapeLike(s string) string {
 }
 
 type profileFields struct {
-	Gender    *string
-	SetGender bool
 	FirstName *string
 	LastName  *string
 	SetBio    bool
@@ -135,15 +133,21 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 			last_name = COALESCE($3, last_name),
 			bio = CASE WHEN $4 THEN $5 ELSE bio END,
 			interests = COALESCE($6, interests),
-			privacy = privacy || COALESCE($7::jsonb, '{}'::jsonb),
-			gender = CASE WHEN $8 THEN $9::text ELSE gender END
-		WHERE id = $1 AND (NOT $8 OR gender IS NULL)`
+			privacy = privacy || COALESCE($7::jsonb, '{}'::jsonb)
+		WHERE id = $1`
 
-	result, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.Interests, f.Privacy, f.SetGender, f.Gender)
-	if err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.Interests, f.Privacy); err != nil {
 		return fmt.Errorf("update profile: %w", err)
 	}
-	if f.SetGender && result.RowsAffected() == 0 {
+	return nil
+}
+
+func (r *profileRepository) setGender(ctx context.Context, userID uuid.UUID, gender Gender) error {
+	result, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET gender = $2 WHERE id = $1 AND gender IS NULL`, userID, gender)
+	if err != nil {
+		return fmt.Errorf("set gender: %w", err)
+	}
+	if result.RowsAffected() == 0 {
 		return ErrGenderImmutable
 	}
 	return nil
