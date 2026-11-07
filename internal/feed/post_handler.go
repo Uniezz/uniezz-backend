@@ -94,12 +94,17 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 	return out, nil
 }
 
-type listPostsInput struct {
-	httpapi.PageQuery
+type PostFilters struct {
+	Search     string    `query:"q" maxLength:"200" doc:"Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search"`
 	University string    `query:"university" maxLength:"32" doc:"Posts targeted to this university or to all; all alone returns only posts targeted to everyone" example:"umcs"`
 	Type       string    `query:"type" enum:"announcement,event,question"`
 	From       time.Time `query:"from" doc:"Created at or after this time"`
 	To         time.Time `query:"to" doc:"Created before this time"`
+}
+
+type listPostsInput struct {
+	httpapi.PageQuery
+	PostFilters
 }
 
 type listPostsOutput struct {
@@ -114,7 +119,7 @@ var listPostsOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/feed/posts",
 	Summary:     "List feed posts",
-	Description: "Newest first, paginated by cursor.",
+	Description: "Newest first by createdAt, then ID descending. All signed-in students can browse posts across universities. Keep the same search and filters when following a cursor; results reflect current data.",
 	Tags:        []string{"feed"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -126,6 +131,7 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 	}
 
 	items, next, err := h.feed.listPosts(ctx, postQuery{
+		Search:     in.Search,
 		ViewerID:   userID,
 		University: in.University,
 		Type:       in.Type,
@@ -240,4 +246,80 @@ func (h *postHandler) deletePost(ctx context.Context, in *postPath) (*struct{}, 
 		return nil, apiError(err)
 	}
 	return nil, nil
+}
+
+type FeaturedPost struct {
+	ID         uuid.UUID  `json:"id" format:"uuid"`
+	Title      string     `json:"title"`
+	ImageURL   *string    `json:"imageUrl" nullable:"true" doc:"First available post image, or null"`
+	University string     `json:"university"`
+	EventDate  *time.Time `json:"eventDate" nullable:"true"`
+}
+
+type featuredPostsOutput struct {
+	Body struct {
+		Items []FeaturedPost `json:"items"`
+	}
+}
+
+var featuredPostsOperation = auth.Protected(huma.Operation{
+	OperationID: "listFeaturedFeedPosts",
+	Method:      http.MethodGet,
+	Path:        "/feed/posts/featured",
+	Summary:     "Get featured feed posts",
+	Description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, or when the week changes. An empty section returns items: [].",
+	Tags:        []string{"feed"},
+})
+
+func (h *postHandler) featuredPosts(ctx context.Context, _ *struct{}) (*featuredPostsOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, unauthorized()
+	}
+	cards, err := h.feed.featuredPosts(ctx, userID)
+	if err != nil {
+		return nil, apiError(err)
+	}
+	out := &featuredPostsOutput{}
+	out.Body.Items = cards
+	return out, nil
+}
+
+type PostNavigation struct {
+	PreviousID *uuid.UUID `json:"previousId" format:"uuid" nullable:"true" doc:"Nearest newer post, or null at the start"`
+	NextID     *uuid.UUID `json:"nextId" format:"uuid" nullable:"true" doc:"Nearest older post, or null at the end"`
+}
+
+type adjacentPostsInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+	PostFilters
+}
+
+type adjacentPostsOutput struct {
+	Body PostNavigation
+}
+
+var adjacentPostsOperation = auth.Protected(huma.Operation{
+	OperationID: "getFeedPostNavigation",
+	Method:      http.MethodGet,
+	Path:        "/feed/posts/{id}/navigation",
+	Summary:     "Get previous and next feed post IDs",
+	Description: "Uses the regular feed visibility and createdAt/ID descending order. Pass the active feed q, university, type, from and to filters; omit them to navigate the whole feed. Returns 404 if the current post is deleted, inaccessible, or outside these filters. Both IDs are null for a single matching post.",
+	Tags:        []string{"feed"},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+})
+
+func (h *postHandler) adjacentPosts(ctx context.Context, in *adjacentPostsInput) (*adjacentPostsOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, unauthorized()
+	}
+	navigation, err := h.feed.adjacentPosts(ctx, in.ID, postQuery{
+		ViewerID: userID, Search: in.Search, University: in.University, Type: in.Type,
+		From: optionalTime(in.From), To: optionalTime(in.To),
+	})
+	if err != nil {
+		return nil, apiError(err)
+	}
+	return &adjacentPostsOutput{Body: *navigation}, nil
 }

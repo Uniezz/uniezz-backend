@@ -254,6 +254,45 @@ components:
         - address
         - location
       type: object
+    FeaturedPost:
+      additionalProperties: false
+      properties:
+        eventDate:
+          format: date-time
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        imageUrl:
+          description: First available post image, or null
+          type:
+            - string
+            - "null"
+        title:
+          type: string
+        university:
+          type: string
+      required:
+        - id
+        - title
+        - imageUrl
+        - university
+        - eventDate
+      type: object
+    FeaturedPostsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/FeaturedPost"
+          type:
+            - array
+            - "null"
+      required:
+        - items
+      type: object
     GeoPointDTO:
       additionalProperties: false
       properties:
@@ -484,6 +523,25 @@ components:
         - createdAt
         - editedAt
       type: object
+    PostNavigation:
+      additionalProperties: false
+      properties:
+        nextId:
+          description: Nearest older post, or null at the end
+          format: uuid
+          type:
+            - string
+            - "null"
+        previousId:
+          description: Nearest newer post, or null at the start
+          format: uuid
+          type:
+            - string
+            - "null"
+      required:
+        - previousId
+        - nextId
+      type: object
     Profile:
       additionalProperties: false
       properties:
@@ -529,6 +587,14 @@ components:
           type:
             - array
             - "null"
+        language:
+          description: Interface language; defaults to pl
+          enum:
+            - en
+            - pl
+            - uk
+            - ru
+          type: string
         lastName:
           examples:
             - Kowalski
@@ -564,6 +630,7 @@ components:
             - umcs
           type: string
       required:
+        - language
         - id
         - email
         - firstName
@@ -939,6 +1006,13 @@ components:
             type: string
           maxItems: 10
           type: array
+        language:
+          enum:
+            - en
+            - pl
+            - uk
+            - ru
+          type: string
         lastName:
           maxLength: 100
           minLength: 1
@@ -1555,7 +1629,7 @@ paths:
         - feed
   /feed/posts:
     get:
-      description: Newest first, paginated by cursor.
+      description: Newest first by createdAt, then ID descending. All signed-in students can browse posts across universities. Keep the same search and filters when following a cursor; results reflect current data.
       operationId: listFeedPosts
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -1577,6 +1651,14 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
+        - description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+            maxLength: 200
+            type: string
         - description: Posts targeted to this university or to all; all alone returns only posts targeted to everyone
           explode: false
           in: query
@@ -1710,6 +1792,34 @@ paths:
       security:
         - bearer: []
       summary: Create a feed post
+      tags:
+        - feed
+  /feed/posts/featured:
+    get:
+      description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, or when the week changes. An empty section returns items: []."
+      operationId: listFeaturedFeedPosts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturedPostsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get featured feed posts
       tags:
         - feed
   /feed/posts/{id}:
@@ -2109,6 +2219,102 @@ paths:
       security:
         - bearer: []
       summary: Like a post
+      tags:
+        - feed
+  /feed/posts/{id}/navigation:
+    get:
+      description: Uses the regular feed visibility and createdAt/ID descending order. Pass the active feed q, university, type, from and to filters; omit them to navigate the whole feed. Returns 404 if the current post is deleted, inaccessible, or outside these filters. Both IDs are null for a single matching post.
+      operationId: getFeedPostNavigation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
+            maxLength: 200
+            type: string
+        - description: Posts targeted to this university or to all; all alone returns only posts targeted to everyone
+          explode: false
+          in: query
+          name: university
+          schema:
+            description: Posts targeted to this university or to all; all alone returns only posts targeted to everyone
+            examples:
+              - umcs
+            maxLength: 32
+            type: string
+        - explode: false
+          in: query
+          name: type
+          schema:
+            enum:
+              - announcement
+              - event
+              - question
+            type: string
+        - description: Created at or after this time
+          explode: false
+          in: query
+          name: from
+          schema:
+            description: Created at or after this time
+            format: date-time
+            type: string
+        - description: Created before this time
+          explode: false
+          in: query
+          name: to
+          schema:
+            description: Created before this time
+            format: date-time
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostNavigation"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get previous and next feed post IDs
       tags:
         - feed
   /media/uploads:

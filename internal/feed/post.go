@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
@@ -196,6 +197,7 @@ func (m Module) post(ctx context.Context, viewerID, postID uuid.UUID) (*Post, er
 }
 
 type postQuery struct {
+	Search     string
 	ViewerID   uuid.UUID
 	University string
 	Type       string
@@ -205,17 +207,24 @@ type postQuery struct {
 	Limit      int
 }
 
-func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
+func (q postQuery) filter() (postFilter, error) {
 	if q.University != "" && q.University != allUniversities {
 		if _, err := auth.GetUniversityByID(auth.UniversityID(q.University)); err != nil {
-			return nil, nil, ErrInvalidInput
+			return postFilter{}, ErrInvalidInput
 		}
 	}
 	if q.From != nil && q.To != nil && !q.From.Before(*q.To) {
-		return nil, nil, ErrInvalidInput
+		return postFilter{}, ErrInvalidInput
 	}
+	return postFilter{ViewerID: q.ViewerID, Search: strings.TrimSpace(q.Search), UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
+}
 
-	filter := postFilter{ViewerID: q.ViewerID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To, Limit: q.Limit + 1}
+func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
+	filter, err := q.filter()
+	if err != nil {
+		return nil, nil, err
+	}
+	filter.Limit = q.Limit + 1
 	if q.Cursor != "" {
 		var after pageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
@@ -424,4 +433,32 @@ func (m Module) removePost(ctx context.Context, postID uuid.UUID, allow func(aut
 		}
 	}
 	return nil
+}
+
+func (m Module) featuredPosts(ctx context.Context, viewerID uuid.UUID) ([]FeaturedPost, error) {
+	rows, err := m.posts.list(ctx, postFilter{ViewerID: viewerID, Featured: true, Limit: 5})
+	if err != nil {
+		return nil, err
+	}
+	posts, err := m.toPosts(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	cards := make([]FeaturedPost, 0, len(posts))
+	for _, p := range posts {
+		card := FeaturedPost{ID: p.ID, Title: p.Title, University: p.University, EventDate: p.EventDate}
+		if len(p.MediaURLs) > 0 {
+			card.ImageURL = &p.MediaURLs[0]
+		}
+		cards = append(cards, card)
+	}
+	return cards, nil
+}
+
+func (m Module) adjacentPosts(ctx context.Context, postID uuid.UUID, q postQuery) (*PostNavigation, error) {
+	filter, err := q.filter()
+	if err != nil {
+		return nil, err
+	}
+	return m.posts.adjacent(ctx, postID, filter)
 }

@@ -65,6 +65,8 @@ func (m Module) Register(api huma.API) {
 
 	huma.Register(api, createPostOperation, posts.createPost)
 	huma.Register(api, listPostsOperation, posts.listPosts)
+	huma.Register(api, featuredPostsOperation, posts.featuredPosts)
+	huma.Register(api, adjacentPostsOperation, posts.adjacentPosts)
 	huma.Register(api, getPostOperation, posts.getPost)
 	huma.Register(api, updatePostOperation, posts.updatePost)
 	huma.Register(api, deletePostOperation, posts.deletePost)

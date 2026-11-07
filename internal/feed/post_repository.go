@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
@@ -136,6 +137,8 @@ type pageCursor struct {
 }
 
 type postFilter struct {
+	Search       string
+	Featured     bool
 	ViewerID     uuid.UUID
 	UniversityID string
 	Type         string
@@ -145,8 +148,7 @@ type postFilter struct {
 	Limit        int
 }
 
-func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
-	args := []any{f.ViewerID}
+func postWhere(f postFilter, args []any) (string, []any) {
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
@@ -169,15 +171,53 @@ func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, err
 	if f.To != nil {
 		where = append(where, "p.created_at < "+arg(*f.To))
 	}
+	if f.Search != "" {
+		normalized := "public.feed_search_text(" + arg(f.Search) + ")"
+		// Escape after normalization, which also converts fullwidth punctuation.
+		pattern := "('%' || replace(replace(replace(" + normalized + ", '!', '!!'), '%', '!%'), '_', '!_') || '%') ESCAPE '!'"
+		var ids, names []string
+		for _, u := range auth.GetUniversities() {
+			ids = append(ids, string(u.ID))
+			names = append(names, u.Name)
+		}
+		// UNION lets each search branch use its own index; IN avoids duplicate posts.
+		where = append(where, `p.id IN (
+			SELECT id FROM feed_posts
+			WHERE public.feed_search_text(title || ' ' || content || ' ' || university_id) LIKE `+pattern+`
+			UNION ALL
+			SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
+			WHERE public.feed_search_text(COALESCE(author.first_name, '') || ' ' || COALESCE(author.last_name, '')) LIKE `+pattern+`
+			UNION ALL
+			SELECT id FROM feed_posts WHERE university_id IN (
+				SELECT id FROM unnest(`+arg(ids)+`::text[], `+arg(names)+`::text[]) AS universities(id, name)
+				WHERE public.feed_search_text(name) LIKE `+pattern+`))`)
+	}
 	if f.After != nil {
 		where = append(where, "(p.created_at, p.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
 
-	query := postSelect
-	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
+	if len(where) == 0 {
+		return "", args
 	}
-	query += " ORDER BY p.created_at DESC, p.id DESC LIMIT " + arg(f.Limit)
+	return " WHERE " + strings.Join(where, " AND "), args
+}
+
+func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
+	where, args := postWhere(f, []any{f.ViewerID})
+	order := "p.created_at DESC, p.id DESC"
+	selection := postSelect
+	if f.Featured {
+		selection += ` JOIN (
+			SELECT post_id, count(*) AS likes_count
+			FROM feed_post_likes
+			WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') AT TIME ZONE 'Europe/Warsaw'
+			  AND created_at < (date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') + interval '1 week') AT TIME ZONE 'Europe/Warsaw'
+			GROUP BY post_id
+		) weekly ON weekly.post_id = p.id`
+		order = "weekly.likes_count DESC, p.created_at DESC, p.id DESC"
+	}
+	args = append(args, f.Limit)
+	query := selection + where + " ORDER BY " + order + " LIMIT $" + strconv.Itoa(len(args))
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -339,4 +379,27 @@ func (r *postRepository) reportTarget(ctx context.Context, postID uuid.UUID) (uu
 		return uuid.Nil, nil, fmt.Errorf("get reported post: %w", err)
 	}
 	return authorID, map[string]any{"title": title, "content": content}, nil
+}
+
+func (r *postRepository) adjacent(ctx context.Context, postID uuid.UUID, f postFilter) (*PostNavigation, error) {
+	where, args := postWhere(f, nil)
+	args = append(args, postID)
+	query := `WITH filtered AS NOT MATERIALIZED (
+		SELECT p.id, p.created_at FROM feed_posts p
+		JOIN public_profiles a ON a.id = p.author_id` + where + `
+	)
+	SELECT
+		(SELECT id FROM filtered WHERE (created_at, id) > (current.created_at, current.id)
+		 ORDER BY created_at ASC, id ASC LIMIT 1),
+		(SELECT id FROM filtered WHERE (created_at, id) < (current.created_at, current.id)
+		 ORDER BY created_at DESC, id DESC LIMIT 1)
+	FROM filtered current WHERE current.id = $` + strconv.Itoa(len(args))
+	var out PostNavigation
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, args...).Scan(&out.PreviousID, &out.NextID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get adjacent posts: %w", err)
+	}
+	return &out, nil
 }

@@ -18,6 +18,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 	}
 
 	out := &Profile{
+		Language:     p.Language,
 		ID:           p.ID,
 		Email:        p.Email,
 		FirstName:    p.FirstName,
@@ -37,6 +38,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 }
 
 type profileChange struct {
+	Language      *string
 	FirstName     *string
 	LastName      *string
 	Bio           *string
@@ -65,6 +67,14 @@ func (c profileChange) fields() (profileFields, error) {
 			return profileFields{}, ErrInvalidInput
 		}
 	}
+	if c.Language != nil {
+		switch *c.Language {
+		case "en", "pl", "uk", "ru":
+		default:
+			return profileFields{}, ErrInvalidInput
+		}
+	}
+	f.Language = c.Language
 	f.Privacy = c.Privacy
 	return f, nil
 }
