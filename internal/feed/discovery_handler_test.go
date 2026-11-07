@@ -136,8 +136,8 @@ func TestFeaturedPosts(t *testing.T) {
 	author := e.user(t)
 	viewer := e.newUser(t, "kul")
 	ctx := context.Background()
-	var weekStart, weekEnd time.Time
-	if err := e.pool.QueryRow(ctx, `SELECT date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') AT TIME ZONE 'Europe/Warsaw', (date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') + interval '1 week') AT TIME ZONE 'Europe/Warsaw'`).Scan(&weekStart, &weekEnd); err != nil {
+	var weekStart time.Time
+	if err := e.pool.QueryRow(ctx, `SELECT date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') AT TIME ZONE 'Europe/Warsaw'`).Scan(&weekStart); err != nil {
 		t.Fatal(err)
 	}
 	exec := func(query string, args ...any) {
@@ -150,13 +150,37 @@ func TestFeaturedPosts(t *testing.T) {
 	for range 6 {
 		likers = append(likers, e.user(t))
 	}
-	like := func(id uuid.UUID, count int) {
+	like := func(id uuid.UUID, users ...testUser) {
 		t.Helper()
-		for _, liker := range likers[:count] {
+		for _, liker := range users {
 			decode[LikeState](t, e.api.Put("/feed/posts/"+id.String()+"/like", liker.bearer), 200)
 		}
-		exec("UPDATE feed_post_likes SET created_at = $2 WHERE post_id = $1", id, weekStart)
 	}
+	moveToLastWeek := func(postID uuid.UUID, liker testUser) {
+		t.Helper()
+		exec("UPDATE feed_post_likes SET created_at = $3 WHERE post_id = $1 AND user_id = $2", postID, liker.id, weekStart.Add(-time.Microsecond))
+		exec("UPDATE feed_post_weekly_likes SET week = week - 7 WHERE post_id = $1", postID)
+	}
+	weekly := func(postID uuid.UUID) map[string]int {
+		t.Helper()
+		rows, err := e.pool.Query(ctx, `SELECT CASE WHEN week = $2::date THEN 'this' ELSE 'last' END, likes
+			FROM feed_post_weekly_likes WHERE post_id = $1`, postID, weekStart.In(time.UTC).Add(2*time.Hour).Format("2006-01-02"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		counts := map[string]int{}
+		for rows.Next() {
+			var week string
+			var likes int
+			if err := rows.Scan(&week, &likes); err != nil {
+				t.Fatal(err)
+			}
+			counts[week] = likes
+		}
+		return counts
+	}
+
 	var want []uuid.UUID
 	// Any post age/type qualifies, including an event whose date has passed.
 	for i, count := range []int{6, 5, 4, 3, 1, 1} {
@@ -173,18 +197,21 @@ func TestFeaturedPosts(t *testing.T) {
 		}
 		post := e.createPost(t, author, fields)
 		want = append(want, post.ID)
-		exec("UPDATE feed_posts SET created_at = $2 WHERE id = $1", post.ID, weekStart.Add(time.Duration(i-10)*time.Hour))
-		like(post.ID, count)
+		createdAt := weekStart.Add(time.Duration(i-10) * time.Hour)
+		if i >= 4 {
+			// Same count and timestamp: ID breaks the tie deterministically.
+			createdAt = weekStart.Add(-time.Hour)
+		}
+		exec("UPDATE feed_posts SET created_at = $2 WHERE id = $1", post.ID, createdAt)
+		like(post.ID, likers[:count]...)
 	}
-	// Same count and timestamp: ID breaks the tie deterministically.
-	exec("UPDATE feed_posts SET created_at = $2 WHERE id = ANY($1)", want[4:], weekStart.Add(-time.Hour))
 	slices.SortFunc(want[4:], func(a, b uuid.UUID) int { return -strings.Compare(a.String(), b.String()) })
-	for _, date := range []time.Time{weekStart.Add(-time.Microsecond), weekEnd} {
-		post := e.createPost(t, author, nil)
-		like(post.ID, 6)
-		exec("UPDATE feed_post_likes SET created_at = $2 WHERE post_id = $1", post.ID, date)
-	}
+
+	lastWeek := e.createPost(t, author, nil)
+	like(lastWeek.ID, likers[0])
+	moveToLastWeek(lastWeek.ID, likers[0])
 	e.createPost(t, author, nil) // No likes: never featured.
+
 	type cards struct {
 		Items []FeaturedPost `json:"items"`
 	}
@@ -205,23 +232,65 @@ func TestFeaturedPosts(t *testing.T) {
 	if items[0].ImageURL == nil || items[2].ImageURL != nil || items[0].EventDate != nil || items[1].EventDate == nil {
 		t.Error("incorrect image/event date null handling")
 	}
-	expectStatus(t, e.api.Delete("/feed/posts/"+want[0].String()+"/like", likers[0].bearer), 200)
-	items = get()
-	if items[0].ID != want[1] || items[1].ID != want[0] {
-		t.Fatalf("unlike did not rerank: %+v", items)
-	}
-	expectStatus(t, e.api.Delete("/feed/posts/"+want[0].String(), author.bearer), 204)
-	exec("UPDATE feed_post_likes SET created_at = $2 WHERE post_id = $1", want[1], weekStart.Add(-time.Microsecond))
-	items = get()
-	if len(items) != 4 || items[0].ID != want[2] {
-		t.Fatalf("previous-week/deleted posts returned: %+v", items)
-	}
-	for _, id := range want[2:] {
-		expectStatus(t, e.api.Delete("/feed/posts/"+id.String(), author.bearer), 204)
-	}
-	items = get()
-	if items == nil || len(items) != 0 {
-		t.Errorf("empty cards = %+v", items)
-	}
+
+	t.Run("a repeated like or unlike changes nothing", func(t *testing.T) {
+		like(want[3], likers[0])
+		expectStatus(t, e.api.Delete("/feed/posts/"+want[5].String()+"/like", likers[5].bearer), 200)
+		if got := weekly(want[3]); got["this"] != 3 {
+			t.Errorf("weekly likes after a repeated like = %v", got)
+		}
+	})
+
+	t.Run("unlike reranks", func(t *testing.T) {
+		expectStatus(t, e.api.Delete("/feed/posts/"+want[0].String()+"/like", likers[0].bearer), 200)
+		items := get()
+		if items[0].ID != want[1] || items[1].ID != want[0] {
+			t.Fatalf("unlike did not rerank: %+v", items)
+		}
+	})
+
+	t.Run("taking back a like from last week leaves this week alone", func(t *testing.T) {
+		post := e.createPost(t, author, nil)
+		like(post.ID, likers[0])
+		moveToLastWeek(post.ID, likers[0])
+		like(post.ID, likers[1], likers[2])
+		expectStatus(t, e.api.Delete("/feed/posts/"+post.ID.String()+"/like", likers[0].bearer), 200)
+		if got := weekly(post.ID); got["this"] != 2 || got["last"] != 0 {
+			t.Errorf("weekly likes = %v, want this week 2 and last week 0", got)
+		}
+		expectStatus(t, e.api.Delete("/feed/posts/"+post.ID.String(), author.bearer), 204)
+	})
+
+	t.Run("deleted posts and past weeks are not featured", func(t *testing.T) {
+		expectStatus(t, e.api.Delete("/feed/posts/"+want[1].String(), author.bearer), 204)
+		for _, card := range get() {
+			if card.ID == want[1] || card.ID == lastWeek.ID {
+				t.Errorf("unexpected card %v", card.ID)
+			}
+		}
+	})
+
+	t.Run("the prune job removes past weeks only", func(t *testing.T) {
+		if err := e.module.pruneWeeklyLikes(ctx, PruneWeeklyLikesArgs{}); err != nil {
+			t.Fatal(err)
+		}
+		if got := weekly(lastWeek.ID); len(got) != 0 {
+			t.Errorf("last week's row survived: %v", got)
+		}
+		if got := weekly(want[2]); got["this"] != 4 {
+			t.Errorf("this week's row = %v", got)
+		}
+	})
+
+	t.Run("an empty section is an empty list", func(t *testing.T) {
+		for _, id := range append([]uuid.UUID{want[0]}, want[2:]...) {
+			expectStatus(t, e.api.Delete("/feed/posts/"+id.String(), author.bearer), 204)
+		}
+		items := get()
+		if items == nil || len(items) != 0 {
+			t.Errorf("empty cards = %+v", items)
+		}
+	})
+
 	expectError(t, e.api.Get("/feed/posts/featured"), 401, "unauthorized")
 }

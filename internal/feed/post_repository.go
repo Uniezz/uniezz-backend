@@ -400,13 +400,7 @@ type featuredRow struct {
 func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow, error) {
 	rows, err := r.db.Conn(ctx).Query(ctx, `
 		SELECT p.id, p.title, p.university_id, p.event_date, image.kind, image.object_key
-		FROM (
-			SELECT post_id, count(*) AS likes
-			FROM feed_post_likes
-			WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') AT TIME ZONE 'Europe/Warsaw'
-			  AND created_at < (date_trunc('week', NOW() AT TIME ZONE 'Europe/Warsaw') + interval '1 week') AT TIME ZONE 'Europe/Warsaw'
-			GROUP BY post_id
-		) weekly
+		FROM feed_post_weekly_likes weekly
 		JOIN feed_posts p ON p.id = weekly.post_id
 		JOIN public_profiles a ON a.id = p.author_id
 		LEFT JOIN LATERAL (
@@ -417,7 +411,8 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 			ORDER BY pm.position
 			LIMIT 1
 		) image ON true
-		ORDER BY weekly.likes DESC, p.created_at DESC, p.id DESC
+		WHERE weekly.week = `+weekOf("NOW()")+` AND weekly.likes > 0
+		ORDER BY weekly.likes DESC, weekly.post_created_at DESC, weekly.post_id DESC
 		LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list featured posts: %w", err)

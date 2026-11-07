@@ -11,9 +11,7 @@ AS $$ SELECT lower(public.unaccent('public.unaccent'::regdictionary, $1)) $$;
 
 CREATE INDEX idx_feed_posts_search ON feed_posts USING gin
     (public.search_text(title || ' ' || content) public.gin_trgm_ops);
-CREATE INDEX idx_feed_post_likes_created_at_post_id ON feed_post_likes (created_at, post_id);
 
 -- +goose Down
-DROP INDEX idx_feed_post_likes_created_at_post_id;
 DROP INDEX idx_feed_posts_search;
 DROP FUNCTION public.search_text(TEXT);
