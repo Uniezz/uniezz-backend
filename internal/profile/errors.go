@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrInvalidInput  = errors.New("invalid input")
-	ErrInvalidAvatar = errors.New("avatar media is missing, not owned by the user or not uploaded")
+	ErrGenderImmutable = errors.New("gender cannot be changed or cleared once set")
+	ErrNotFound        = errors.New("not found")
+	ErrInvalidInput    = errors.New("invalid input")
+	ErrInvalidAvatar   = errors.New("avatar media is missing, not owned by the user or not uploaded")
 )
 
 var errorResponses = []struct {
@@ -18,6 +19,7 @@ var errorResponses = []struct {
 	status int
 	code   string
 }{
+	{ErrGenderImmutable, http.StatusBadRequest, "gender_immutable"},
 	{ErrNotFound, http.StatusNotFound, "not_found"},
 	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
 	{ErrInvalidAvatar, http.StatusBadRequest, "invalid_avatar"},
