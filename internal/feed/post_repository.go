@@ -137,6 +137,7 @@ type pageCursor struct {
 
 type postFilter struct {
 	ViewerID     uuid.UUID
+	AuthorID     string
 	UniversityID string
 	Type         string
 	From         *time.Time
@@ -153,6 +154,9 @@ func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, err
 	}
 
 	var where []string
+	if f.AuthorID != "" {
+		where = append(where, "p.author_id = "+arg(f.AuthorID))
+	}
 	switch f.UniversityID {
 	case "":
 	case allUniversities:

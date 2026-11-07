@@ -197,6 +197,7 @@ func (m Module) post(ctx context.Context, viewerID, postID uuid.UUID) (*Post, er
 
 type postQuery struct {
 	ViewerID   uuid.UUID
+	AuthorID   string
 	University string
 	Type       string
 	From       *time.Time
@@ -215,7 +216,7 @@ func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, er
 		return nil, nil, ErrInvalidInput
 	}
 
-	filter := postFilter{ViewerID: q.ViewerID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To, Limit: q.Limit + 1}
+	filter := postFilter{ViewerID: q.ViewerID, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To, Limit: q.Limit + 1}
 	if q.Cursor != "" {
 		var after pageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {

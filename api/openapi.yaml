@@ -1577,6 +1577,14 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
+        - description: Only posts by this user
+          explode: false
+          in: query
+          name: authorId
+          schema:
+            description: Only posts by this user
+            format: uuid
+            type: string
         - description: Posts targeted to this university or to all; all alone returns only posts targeted to everyone
           explode: false
           in: query
