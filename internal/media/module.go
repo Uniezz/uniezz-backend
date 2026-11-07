@@ -28,6 +28,7 @@ type mediaStore interface {
 	deleteDeleting(ctx context.Context, id uuid.UUID) error
 	markAbandonedDeleting(ctx context.Context, olderThan time.Duration) error
 	listDeleting(ctx context.Context, limit int) ([]uuid.UUID, error)
+	markOwnerDeleting(ctx context.Context, ownerUserID uuid.UUID) ([]uuid.UUID, error)
 }
 
 var _ objectStore = (*objectStorage)(nil)

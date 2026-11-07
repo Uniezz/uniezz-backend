@@ -5,10 +5,12 @@ package moderation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/danielgtaylor/huma/v2"
@@ -46,15 +48,23 @@ type Module struct {
 	limiter  limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets) Module {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
-	return Module{
+	m := Module{
 		tx:       db,
 		reports:  newReportRepository(db),
 		feed:     feedModule,
 		profiles: profileModule,
 		limiter:  ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
+
+	if err := jobs.Register(runner, m.anonymiseReports, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	if err := jobs.Schedule(runner, AnonymiseReportsArgs{}, 24*time.Hour); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	return m, nil
 }
 
 func (m Module) Register(api huma.API) {

@@ -45,7 +45,10 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	moderationModule := moderation.New(db, feedModule, profileModule)
+	moderationModule, err := moderation.New(db, feedModule, profileModule, runner)
+	if err != nil {
+		return Modules{}, err
+	}
 
 	mailModule := mail.NewResendSender(cfg)
 	authModule, err := auth.New(db, cfg, mailModule, profileModule)

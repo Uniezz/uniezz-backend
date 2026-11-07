@@ -14,6 +14,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
@@ -78,7 +79,10 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	e := &testEnv{pool: pool, targets: fakeTargets{authors: map[uuid.UUID]uuid.UUID{}}, users: fakeProfiles{users: map[uuid.UUID]bool{}}}
-	m := New(pool, e.targets, e.users)
+	m, err := New(pool, e.targets, e.users, jobs.NewRunner(pool, 1, time.Minute))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
