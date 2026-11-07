@@ -242,15 +242,11 @@ func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, er
 		return nil, nil, err
 	}
 
-	var next *string
-	if len(rows) > q.Limit {
-		rows = rows[:q.Limit]
-		last := rows[len(rows)-1]
-		cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: last.CreatedAt, ID: last.ID})
-		if err != nil {
-			return nil, nil, err
-		}
-		next = &cursor
+	rows, next, err := httpapi.Page(rows, q.Limit, func(last postRow) any {
+		return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	posts, err := m.toPosts(ctx, rows)

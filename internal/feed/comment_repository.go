@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -49,7 +50,7 @@ func scanComment(row pgx.Row) (*commentRow, error) {
 	if authorID != nil && university != nil {
 		author.ID = *authorID
 		author.UniversityID = *university
-		author.Avatar = mediaRef(avatarKind, avatarKey)
+		author.Avatar = media.RefOf(avatarKind, avatarKey)
 		c.Author = &author
 	}
 	return &c, nil

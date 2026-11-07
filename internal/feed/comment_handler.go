@@ -57,7 +57,7 @@ var createCommentOperation = auth.Protected(huma.Operation{
 func (h *commentHandler) createComment(ctx context.Context, in *createCommentInput) (*createCommentOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	comment, replayed, err := h.feed.createComment(ctx, userID, commentInput{
@@ -66,7 +66,7 @@ func (h *commentHandler) createComment(ctx context.Context, in *createCommentInp
 		Content:          in.Body.Content,
 	}, in.IdempotencyKey)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	out := &createCommentOutput{Body: *comment}
@@ -101,12 +101,12 @@ var listCommentsOperation = auth.Protected(huma.Operation{
 func (h *commentHandler) listComments(ctx context.Context, in *listCommentsInput) (*listCommentsOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	items, next, err := h.feed.listComments(ctx, userID, in.ID, in.Cursor, in.Limit)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	out := &listCommentsOutput{}
 	out.Body.Items = items
@@ -127,12 +127,12 @@ var listRepliesOperation = auth.Protected(huma.Operation{
 func (h *commentHandler) listReplies(ctx context.Context, in *listCommentsInput) (*listCommentsOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	items, next, err := h.feed.listReplies(ctx, userID, in.ID, in.Cursor, in.Limit)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	out := &listCommentsOutput{}
 	out.Body.Items = items
@@ -163,12 +163,12 @@ var updateCommentOperation = auth.Protected(huma.Operation{
 func (h *commentHandler) updateComment(ctx context.Context, in *updateCommentInput) (*commentOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	comment, err := h.feed.updateComment(ctx, userID, in.ID, in.Body.Content)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &commentOutput{Body: *comment}, nil
 }
@@ -191,11 +191,11 @@ var deleteCommentOperation = auth.Protected(huma.Operation{
 func (h *commentHandler) deleteComment(ctx context.Context, in *commentPath) (*struct{}, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	if err := h.feed.deleteComment(ctx, userID, in.ID); err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
 }

@@ -113,3 +113,13 @@ func TestReadyMediaView(t *testing.T) {
 		t.Errorf("pending and deleting media must not be in ready_media, found %d", hidden)
 	}
 }
+
+func TestRefOf(t *testing.T) {
+	kind, key := "avatar", "avatars/x.jpg"
+	if ref := RefOf(&kind, &key); ref == nil || ref.Kind != KindAvatar || ref.ObjectKey != key {
+		t.Errorf("RefOf = %+v", ref)
+	}
+	if RefOf(nil, &key) != nil || RefOf(&kind, nil) != nil {
+		t.Error("RefOf must be nil when either column is null")
+	}
+}

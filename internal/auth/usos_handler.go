@@ -75,7 +75,7 @@ func (h *usosHandler) callback(ctx context.Context, in *usosCallbackInput) (*red
 	id, platform, err := h.usos.finish(ctx, in.OAuthToken, in.OAuthVerifier)
 	if err != nil {
 		if platform == "" {
-			return nil, apiError(err)
+			return nil, errorResponses.Error(err)
 		}
 		return h.redirectWithError(ctx, platform, err), nil
 	}
@@ -94,7 +94,7 @@ func (h *usosHandler) callback(ctx context.Context, in *usosCallbackInput) (*red
 }
 
 func (h *usosHandler) redirectWithError(ctx context.Context, platform Platform, err error) *redirectOutput {
-	status, code := errorResponse(err)
+	status, code := errorResponses.Lookup(err)
 	switch {
 	case errors.Is(err, context.Canceled):
 		slog.InfoContext(ctx, "usos login abandoned by client", slog.Any("error", err))

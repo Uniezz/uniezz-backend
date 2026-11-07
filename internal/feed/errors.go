@@ -17,30 +17,13 @@ var (
 	ErrResourceDeleted   = errors.New("the resource created with this idempotency key was deleted")
 )
 
-var errorResponses = []struct {
-	err    error
-	status int
-	code   string
-}{
-	{ErrNotFound, http.StatusNotFound, "not_found"},
-	{ErrForbidden, http.StatusForbidden, "forbidden"},
-	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
-	{ErrInvalidUniversity, http.StatusBadRequest, "invalid_university"},
-	{ErrInvalidMedia, http.StatusBadRequest, "invalid_media"},
-	{ErrKeyReused, http.StatusUnprocessableEntity, "idempotency_key_reused"},
-	{ErrResourceDeleted, http.StatusGone, "resource_deleted"},
-	{httpapi.ErrInvalidCursor, http.StatusBadRequest, "invalid_cursor"},
-}
-
-func apiError(err error) error {
-	for _, e := range errorResponses {
-		if errors.Is(err, e.err) {
-			return httpapi.Error(e.status, e.code, err)
-		}
-	}
-	return httpapi.Error(http.StatusInternalServerError, "internal_error", err)
-}
-
-func unauthorized() error {
-	return httpapi.Error(http.StatusUnauthorized, "unauthorized", nil)
+var errorResponses = httpapi.ErrorResponses{
+	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
+	{Err: ErrForbidden, Status: http.StatusForbidden, Code: "forbidden"},
+	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
+	{Err: ErrInvalidUniversity, Status: http.StatusBadRequest, Code: "invalid_university"},
+	{Err: ErrInvalidMedia, Status: http.StatusBadRequest, Code: "invalid_media"},
+	{Err: ErrKeyReused, Status: http.StatusUnprocessableEntity, Code: "idempotency_key_reused"},
+	{Err: ErrResourceDeleted, Status: http.StatusGone, Code: "resource_deleted"},
+	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

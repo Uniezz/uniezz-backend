@@ -71,15 +71,11 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 		return nil, nil, err
 	}
 
-	var next *string
-	if len(rows) > q.Limit {
-		rows = rows[:q.Limit]
-		last := rows[len(rows)-1]
-		cursor, err := httpapi.EncodeCursor(profileCursor{SearchRank: last.SearchRank, CreatedAt: last.CreatedAt, ID: last.ID})
-		if err != nil {
-			return nil, nil, err
-		}
-		next = &cursor
+	rows, next, err := httpapi.Page(rows, q.Limit, func(last profileRow) any {
+		return profileCursor{SearchRank: last.SearchRank, CreatedAt: last.CreatedAt, ID: last.ID}
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	items := make([]ProfileSummary, 0, len(rows))

@@ -49,7 +49,7 @@ func (m Module) Guard(api huma.API) func(huma.Context, func(huma.Context)) {
 
 		p, err := m.guard.authenticate(ctx.Context(), ctx.Header("Authorization"))
 		if err != nil {
-			status, _ := errorResponse(err)
+			status, _ := errorResponses.Lookup(err)
 			_ = huma.WriteErr(api, ctx, status, "authenticate session", err)
 			return
 		}

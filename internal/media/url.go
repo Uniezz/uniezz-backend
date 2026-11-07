@@ -14,6 +14,13 @@ type Ref struct {
 	ObjectKey string
 }
 
+func RefOf(kind, objectKey *string) *Ref {
+	if kind == nil || objectKey == nil {
+		return nil
+	}
+	return &Ref{Kind: Kind(*kind), ObjectKey: *objectKey}
+}
+
 func (m Module) URL(ctx context.Context, mediaID uuid.UUID) (string, error) {
 	item, err := m.repo.getReady(ctx, mediaID)
 	if err != nil {

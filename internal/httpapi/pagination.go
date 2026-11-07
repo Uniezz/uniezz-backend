@@ -31,3 +31,15 @@ func DecodeCursor(cursor string, position any) error {
 	}
 	return nil
 }
+
+func Page[T any](rows []T, limit int, position func(last T) any) ([]T, *string, error) {
+	if len(rows) <= limit {
+		return rows, nil, nil
+	}
+	rows = rows[:limit]
+	cursor, err := EncodeCursor(position(rows[len(rows)-1]))
+	if err != nil {
+		return nil, nil, err
+	}
+	return rows, &cursor, nil
+}

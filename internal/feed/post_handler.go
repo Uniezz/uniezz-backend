@@ -71,7 +71,7 @@ var createPostOperation = auth.Protected(huma.Operation{
 func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*createPostOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	post, replayed, err := h.feed.createPost(ctx, userID, postInput{
@@ -84,7 +84,7 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 		MediaIDs:   in.Body.MediaIDs,
 	}, in.IdempotencyKey)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	out := &createPostOutput{Body: *post}
@@ -140,14 +140,14 @@ var listPostsOperation = auth.Protected(huma.Operation{
 func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listPostsOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	q := in.query(userID)
 	q.Cursor, q.Limit = in.Cursor, in.Limit
 	items, next, err := h.feed.listPosts(ctx, q)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	out := &listPostsOutput{}
@@ -183,12 +183,12 @@ var getPostOperation = auth.Protected(huma.Operation{
 func (h *postHandler) getPost(ctx context.Context, in *postPath) (*postOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	post, err := h.feed.post(ctx, userID, in.ID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &postOutput{Body: *post}, nil
 }
@@ -216,7 +216,7 @@ var updatePostOperation = auth.Protected(huma.Operation{
 func (h *postHandler) updatePost(ctx context.Context, in *updatePostInput) (*postOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	post, err := h.feed.updatePost(ctx, userID, in.ID, postEdit{
@@ -226,7 +226,7 @@ func (h *postHandler) updatePost(ctx context.Context, in *updatePostInput) (*pos
 		Tags:      in.Body.Tags,
 	})
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &postOutput{Body: *post}, nil
 }
@@ -245,11 +245,11 @@ var deletePostOperation = auth.Protected(huma.Operation{
 func (h *postHandler) deletePost(ctx context.Context, in *postPath) (*struct{}, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	if err := h.feed.deletePost(ctx, userID, in.ID); err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
 }
@@ -279,11 +279,11 @@ var featuredPostsOperation = auth.Protected(huma.Operation{
 
 func (h *postHandler) featuredPosts(ctx context.Context, _ *struct{}) (*featuredPostsOutput, error) {
 	if _, ok := auth.UserIDFrom(ctx); !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 	cards, err := h.feed.featuredPosts(ctx)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	out := &featuredPostsOutput{}
 	out.Body.Items = cards
@@ -317,11 +317,11 @@ var adjacentPostsOperation = auth.Protected(huma.Operation{
 func (h *postHandler) adjacentPosts(ctx context.Context, in *adjacentPostsInput) (*adjacentPostsOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 	navigation, err := h.feed.adjacentPosts(ctx, in.ID, in.query(userID))
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &adjacentPostsOutput{Body: *navigation}, nil
 }

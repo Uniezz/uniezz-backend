@@ -172,10 +172,6 @@ func universityColumns() (ids, names []string) {
 	return ids, names
 }
 
-func UniversityIDsAndNames() (ids, names []string) {
-	return universityIDs, universityNames
-}
-
 func GetUniversityByID(id UniversityID) (University, error) {
 	u, exists := universities[id]
 	if !exists {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -46,12 +47,12 @@ var getMeOperation = auth.Protected(huma.Operation{
 func (h *profileHandler) getMe(ctx context.Context, _ *struct{}) (*getMeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	p, err := h.profile.profile(ctx, userID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &getMeOutput{Body: *p}, nil
 }
@@ -86,7 +87,7 @@ var updateMeOperation = auth.Protected(huma.Operation{
 func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*updateMeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	err := h.profile.updateProfile(ctx, userID, profileChange{
@@ -100,12 +101,12 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		AvatarMediaID: in.Body.AvatarMediaID,
 	})
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	p, err := h.profile.profile(ctx, userID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &updateMeOutput{Body: *p}, nil
 }
@@ -123,11 +124,11 @@ var deleteAvatarOperation = auth.Protected(huma.Operation{
 func (h *profileHandler) deleteAvatar(ctx context.Context, _ *struct{}) (*struct{}, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	if err := h.profile.removeAvatar(ctx, userID); err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
 }

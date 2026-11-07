@@ -71,7 +71,7 @@ var listProfilesOperation = auth.Protected(huma.Operation{
 
 func (h *publicProfileHandler) listProfiles(ctx context.Context, in *listProfilesInput) (*listProfilesOutput, error) {
 	if _, ok := auth.UserIDFrom(ctx); !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	items, next, err := h.profile.listProfiles(ctx, profileQuery{
@@ -81,7 +81,7 @@ func (h *publicProfileHandler) listProfiles(ctx context.Context, in *listProfile
 		Limit:        in.Limit,
 	})
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	out := &listProfilesOutput{}
@@ -110,12 +110,12 @@ var getProfileOperation = auth.Protected(huma.Operation{
 
 func (h *publicProfileHandler) getProfile(ctx context.Context, in *getProfileInput) (*getProfileOutput, error) {
 	if _, ok := auth.UserIDFrom(ctx); !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	p, err := h.profile.publicProfile(ctx, in.ID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &getProfileOutput{Body: *p}, nil
 }

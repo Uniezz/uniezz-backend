@@ -28,3 +28,21 @@ func TestCursor(t *testing.T) {
 		}
 	}
 }
+
+func TestPage(t *testing.T) {
+	position := func(last int) any { return map[string]int{"n": last} }
+
+	rows, next, err := Page([]int{1, 2}, 2, position)
+	if err != nil || len(rows) != 2 || next != nil {
+		t.Fatalf("last page = %v, %v, %v", rows, next, err)
+	}
+
+	rows, next, err = Page([]int{1, 2, 3}, 2, position)
+	if err != nil || len(rows) != 2 || next == nil {
+		t.Fatalf("full page = %v, %v, %v", rows, next, err)
+	}
+	var got map[string]int
+	if err := DecodeCursor(*next, &got); err != nil || got["n"] != 2 {
+		t.Errorf("cursor points at %v, want the last returned row", got)
+	}
+}

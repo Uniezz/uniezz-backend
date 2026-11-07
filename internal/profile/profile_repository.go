@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -50,9 +49,7 @@ func scanProfile(row pgx.Row, extra ...any) (*profileRow, error) {
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
-	if avatarKind != nil && avatarKey != nil {
-		p.Avatar = &media.Ref{Kind: media.Kind(*avatarKind), ObjectKey: *avatarKey}
-	}
+	p.Avatar = media.RefOf(avatarKind, avatarKey)
 	return &p, nil
 }
 
@@ -89,11 +86,8 @@ type profileFilter struct {
 }
 
 func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profileRow, error) {
-	var args []any
-	arg := func(v any) string {
-		args = append(args, v)
-		return "$" + strconv.Itoa(len(args))
-	}
+	var args database.Args
+	arg := args.Add
 
 	var where []string
 	if f.UniversityID != "" {
@@ -101,8 +95,6 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 	}
 	rank := "0"
 	if len(f.Words) > 0 {
-		ids, names := auth.UniversityIDsAndNames()
-		idsArg, namesArg := arg(ids), arg(names)
 		var nameMatches []string
 		for _, word := range f.Words {
 			pattern := database.SearchPattern(arg(word))
@@ -113,9 +105,7 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 				UNION ALL
 				SELECT id FROM users WHERE public.search_text(interests) LIKE `+pattern+`
 				UNION ALL
-				SELECT id FROM users WHERE university_id IN (
-					SELECT id FROM unnest(`+idsArg+`::text[], `+namesArg+`::text[]) AS universities(id, name)
-					WHERE public.search_text(id) LIKE `+pattern+` OR public.search_text(name) LIKE `+pattern+`)
+				SELECT id FROM users WHERE university_id IN (`+auth.MatchingUniversities(&args, pattern)+`)
 				UNION ALL
 				SELECT user_id FROM student_programmes WHERE public.search_text(programme_name) LIKE `+pattern+`
 				UNION ALL

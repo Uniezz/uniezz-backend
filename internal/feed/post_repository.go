@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -57,15 +56,8 @@ func scanPost(row pgx.Row) (*postRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.Author.Avatar = mediaRef(avatarKind, avatarKey)
+	p.Author.Avatar = media.RefOf(avatarKind, avatarKey)
 	return &p, nil
-}
-
-func mediaRef(kind, key *string) *media.Ref {
-	if kind == nil || key == nil {
-		return nil
-	}
-	return &media.Ref{Kind: media.Kind(*kind), ObjectKey: *key}
 }
 
 type postRepository struct {
@@ -148,12 +140,8 @@ type postFilter struct {
 	Limit        int
 }
 
-func postWhere(f postFilter, args []any) (string, []any) {
-	arg := func(v any) string {
-		args = append(args, v)
-		return "$" + strconv.Itoa(len(args))
-	}
-
+func postWhere(f postFilter, args *database.Args) string {
+	arg := args.Add
 	var where []string
 	if f.AuthorID != "" {
 		where = append(where, "p.author_id = "+arg(f.AuthorID))
@@ -174,38 +162,31 @@ func postWhere(f postFilter, args []any) (string, []any) {
 	if f.To != nil {
 		where = append(where, "p.created_at < "+arg(*f.To))
 	}
-	if len(f.Words) > 0 {
-		ids, names := auth.UniversityIDsAndNames()
-		idsArg, namesArg := arg(ids), arg(names)
-		for _, word := range f.Words {
-			pattern := database.SearchPattern(arg(word))
-			// UNION lets each search branch use its own index; IN avoids duplicate posts.
-			where = append(where, `p.id IN (
-				SELECT id FROM feed_posts
-				WHERE public.search_text(title || ' ' || content) LIKE `+pattern+`
-				UNION ALL
-				SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
-				WHERE author.name_search LIKE `+pattern+`
-				UNION ALL
-				SELECT id FROM feed_posts WHERE university_id IN (
-					SELECT id FROM unnest(`+idsArg+`::text[], `+namesArg+`::text[]) AS universities(id, name)
-					WHERE public.search_text(id) LIKE `+pattern+` OR public.search_text(name) LIKE `+pattern+`))`)
-		}
+	for _, word := range f.Words {
+		pattern := database.SearchPattern(arg(word))
+		// UNION lets each search branch use its own index; IN avoids duplicate posts.
+		where = append(where, `p.id IN (
+			SELECT id FROM feed_posts
+			WHERE public.search_text(title || ' ' || content) LIKE `+pattern+`
+			UNION ALL
+			SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
+			WHERE author.name_search LIKE `+pattern+`
+			UNION ALL
+			SELECT id FROM feed_posts WHERE university_id IN (`+auth.MatchingUniversities(args, pattern)+`))`)
 	}
 	if f.After != nil {
 		where = append(where, "(p.created_at, p.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
 
 	if len(where) == 0 {
-		return "", args
+		return ""
 	}
-	return " WHERE " + strings.Join(where, " AND "), args
+	return " WHERE " + strings.Join(where, " AND ")
 }
 
 func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
-	where, args := postWhere(f, []any{f.ViewerID})
-	args = append(args, f.Limit)
-	query := postSelect + where + " ORDER BY p.created_at DESC, p.id DESC LIMIT $" + strconv.Itoa(len(args))
+	args := database.Args{f.ViewerID}
+	query := postSelect + postWhere(f, &args) + " ORDER BY p.created_at DESC, p.id DESC LIMIT " + args.Add(f.Limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -370,8 +351,8 @@ func (r *postRepository) reportTarget(ctx context.Context, postID uuid.UUID) (uu
 }
 
 func (r *postRepository) adjacent(ctx context.Context, postID uuid.UUID, f postFilter) (*PostNavigation, error) {
-	where, args := postWhere(f, nil)
-	args = append(args, postID)
+	var args database.Args
+	where := postWhere(f, &args)
 	query := `WITH filtered AS NOT MATERIALIZED (
 		SELECT p.id, p.created_at FROM feed_posts p
 		JOIN public_profiles a ON a.id = p.author_id` + where + `
@@ -381,7 +362,7 @@ func (r *postRepository) adjacent(ctx context.Context, postID uuid.UUID, f postF
 		 ORDER BY created_at ASC, id ASC LIMIT 1),
 		(SELECT id FROM filtered WHERE (created_at, id) < (current.created_at, current.id)
 		 ORDER BY created_at DESC, id DESC LIMIT 1)
-	FROM filtered current WHERE current.id = $` + strconv.Itoa(len(args))
+	FROM filtered current WHERE current.id = ` + args.Add(postID)
 	var out PostNavigation
 	if err := r.db.Conn(ctx).QueryRow(ctx, query, args...).Scan(&out.PreviousID, &out.NextID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -429,7 +410,7 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &imageKind, &imageKey); err != nil {
 			return nil, fmt.Errorf("scan featured post: %w", err)
 		}
-		f.Image = mediaRef(imageKind, imageKey)
+		f.Image = media.RefOf(imageKind, imageKey)
 		out = append(out, f)
 	}
 	if err := rows.Err(); err != nil {

@@ -32,7 +32,7 @@ var otpRequestOperation = huma.Operation{
 
 func (h *otpHandler) request(ctx context.Context, in *otpRequestInput) (*struct{}, error) {
 	if err := h.otp.request(ctx, in.Body.University, in.Body.Email); err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
 }
@@ -62,17 +62,17 @@ var otpVerifyOperation = huma.Operation{
 func (h *otpHandler) verify(ctx context.Context, in *otpVerifyInput) (*otpVerifyOutput, error) {
 	id, err := h.otp.verify(ctx, in.Body.University, in.Body.Email, in.Body.Code)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	user, err := h.logins.signIn(ctx, id)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	session, err := h.logins.issueSession(ctx, user.ID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &otpVerifyOutput{Body: session}, nil
 }
