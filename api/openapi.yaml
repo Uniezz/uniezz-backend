@@ -515,6 +515,15 @@ components:
           type:
             - string
             - "null"
+        gender:
+          description: Set once; null until set. Visible to other students, with no privacy toggle.
+          enum:
+            - male
+            - female
+            - null
+          type:
+            - string
+            - "null"
         id:
           description: User ID
           format: uuid
@@ -568,6 +577,7 @@ components:
         - email
         - firstName
         - lastName
+        - gender
         - universityId
         - programmes
         - avatarUrl
@@ -589,6 +599,15 @@ components:
           type:
             - string
             - "null"
+        gender:
+          description: Null until set; always visible to other students, with no privacy toggle
+          enum:
+            - male
+            - female
+            - null
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -606,6 +625,7 @@ components:
         - id
         - firstName
         - lastName
+        - gender
         - universityId
         - avatarUrl
       type: object
@@ -734,6 +754,15 @@ components:
           type:
             - string
             - "null"
+        gender:
+          description: Null until set; always visible to other students, with no privacy toggle
+          enum:
+            - male
+            - female
+            - null
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -765,6 +794,7 @@ components:
         - email
         - firstName
         - lastName
+        - gender
         - universityId
         - avatarUrl
         - bio
@@ -933,6 +963,15 @@ components:
           maxLength: 100
           minLength: 1
           type: string
+        gender:
+          description: Accepts male or female only while the saved gender is null. Once set, any supplied gender (including null or the same value) returns 400 gender_immutable. Omit to leave unchanged; null before setting is a no-op. Visible to other students; no privacy toggle.
+          enum:
+            - male
+            - female
+            - null
+          type:
+            - string
+            - "null"
         interests:
           description: "Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"
           items:
@@ -2427,7 +2466,7 @@ paths:
         - profile
   /profiles:
     get:
-      description: Newest accounts first, paginated by cursor.
+      description: Newest accounts first, paginated by cursor. Gender is included (null until set) and has no privacy toggle.
       operationId: listProfiles
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -2507,7 +2546,7 @@ paths:
         - profile
   /profiles/{id}:
     get:
-      description: Fields the student hides through privacy settings are null.
+      description: Fields the student hides through privacy settings are null. Gender is always included (null until set) and has no privacy toggle.
       operationId: getProfile
       parameters:
         - in: path

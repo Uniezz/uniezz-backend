@@ -23,6 +23,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
+		Gender:       p.Gender,
 		UniversityID: p.UniversityID,
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		Bio:          p.Bio,
@@ -83,6 +84,7 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 			ID:           p.ID,
 			FirstName:    p.FirstName,
 			LastName:     p.LastName,
+			Gender:       p.Gender,
 			UniversityID: p.UniversityID,
 			AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		})

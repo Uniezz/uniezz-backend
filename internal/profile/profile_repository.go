@@ -14,6 +14,7 @@ import (
 )
 
 type profileRow struct {
+	Gender        *string
 	ID            uuid.UUID
 	UniversityID  string
 	Email         *string
@@ -29,7 +30,7 @@ type profileRow struct {
 
 const profileSelect = `
 	SELECT u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id,
-		u.bio, u.interests, u.privacy, u.created_at, avatar.kind, avatar.object_key
+		u.bio, u.interests, u.privacy, u.created_at, u.gender, avatar.kind, avatar.object_key
 	FROM users u
 	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id`
 
@@ -37,7 +38,7 @@ func scanProfile(row pgx.Row) (*profileRow, error) {
 	var p profileRow
 	var avatarKind, avatarKey *string
 	err := row.Scan(&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID,
-		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &avatarKind, &avatarKey)
+		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &p.Gender, &avatarKind, &avatarKey)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +118,8 @@ func escapeLike(s string) string {
 }
 
 type profileFields struct {
+	Gender    *string
+	SetGender bool
 	FirstName *string
 	LastName  *string
 	SetBio    bool
@@ -132,11 +135,16 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 			last_name = COALESCE($3, last_name),
 			bio = CASE WHEN $4 THEN $5 ELSE bio END,
 			interests = COALESCE($6, interests),
-			privacy = privacy || COALESCE($7::jsonb, '{}'::jsonb)
-		WHERE id = $1`
+			privacy = privacy || COALESCE($7::jsonb, '{}'::jsonb),
+			gender = CASE WHEN $8 THEN $9::text ELSE gender END
+		WHERE id = $1 AND (NOT $8 OR gender IS NULL)`
 
-	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.Interests, f.Privacy); err != nil {
+	result, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.Interests, f.Privacy, f.SetGender, f.Gender)
+	if err != nil {
 		return fmt.Errorf("update profile: %w", err)
+	}
+	if f.SetGender && result.RowsAffected() == 0 {
+		return ErrGenderImmutable
 	}
 	return nil
 }

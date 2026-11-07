@@ -20,11 +20,17 @@ type PublicProfile struct {
 	Email        *string           `json:"email" nullable:"true" doc:"Null unless the student shows it"`
 	FirstName    *string           `json:"firstName" nullable:"true" example:"Jan"`
 	LastName     *string           `json:"lastName" nullable:"true" example:"Kowalski"`
+	Gender       *string           `json:"gender" nullable:"true" enum:"male,female" doc:"Null until set; always visible to other students, with no privacy toggle"`
 	UniversityID string            `json:"universityId" example:"umcs"`
 	AvatarURL    *string           `json:"avatarUrl" nullable:"true"`
 	Bio          *string           `json:"bio" nullable:"true"`
 	Interests    []string          `json:"interests"`
 	Programmes   []PublicProgramme `json:"programmes" doc:"Primary first"`
+}
+
+func (PublicProfile) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Schema {
+	s.Properties["gender"].Enum = append(s.Properties["gender"].Enum, nil)
+	return s
 }
 
 type PublicProgramme struct {
@@ -41,8 +47,14 @@ type ProfileSummary struct {
 	ID           uuid.UUID `json:"id" format:"uuid"`
 	FirstName    *string   `json:"firstName" nullable:"true" example:"Jan"`
 	LastName     *string   `json:"lastName" nullable:"true" example:"Kowalski"`
+	Gender       *string   `json:"gender" nullable:"true" enum:"male,female" doc:"Null until set; always visible to other students, with no privacy toggle"`
 	UniversityID string    `json:"universityId" example:"umcs"`
 	AvatarURL    *string   `json:"avatarUrl" nullable:"true"`
+}
+
+func (ProfileSummary) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Schema {
+	s.Properties["gender"].Enum = append(s.Properties["gender"].Enum, nil)
+	return s
 }
 
 type listProfilesInput struct {
@@ -63,7 +75,7 @@ var listProfilesOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/profiles",
 	Summary:     "List students",
-	Description: "Newest accounts first, paginated by cursor.",
+	Description: "Newest accounts first, paginated by cursor. Gender is included (null until set) and has no privacy toggle.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -102,7 +114,7 @@ var getProfileOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/profiles/{id}",
 	Summary:     "Get a student's public profile",
-	Description: "Fields the student hides through privacy settings are null.",
+	Description: "Fields the student hides through privacy settings are null. Gender is always included (null until set) and has no privacy toggle.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusNotFound},
 })

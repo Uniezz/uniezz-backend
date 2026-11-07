@@ -22,6 +22,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
+		Gender:       p.Gender,
 		UniversityID: p.UniversityID,
 		Programmes:   make([]Programme, 0, len(programmes)),
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
@@ -37,6 +38,8 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 }
 
 type profileChange struct {
+	Gender        *string
+	SetGender     bool
 	FirstName     *string
 	LastName      *string
 	Bio           *string
@@ -48,6 +51,10 @@ type profileChange struct {
 func (c profileChange) fields() (profileFields, error) {
 	var f profileFields
 	var err error
+	if c.Gender != nil && *c.Gender != "male" && *c.Gender != "female" {
+		return profileFields{}, ErrInvalidInput
+	}
+	f.Gender, f.SetGender = c.Gender, c.SetGender
 	if f.FirstName, err = trimmedName(c.FirstName); err != nil {
 		return profileFields{}, err
 	}
