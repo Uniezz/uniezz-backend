@@ -96,6 +96,7 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 
 type PostFilters struct {
 	Search     string    `query:"q" maxLength:"200" doc:"Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search"`
+	AuthorID   string    `query:"authorId" format:"uuid" doc:"Only posts by this user"`
 	University string    `query:"university" maxLength:"32" doc:"Posts targeted to this university or to all; all alone returns only posts targeted to everyone" example:"umcs"`
 	Type       string    `query:"type" enum:"announcement,event,question"`
 	From       time.Time `query:"from" doc:"Created at or after this time"`
@@ -133,6 +134,7 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 	items, next, err := h.feed.listPosts(ctx, postQuery{
 		Search:     in.Search,
 		ViewerID:   userID,
+		AuthorID:   in.AuthorID,
 		University: in.University,
 		Type:       in.Type,
 		From:       optionalTime(in.From),

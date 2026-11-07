@@ -573,6 +573,14 @@ components:
           type:
             - string
             - "null"
+        gender:
+          description: Set once; null until set. Visible to other students, with no privacy toggle.
+          enum:
+            - male
+            - female
+          type:
+            - string
+            - "null"
         id:
           description: User ID
           format: uuid
@@ -635,6 +643,7 @@ components:
         - email
         - firstName
         - lastName
+        - gender
         - universityId
         - programmes
         - avatarUrl
@@ -656,6 +665,14 @@ components:
           type:
             - string
             - "null"
+        gender:
+          description: Null until set; always visible to other students, with no privacy toggle
+          enum:
+            - male
+            - female
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -673,6 +690,7 @@ components:
         - id
         - firstName
         - lastName
+        - gender
         - universityId
         - avatarUrl
       type: object
@@ -801,6 +819,14 @@ components:
           type:
             - string
             - "null"
+        gender:
+          description: Null until set; always visible to other students, with no privacy toggle
+          enum:
+            - male
+            - female
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -832,6 +858,7 @@ components:
         - email
         - firstName
         - lastName
+        - gender
         - universityId
         - avatarUrl
         - bio
@@ -999,6 +1026,12 @@ components:
         firstName:
           maxLength: 100
           minLength: 1
+          type: string
+        gender:
+          description: "Can be set only once: when a gender is already saved, returns 400 gender_immutable"
+          enum:
+            - male
+            - female
           type: string
         interests:
           description: "Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"
@@ -1659,6 +1692,14 @@ paths:
             description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
             maxLength: 200
             type: string
+        - description: Only posts by this user
+          explode: false
+          in: query
+          name: authorId
+          schema:
+            description: Only posts by this user
+            format: uuid
+            type: string
         - description: Posts targeted to this university or to all; all alone returns only posts targeted to everyone
           explode: false
           in: query
@@ -2240,6 +2281,14 @@ paths:
             description: Case- and accent-insensitive literal substring in title, content, author name or target university ID/name; blank means no search
             maxLength: 200
             type: string
+        - description: Only posts by this user
+          explode: false
+          in: query
+          name: authorId
+          schema:
+            description: Only posts by this user
+            format: uuid
+            type: string
         - description: Posts targeted to this university or to all; all alone returns only posts targeted to everyone
           explode: false
           in: query
@@ -2633,7 +2682,7 @@ paths:
         - profile
   /profiles:
     get:
-      description: Newest accounts first, paginated by cursor.
+      description: Newest accounts first, paginated by cursor. Gender is included (null until set) and has no privacy toggle.
       operationId: listProfiles
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -2713,7 +2762,7 @@ paths:
         - profile
   /profiles/{id}:
     get:
-      description: Fields the student hides through privacy settings are null.
+      description: Fields the student hides through privacy settings are null. Gender is always included (null until set) and has no privacy toggle.
       operationId: getProfile
       parameters:
         - in: path

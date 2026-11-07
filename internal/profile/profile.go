@@ -23,6 +23,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
+		Gender:       p.Gender,
 		UniversityID: p.UniversityID,
 		Programmes:   make([]Programme, 0, len(programmes)),
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
@@ -37,10 +38,18 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 	return out, nil
 }
 
+type Gender string
+
+const (
+	GenderMale   Gender = "male"
+	GenderFemale Gender = "female"
+)
+
 type profileChange struct {
 	Language      *string
 	FirstName     *string
 	LastName      *string
+	Gender        *Gender
 	Bio           *string
 	Interests     *[]string
 	Privacy       Privacy
@@ -94,6 +103,11 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 
 	var previous *uuid.UUID
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if change.Gender != nil {
+			if err := m.profiles.setGender(ctx, userID, *change.Gender); err != nil {
+				return err
+			}
+		}
 		if err := m.profiles.update(ctx, userID, fields); err != nil {
 			return err
 		}

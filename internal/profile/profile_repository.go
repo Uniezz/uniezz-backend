@@ -20,6 +20,7 @@ type profileRow struct {
 	Email         *string
 	FirstName     *string
 	LastName      *string
+	Gender        *Gender
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
 	Bio           *string
@@ -30,7 +31,7 @@ type profileRow struct {
 
 const profileSelect = `
 	SELECT u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id,
-		u.bio, u.interests, u.privacy, u.language, u.created_at, avatar.kind, avatar.object_key
+		u.bio, u.interests, u.privacy, u.created_at, u.gender, u.language, avatar.kind, avatar.object_key
 	FROM users u
 	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id`
 
@@ -38,7 +39,7 @@ func scanProfile(row pgx.Row) (*profileRow, error) {
 	var p profileRow
 	var avatarKind, avatarKey *string
 	err := row.Scan(&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID,
-		&p.Bio, &p.Interests, &p.Privacy, &p.Language, &p.CreatedAt, &avatarKind, &avatarKey)
+		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &p.Gender, &p.Language, &avatarKind, &avatarKey)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +141,17 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 
 	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.Interests, f.Privacy, f.Language); err != nil {
 		return fmt.Errorf("update profile: %w", err)
+	}
+	return nil
+}
+
+func (r *profileRepository) setGender(ctx context.Context, userID uuid.UUID, gender Gender) error {
+	result, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET gender = $2 WHERE id = $1 AND gender IS NULL`, userID, gender)
+	if err != nil {
+		return fmt.Errorf("set gender: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrGenderImmutable
 	}
 	return nil
 }

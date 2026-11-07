@@ -140,6 +140,7 @@ type postFilter struct {
 	Search       string
 	Featured     bool
 	ViewerID     uuid.UUID
+	AuthorID     string
 	UniversityID string
 	Type         string
 	From         *time.Time
@@ -155,6 +156,9 @@ func postWhere(f postFilter, args []any) (string, []any) {
 	}
 
 	var where []string
+	if f.AuthorID != "" {
+		where = append(where, "p.author_id = "+arg(f.AuthorID))
+	}
 	switch f.UniversityID {
 	case "":
 	case allUniversities:

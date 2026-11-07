@@ -199,6 +199,7 @@ func (m Module) post(ctx context.Context, viewerID, postID uuid.UUID) (*Post, er
 type postQuery struct {
 	Search     string
 	ViewerID   uuid.UUID
+	AuthorID   string
 	University string
 	Type       string
 	From       *time.Time
@@ -216,7 +217,7 @@ func (q postQuery) filter() (postFilter, error) {
 	if q.From != nil && q.To != nil && !q.From.Before(*q.To) {
 		return postFilter{}, ErrInvalidInput
 	}
-	return postFilter{ViewerID: q.ViewerID, Search: strings.TrimSpace(q.Search), UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
+	return postFilter{ViewerID: q.ViewerID, Search: strings.TrimSpace(q.Search), AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
 }
 
 func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
