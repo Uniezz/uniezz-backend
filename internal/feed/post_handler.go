@@ -96,6 +96,7 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 
 type listPostsInput struct {
 	httpapi.PageQuery
+	AuthorID   string    `query:"authorId" format:"uuid" doc:"Only posts by this user"`
 	University string    `query:"university" maxLength:"32" doc:"Posts targeted to this university or to all; all alone returns only posts targeted to everyone" example:"umcs"`
 	Type       string    `query:"type" enum:"announcement,event,question"`
 	From       time.Time `query:"from" doc:"Created at or after this time"`
@@ -127,6 +128,7 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 
 	items, next, err := h.feed.listPosts(ctx, postQuery{
 		ViewerID:   userID,
+		AuthorID:   in.AuthorID,
 		University: in.University,
 		Type:       in.Type,
 		From:       optionalTime(in.From),
