@@ -148,16 +148,6 @@ type postFilter struct {
 	Limit        int
 }
 
-var universityIDs, universityNames = universityColumns()
-
-func universityColumns() (ids, names []string) {
-	for _, u := range auth.GetUniversities() {
-		ids = append(ids, string(u.ID))
-		names = append(names, u.Name)
-	}
-	return ids, names
-}
-
 func postWhere(f postFilter, args []any) (string, []any) {
 	arg := func(v any) string {
 		args = append(args, v)
@@ -185,19 +175,18 @@ func postWhere(f postFilter, args []any) (string, []any) {
 		where = append(where, "p.created_at < "+arg(*f.To))
 	}
 	if f.Search != "" {
-		normalized := "public.search_text(" + arg(f.Search) + ")"
-		// Escape after normalization, which also converts fullwidth punctuation.
-		pattern := "('%' || replace(replace(replace(" + normalized + ", '!', '!!'), '%', '!%'), '_', '!_') || '%') ESCAPE '!'"
+		pattern := database.SearchPattern(arg(f.Search))
+		ids, names := auth.UniversityIDsAndNames()
 		// UNION lets each search branch use its own index; IN avoids duplicate posts.
 		where = append(where, `p.id IN (
 			SELECT id FROM feed_posts
 			WHERE public.search_text(title || ' ' || content) LIKE `+pattern+`
 			UNION ALL
 			SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
-			WHERE public.search_text(COALESCE(author.first_name, '') || ' ' || COALESCE(author.last_name, '')) LIKE `+pattern+`
+			WHERE author.name_search LIKE `+pattern+`
 			UNION ALL
 			SELECT id FROM feed_posts WHERE university_id IN (
-				SELECT id FROM unnest(`+arg(universityIDs)+`::text[], `+arg(universityNames)+`::text[]) AS universities(id, name)
+				SELECT id FROM unnest(`+arg(ids)+`::text[], `+arg(names)+`::text[]) AS universities(id, name)
 				WHERE public.search_text(id) LIKE `+pattern+` OR public.search_text(name) LIKE `+pattern+`))`)
 	}
 	if f.After != nil {

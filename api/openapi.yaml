@@ -2714,15 +2714,15 @@ paths:
               - umcs
             maxLength: 32
             type: string
-        - description: Case-insensitive match on first and last name
+        - description: Up to 5 words of at least 3 characters. Every word must match the name, university, programme, faculty (unless hidden) or interests, ignoring case and accents. Students whose name matches every word come first.
           explode: false
           in: query
-          name: name
+          name: q
           schema:
-            description: Case-insensitive match on first and last name
+            description: Up to 5 words of at least 3 characters. Every word must match the name, university, programme, faculty (unless hidden) or interests, ignoring case and accents. Students whose name matches every word come first.
             examples:
-              - kowal
-            maxLength: 100
+              - kowal informatyka
+            maxLength: 200
             type: string
       responses:
         "200":
