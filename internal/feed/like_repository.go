@@ -2,10 +2,13 @@ package feed
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type likeTarget struct {
@@ -27,22 +30,52 @@ func newLikeRepository(db database.DB) *likeRepository {
 	return &likeRepository{db: db}
 }
 
-func (r *likeRepository) add(ctx context.Context, t likeTarget, targetID, userID uuid.UUID) (bool, error) {
-	result, err := r.db.Conn(ctx).Exec(ctx,
-		`INSERT INTO `+t.likes+` (`+t.column+`, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, targetID, userID)
-	if err != nil {
-		return false, fmt.Errorf("add like: %w", err)
-	}
-	return result.RowsAffected() == 1, nil
+func (r *likeRepository) add(ctx context.Context, t likeTarget, targetID, userID uuid.UUID) (*time.Time, error) {
+	return r.change(ctx, "add like",
+		`INSERT INTO `+t.likes+` (`+t.column+`, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING created_at`, targetID, userID)
 }
 
-func (r *likeRepository) remove(ctx context.Context, t likeTarget, targetID, userID uuid.UUID) (bool, error) {
-	result, err := r.db.Conn(ctx).Exec(ctx,
-		`DELETE FROM `+t.likes+` WHERE `+t.column+` = $1 AND user_id = $2`, targetID, userID)
-	if err != nil {
-		return false, fmt.Errorf("remove like: %w", err)
+func (r *likeRepository) remove(ctx context.Context, t likeTarget, targetID, userID uuid.UUID) (*time.Time, error) {
+	return r.change(ctx, "remove like",
+		`DELETE FROM `+t.likes+` WHERE `+t.column+` = $1 AND user_id = $2 RETURNING created_at`, targetID, userID)
+}
+
+func (r *likeRepository) change(ctx context.Context, op, query string, targetID, userID uuid.UUID) (*time.Time, error) {
+	var likedAt time.Time
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, targetID, userID).Scan(&likedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return result.RowsAffected() == 1, nil
+	return &likedAt, nil
+}
+
+func weekOf(timestamp string) string {
+	return `date_trunc('week', ` + timestamp + ` AT TIME ZONE 'Europe/Warsaw')::date`
+}
+
+func (r *likeRepository) countWeekly(ctx context.Context, postID uuid.UUID, likedAt time.Time, delta int) error {
+	query := `
+		UPDATE feed_post_weekly_likes SET likes = likes + $3
+		WHERE week = ` + weekOf("$2::timestamptz") + ` AND post_id = $1`
+	if delta > 0 {
+		query = `
+			INSERT INTO feed_post_weekly_likes (week, post_id, post_created_at, likes)
+			SELECT ` + weekOf("$2::timestamptz") + `, id, created_at, $3 FROM feed_posts WHERE id = $1
+			ON CONFLICT (week, post_id) DO UPDATE SET likes = feed_post_weekly_likes.likes + EXCLUDED.likes`
+	}
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, postID, likedAt, delta); err != nil {
+		return fmt.Errorf("count weekly likes: %w", err)
+	}
+	return nil
+}
+
+func (r *likeRepository) pruneWeeklyBeforeThisWeek(ctx context.Context) error {
+	if _, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM feed_post_weekly_likes WHERE week < `+weekOf("NOW()")); err != nil {
+		return fmt.Errorf("prune weekly likes: %w", err)
+	}
+	return nil
 }
 
 func (r *likeRepository) count(ctx context.Context, t likeTarget, targetID uuid.UUID, delta int) (int, error) {

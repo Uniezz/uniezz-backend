@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -20,6 +21,7 @@ type Profile struct {
 	FirstName    *string     `json:"firstName" nullable:"true" example:"Jan"`
 	LastName     *string     `json:"lastName" nullable:"true" example:"Kowalski"`
 	Gender       *Gender     `json:"gender" nullable:"true" enum:"male,female" doc:"Set once; null until set. Visible to other students, with no privacy toggle."`
+	Language     Language    `json:"language" enum:"en,pl,uk,ru" doc:"Interface language; defaults to pl"`
 	UniversityID string      `json:"universityId" example:"umcs"`
 	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
 	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
@@ -45,12 +47,12 @@ var getMeOperation = auth.Protected(huma.Operation{
 func (h *profileHandler) getMe(ctx context.Context, _ *struct{}) (*getMeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	p, err := h.profile.profile(ctx, userID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &getMeOutput{Body: *p}, nil
 }
@@ -60,6 +62,7 @@ type updateMeInput struct {
 		FirstName     *string    `json:"firstName,omitempty" minLength:"1" maxLength:"100"`
 		LastName      *string    `json:"lastName,omitempty" minLength:"1" maxLength:"100"`
 		Gender        *Gender    `json:"gender,omitempty" enum:"male,female" doc:"Can be set only once: when a gender is already saved, returns 400 gender_immutable"`
+		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru"`
 		Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
 		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
 		Privacy       Privacy    `json:"privacy,omitempty"`
@@ -84,25 +87,26 @@ var updateMeOperation = auth.Protected(huma.Operation{
 func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*updateMeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	err := h.profile.updateProfile(ctx, userID, profileChange{
 		FirstName:     in.Body.FirstName,
 		LastName:      in.Body.LastName,
 		Gender:        in.Body.Gender,
+		Language:      in.Body.Language,
 		Bio:           in.Body.Bio,
 		Interests:     in.Body.Interests,
 		Privacy:       in.Body.Privacy,
 		AvatarMediaID: in.Body.AvatarMediaID,
 	})
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	p, err := h.profile.profile(ctx, userID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &updateMeOutput{Body: *p}, nil
 }
@@ -120,11 +124,11 @@ var deleteAvatarOperation = auth.Protected(huma.Operation{
 func (h *profileHandler) deleteAvatar(ctx context.Context, _ *struct{}) (*struct{}, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	if err := h.profile.removeAvatar(ctx, userID); err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
 }

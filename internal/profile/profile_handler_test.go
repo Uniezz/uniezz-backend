@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/database"
@@ -24,7 +25,7 @@ func TestGetMe(t *testing.T) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		want := []string{"avatarUrl", "bio", "createdAt", "email", "firstName", "gender", "id", "interests", "lastName", "privacy", "programmes", "universityId"}
+		want := []string{"avatarUrl", "bio", "createdAt", "email", "firstName", "gender", "id", "interests", "language", "lastName", "privacy", "programmes", "universityId"}
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
 		}
@@ -166,5 +167,37 @@ func TestDeleteAvatar(t *testing.T) {
 
 	if rec := e.api.Delete("/profile/avatar", u.bearer); rec.Code != http.StatusNoContent {
 		t.Errorf("deleting a missing avatar should still be 204, got %d", rec.Code)
+	}
+}
+
+func TestProfileLanguage(t *testing.T) {
+	e := newTestEnv(t)
+	u := e.otpUser(t)
+	p := decode[Profile](t, e.api.Get("/profile/me", u.bearer), 200)
+	if p.Language != "pl" {
+		t.Fatalf("default language = %q", p.Language)
+	}
+	for _, language := range []Language{LanguageEnglish, LanguagePolish, LanguageUkrainian, LanguageRussian} {
+		p = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"language": language}), 200)
+		if p.Language != language {
+			t.Errorf("updated language = %q", p.Language)
+		}
+		// Another device has its own session for the same account.
+		token := auth.GenerateSessionToken()
+		hash := token.Hash()
+		if _, err := auth.NewSessionRepository(database.New(e.pool)).CreateSession(context.Background(), u.id, hash[:], time.Now().Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		p = decode[Profile](t, e.api.Get("/profile/me", "Authorization: Bearer "+token.String()), 200)
+		if p.Language != language {
+			t.Errorf("saved language = %q", p.Language)
+		}
+	}
+	for _, language := range []string{"", "de", "EN", "en-US"} {
+		expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{"language": language}), 400, "invalid_input")
+	}
+	p = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"firstName": "Anna"}), 200)
+	if p.Language != "ru" {
+		t.Error("unrelated patch reset language")
 	}
 }

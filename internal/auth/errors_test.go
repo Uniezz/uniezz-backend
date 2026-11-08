@@ -34,9 +34,9 @@ func TestErrorResponse(t *testing.T) {
 		t.Run(tc.err.Error(), func(t *testing.T) {
 			// Flows always wrap errors with detail, so test the wrapped form too.
 			for _, err := range []error{tc.err, fmt.Errorf("usos callback: %w", tc.err)} {
-				status, code := errorResponse(err)
+				status, code := errorResponses.Lookup(err)
 				if status != tc.wantStatus || code != tc.wantCode {
-					t.Errorf("errorResponse(%q) = %d %q, want %d %q", err, status, code, tc.wantStatus, tc.wantCode)
+					t.Errorf("errorResponses.Lookup(%q) = %d %q, want %d %q", err, status, code, tc.wantStatus, tc.wantCode)
 				}
 			}
 		})
@@ -51,7 +51,7 @@ func TestErrorResponse_InvalidIdentityWinsOverItsCause(t *testing.T) {
 		t.Fatalf("precondition: expected the error to wrap ErrUnknownUniversity, got: %v", err)
 	}
 
-	status, code := errorResponse(err)
+	status, code := errorResponses.Lookup(err)
 	if status != http.StatusInternalServerError || code != "internal_error" {
 		t.Errorf("expected 500 internal_error, got %d %q", status, code)
 	}
@@ -67,7 +67,7 @@ func TestErrorResponses_EveryAuthErrorIsMapped(t *testing.T) {
 	for _, sentinel := range sentinels {
 		found := false
 		for _, e := range errorResponses {
-			if e.err == sentinel {
+			if e.Err == sentinel {
 				found = true
 				break
 			}
@@ -79,7 +79,7 @@ func TestErrorResponses_EveryAuthErrorIsMapped(t *testing.T) {
 }
 
 func TestAPIError(t *testing.T) {
-	err := apiError(fmt.Errorf("student_status=1 for usos user 123456: %w", ErrNotStudent))
+	err := errorResponses.Error(fmt.Errorf("student_status=1 for usos user 123456: %w", ErrNotStudent))
 
 	var se huma.StatusError
 	if !errors.As(err, &se) {

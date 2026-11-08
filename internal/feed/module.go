@@ -55,6 +55,12 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Mod
 	if err := jobs.Schedule(runner, PruneKeysArgs{}, 24*time.Hour); err != nil {
 		return Module{}, fmt.Errorf("feed: %w", err)
 	}
+	if err := jobs.Register(runner, m.pruneWeeklyLikes, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("feed: %w", err)
+	}
+	if err := jobs.Schedule(runner, PruneWeeklyLikesArgs{}, 24*time.Hour); err != nil {
+		return Module{}, fmt.Errorf("feed: %w", err)
+	}
 	return m, nil
 }
 
@@ -65,6 +71,8 @@ func (m Module) Register(api huma.API) {
 
 	huma.Register(api, createPostOperation, posts.createPost)
 	huma.Register(api, listPostsOperation, posts.listPosts)
+	huma.Register(api, featuredPostsOperation, posts.featuredPosts)
+	huma.Register(api, adjacentPostsOperation, posts.adjacentPosts)
 	huma.Register(api, getPostOperation, posts.getPost)
 	huma.Register(api, updatePostOperation, posts.updatePost)
 	huma.Register(api, deletePostOperation, posts.deletePost)

@@ -44,7 +44,7 @@ func (h *uploadHandler) createUpload(ctx context.Context, in *createUploadInput)
 
 	upload, err := h.media.CreateUpload(ctx, userID, in.Body.Kind, in.Body.ContentType, in.Body.Size)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &createUploadOutput{Body: upload}, nil
 }

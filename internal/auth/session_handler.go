@@ -33,7 +33,7 @@ var exchangeOperation = huma.Operation{
 func (h *sessionHandler) exchange(ctx context.Context, in *exchangeInput) (*exchangeOutput, error) {
 	session, err := h.logins.exchange(ctx, in.Body.Code)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &exchangeOutput{Body: session}, nil
 }

@@ -76,3 +76,21 @@ func NonNil(s []string) []string {
 	}
 	return s
 }
+
+const (
+	minSearchWord  = 3
+	maxSearchWords = 5
+)
+
+func SearchWords(q string) ([]string, error) {
+	words := strings.Fields(q)
+	if len(words) > maxSearchWords {
+		return nil, ErrInvalid
+	}
+	for _, word := range words {
+		if utf8.RuneCountInString(word) < minSearchWord {
+			return nil, ErrInvalid
+		}
+	}
+	return words, nil
+}

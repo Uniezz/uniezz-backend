@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -75,12 +76,12 @@ var listProgrammesOperation = auth.Protected(huma.Operation{
 func (h *programmeHandler) listProgrammes(ctx context.Context, _ *struct{}) (*listProgrammesOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	rows, err := h.programmes.list(ctx, userID)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 
 	out := &listProgrammesOutput{}
@@ -112,16 +113,16 @@ var createProgrammeOperation = auth.Protected(huma.Operation{
 func (h *programmeHandler) createProgramme(ctx context.Context, in *createProgrammeInput) (*createProgrammeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	f, err := in.Body.fields()
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	row, err := h.programmes.create(ctx, userID, f)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &createProgrammeOutput{Body: toProgramme(*row)}, nil
 }
@@ -148,16 +149,16 @@ var replaceProgrammeOperation = auth.Protected(huma.Operation{
 func (h *programmeHandler) replaceProgramme(ctx context.Context, in *replaceProgrammeInput) (*replaceProgrammeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	f, err := in.Body.fields()
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	row, err := h.programmes.replace(ctx, userID, in.ID, f)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &replaceProgrammeOutput{Body: toProgramme(*row)}, nil
 }
@@ -179,11 +180,11 @@ var deleteProgrammeOperation = auth.Protected(huma.Operation{
 func (h *programmeHandler) deleteProgramme(ctx context.Context, in *deleteProgrammeInput) (*struct{}, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	if err := h.programmes.delete(ctx, userID, in.ID); err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
 }

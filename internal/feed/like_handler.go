@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -64,12 +65,12 @@ func (h *likeHandler) unlikeComment(ctx context.Context, in *likeInput) (*likeOu
 func (h *likeHandler) set(ctx context.Context, id uuid.UUID, liked bool, set func(context.Context, uuid.UUID, uuid.UUID, bool) (*LikeState, error)) (*likeOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	state, err := set(ctx, userID, id, liked)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &likeOutput{Body: *state}, nil
 }
