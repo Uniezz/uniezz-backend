@@ -4232,6 +4232,7 @@ paths:
         - profile
   /profile/programmes/{id}:
     delete:
+      description: Deleting the last programme is allowed. When deleting the primary programme, the oldest remaining programme becomes primary. The response has no body; clients should fetch the programme list again.
       operationId: deleteMyProgramme
       parameters:
         - in: path

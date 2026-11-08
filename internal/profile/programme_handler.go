@@ -172,6 +172,7 @@ var deleteProgrammeOperation = auth.Protected(huma.Operation{
 	Method:        http.MethodDelete,
 	Path:          "/profile/programmes/{id}",
 	Summary:       "Delete a study programme",
+	Description:   "Deleting the last programme is allowed. When deleting the primary programme, the oldest remaining programme becomes primary. The response has no body; clients should fetch the programme list again.",
 	Tags:          []string{"profile"},
 	DefaultStatus: http.StatusNoContent,
 	Errors:        []int{http.StatusNotFound},

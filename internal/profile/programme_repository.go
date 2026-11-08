@@ -127,14 +127,61 @@ func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID,
 }
 
 func (r *programmeRepository) delete(ctx context.Context, userID, id uuid.UUID) error {
-	result, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM student_programmes WHERE id = $1 AND user_id = $2`, id, userID)
-	if err != nil {
-		return fmt.Errorf("delete programme: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return r.db.WithTx(ctx, func(ctx context.Context) error {
+		var isPrimary bool
+		err := r.db.Conn(ctx).QueryRow(ctx, `
+            SELECT is_primary
+            FROM student_programmes
+            WHERE id = $1 AND user_id = $2
+            FOR UPDATE`, id, userID).Scan(&isPrimary)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("find programme for deletion: %w", err)
+		}
+
+		var promotedID uuid.UUID
+		promote := false
+		if isPrimary {
+			err = r.db.Conn(ctx).QueryRow(ctx, `
+                SELECT id
+                FROM student_programmes
+                WHERE user_id = $1 AND id <> $2
+                ORDER BY created_at, id
+                LIMIT 1
+                FOR UPDATE`, userID, id).Scan(&promotedID)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("find replacement primary programme: %w", err)
+			}
+			promote = err == nil
+		}
+
+		result, err := r.db.Conn(ctx).Exec(ctx, `
+            DELETE FROM student_programmes
+            WHERE id = $1 AND user_id = $2`, id, userID)
+		if err != nil {
+			return fmt.Errorf("delete programme: %w", err)
+		}
+		if result.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+
+		if promote {
+			result, err = r.db.Conn(ctx).Exec(ctx, `
+                UPDATE student_programmes
+                SET is_primary = TRUE
+                WHERE id = $1 AND user_id = $2`, promotedID, userID)
+			if err != nil {
+				return fmt.Errorf("promote replacement primary programme: %w", err)
+			}
+			if result.RowsAffected() != 1 {
+				return fmt.Errorf("promote replacement primary programme: programme was not updated")
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *programmeRepository) insertInitial(ctx context.Context, userID uuid.UUID, programmes []auth.InitialProgramme) error {

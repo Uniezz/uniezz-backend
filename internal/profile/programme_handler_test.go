@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"context"
 	"net/http"
 	"testing"
 )
@@ -86,6 +87,53 @@ func TestProgrammes(t *testing.T) {
 		}
 		if got := list(t, u); len(got) != 0 {
 			t.Errorf("expected no programmes, got %+v", got)
+		}
+	})
+
+	t.Run("deleting primary promotes the oldest remaining programme", func(t *testing.T) {
+		u := e.otpUser(t)
+		primary := create(t, u, map[string]any{
+			"faculty": "A", "programme": "Primary", "isPrimary": true,
+		})
+		oldest := create(t, u, map[string]any{"faculty": "A", "programme": "Oldest"})
+		newer := create(t, u, map[string]any{"faculty": "A", "programme": "Newer"})
+
+		_, err := e.pool.Exec(context.Background(), `
+        UPDATE student_programmes
+        SET created_at = CASE id
+            WHEN $1 THEN NOW() - INTERVAL '2 days'
+            WHEN $2 THEN NOW() - INTERVAL '1 day'
+            ELSE created_at
+        END
+        WHERE id IN ($1, $2)`, oldest.ID, newer.ID)
+		if err != nil {
+			t.Fatalf("set programme creation times: %v", err)
+		}
+
+		if rec := e.api.Delete("/profile/programmes/"+primary.ID.String(), u.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		got := list(t, u)
+		if len(got) != 2 || got[0].ID != oldest.ID || !got[0].IsPrimary || got[1].IsPrimary {
+			t.Errorf("expected oldest remaining programme to be the only primary, got %+v", got)
+		}
+	})
+
+	t.Run("deleting non-primary leaves primary unchanged", func(t *testing.T) {
+		u := e.otpUser(t)
+		primary := create(t, u, map[string]any{
+			"faculty": "A", "programme": "Primary", "isPrimary": true,
+		})
+		other := create(t, u, map[string]any{"faculty": "A", "programme": "Other"})
+
+		if rec := e.api.Delete("/profile/programmes/"+other.ID.String(), u.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		got := list(t, u)
+		if len(got) != 1 || got[0].ID != primary.ID || !got[0].IsPrimary {
+			t.Errorf("expected original primary to remain, got %+v", got)
 		}
 	})
 }
