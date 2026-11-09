@@ -133,7 +133,7 @@ func TestLogins_Integration(t *testing.T) {
 				t.Fatalf("exchange(%q): expected ErrInvalidCode, got: %v", code, err)
 			}
 
-			status, errCode := errorResponse(err)
+			status, errCode := errorResponses.Lookup(err)
 			if status != http.StatusUnauthorized || errCode != "invalid_code" {
 				t.Errorf("exchange(%q): expected 401 invalid_code, got %d %q", code, status, errCode)
 			}

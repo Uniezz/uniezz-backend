@@ -137,7 +137,7 @@ func TestListProfiles(t *testing.T) {
 
 	t.Run("walks every page newest first without gaps or repeats", func(t *testing.T) {
 		var got []uuid.UUID
-		params := url.Values{"name": {tag}, "university": {"umcs"}, "limit": {"2"}}
+		params := url.Values{"q": {tag}, "university": {"umcs"}, "limit": {"2"}}
 		for range 10 {
 			p := list(t, params)
 			for _, item := range p.Items {
@@ -160,13 +160,13 @@ func TestListProfiles(t *testing.T) {
 	})
 
 	t.Run("filters by university and name, treating LIKE wildcards literally", func(t *testing.T) {
-		if p := list(t, url.Values{"name": {tag}}); len(p.Items) != 6 {
+		if p := list(t, url.Values{"q": {tag}}); len(p.Items) != 6 {
 			t.Errorf("expected 6 profiles across universities, got %d", len(p.Items))
 		}
-		if p := list(t, url.Values{"name": {tag}, "university": {"kul"}}); len(p.Items) != 1 || p.Items[0].ID != other.id {
+		if p := list(t, url.Values{"q": {tag}, "university": {"kul"}}); len(p.Items) != 1 || p.Items[0].ID != other.id {
 			t.Errorf("expected only the KUL profile, got %+v", p.Items)
 		}
-		if p := list(t, url.Values{"name": {tag + "%"}}); len(p.Items) != 0 {
+		if p := list(t, url.Values{"q": {tag + "%"}}); len(p.Items) != 0 {
 			t.Errorf("%% must not act as a wildcard, got %d profiles", len(p.Items))
 		}
 	})
@@ -181,7 +181,7 @@ func TestListProfiles(t *testing.T) {
 			avatars[ids[i]] = mediaID
 		}
 
-		p := list(t, url.Values{"name": {tag}, "university": {"umcs"}})
+		p := list(t, url.Values{"q": {tag}, "university": {"umcs"}})
 		for _, item := range p.Items {
 			switch item.ID {
 			case ids[0]:
@@ -206,7 +206,7 @@ func TestListProfiles(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		p := list(t, url.Values{"name": {tag}, "university": {"umcs"}})
+		p := list(t, url.Values{"q": {tag}, "university": {"umcs"}})
 		for _, item := range p.Items {
 			if item.ID == deleted.id {
 				t.Errorf("profile %v is being deleted and must not be listed", deleted.id)

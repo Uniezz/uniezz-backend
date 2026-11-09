@@ -201,6 +201,12 @@ mise.toml             Toolchain versions and tasks
 
 The full API is described in `api/openapi.yaml`.
 
+Gender is optional and visible to other students on public profiles and in
+student search (`null` until set). `PATCH /profile/me` accepts `male` or `female` once.
+After it is set, any supplied gender, including the same value, returns
+`400 {"error":"gender_immutable"}`: gender cannot be changed or cleared. Omitting the
+field or sending `null` leaves it unchanged. Other values return `400 {"error":"invalid_input"}`. There is no `showGender` privacy toggle.
+
 ## Testing
 
 ```sh

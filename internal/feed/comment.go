@@ -132,15 +132,11 @@ func (m Module) commentPage(ctx context.Context, cursor string, limit int, list 
 		return nil, nil, err
 	}
 
-	var next *string
-	if len(rows) > limit {
-		rows = rows[:limit]
-		last := rows[len(rows)-1]
-		encoded, err := httpapi.EncodeCursor(pageCursor{CreatedAt: last.CreatedAt, ID: last.ID})
-		if err != nil {
-			return nil, nil, err
-		}
-		next = &encoded
+	rows, next, err := httpapi.Page(rows, limit, func(last commentRow) any {
+		return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	comments := make([]Comment, 0, len(rows))

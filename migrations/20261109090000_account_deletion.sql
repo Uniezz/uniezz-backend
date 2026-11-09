@@ -9,9 +9,9 @@ ALTER TABLE users ADD CONSTRAINT check_identity_present CHECK (
 );
 
 CREATE OR REPLACE VIEW public_profiles AS
-SELECT id, first_name, last_name, university_id, avatar_media_id
+SELECT id, first_name, last_name, university_id, avatar_media_id, name_search
 FROM users
-WHERE deleted_at IS NULL; 
+WHERE deleted_at IS NULL;
 
 ALTER TABLE media DROP CONSTRAINT media_owner_user_id_fkey;
 ALTER TABLE media ADD CONSTRAINT media_owner_user_id_fkey
@@ -23,7 +23,7 @@ ALTER TABLE media ADD CONSTRAINT media_owner_user_id_fkey
     FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 CREATE OR REPLACE VIEW public_profiles AS
-SELECT id, first_name, last_name, university_id, avatar_media_id
+SELECT id, first_name, last_name, university_id, avatar_media_id, name_search
 FROM users;
 
 ALTER TABLE users DROP CONSTRAINT check_identity_present;

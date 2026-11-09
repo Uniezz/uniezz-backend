@@ -196,7 +196,9 @@ func (m Module) post(ctx context.Context, viewerID, postID uuid.UUID) (*Post, er
 }
 
 type postQuery struct {
+	Search     string
 	ViewerID   uuid.UUID
+	AuthorID   string
 	University string
 	Type       string
 	From       *time.Time
@@ -205,17 +207,28 @@ type postQuery struct {
 	Limit      int
 }
 
-func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
+func (q postQuery) filter() (postFilter, error) {
 	if q.University != "" && q.University != allUniversities {
 		if _, err := auth.GetUniversityByID(auth.UniversityID(q.University)); err != nil {
-			return nil, nil, ErrInvalidInput
+			return postFilter{}, ErrInvalidInput
 		}
 	}
 	if q.From != nil && q.To != nil && !q.From.Before(*q.To) {
-		return nil, nil, ErrInvalidInput
+		return postFilter{}, ErrInvalidInput
 	}
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
+		return postFilter{}, ErrInvalidInput
+	}
+	return postFilter{ViewerID: q.ViewerID, Words: words, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
+}
 
-	filter := postFilter{ViewerID: q.ViewerID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To, Limit: q.Limit + 1}
+func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
+	filter, err := q.filter()
+	if err != nil {
+		return nil, nil, err
+	}
+	filter.Limit = q.Limit + 1
 	if q.Cursor != "" {
 		var after pageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
@@ -229,15 +242,11 @@ func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, er
 		return nil, nil, err
 	}
 
-	var next *string
-	if len(rows) > q.Limit {
-		rows = rows[:q.Limit]
-		last := rows[len(rows)-1]
-		cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: last.CreatedAt, ID: last.ID})
-		if err != nil {
-			return nil, nil, err
-		}
-		next = &cursor
+	rows, next, err := httpapi.Page(rows, q.Limit, func(last postRow) any {
+		return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	posts, err := m.toPosts(ctx, rows)
@@ -424,4 +433,30 @@ func (m Module) removePost(ctx context.Context, postID uuid.UUID, allow func(aut
 		}
 	}
 	return nil
+}
+
+func (m Module) featuredPosts(ctx context.Context) ([]FeaturedPost, error) {
+	rows, err := m.posts.featured(ctx, 5)
+	if err != nil {
+		return nil, err
+	}
+	cards := make([]FeaturedPost, 0, len(rows))
+	for _, row := range rows {
+		cards = append(cards, FeaturedPost{
+			ID:         row.ID,
+			Title:      row.Title,
+			ImageURL:   m.mediaURL(ctx, row.Image),
+			University: row.UniversityID,
+			EventDate:  row.EventDate,
+		})
+	}
+	return cards, nil
+}
+
+func (m Module) adjacentPosts(ctx context.Context, postID uuid.UUID, q postQuery) (*PostNavigation, error) {
+	filter, err := q.filter()
+	if err != nil {
+		return nil, err
+	}
+	return m.posts.adjacent(ctx, postID, filter)
 }

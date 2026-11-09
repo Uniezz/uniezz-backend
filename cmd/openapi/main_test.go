@@ -122,3 +122,34 @@ func TestRun(t *testing.T) {
 		}
 	})
 }
+
+func TestFeedDiscoveryParameters(t *testing.T) {
+	spec, err := buildSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Embedded request fields must remain visible to Huma and API clients.
+	var doc struct {
+		Paths map[string]struct {
+			Get struct {
+				Parameters []struct {
+					Name string `yaml:"name"`
+				} `yaml:"parameters"`
+			} `yaml:"get"`
+		} `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/feed/posts", "/feed/posts/{id}/navigation"} {
+		names := map[string]bool{}
+		for _, p := range doc.Paths[path].Get.Parameters {
+			names[p.Name] = true
+		}
+		for _, name := range []string{"q", "university", "type", "from", "to"} {
+			if !names[name] {
+				t.Errorf("%s is missing parameter %s", path, name)
+			}
+		}
+	}
+}

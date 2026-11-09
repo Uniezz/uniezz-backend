@@ -162,6 +162,16 @@ func GetUniversities() []University {
 	return list
 }
 
+var universityIDs, universityNames = universityColumns()
+
+func universityColumns() (ids, names []string) {
+	for _, u := range GetUniversities() {
+		ids = append(ids, string(u.ID))
+		names = append(names, u.Name)
+	}
+	return ids, names
+}
+
 func GetUniversityByID(id UniversityID) (University, error) {
 	u, exists := universities[id]
 	if !exists {

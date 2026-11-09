@@ -23,6 +23,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
+		Gender:       p.Gender,
 		UniversityID: p.UniversityID,
 		AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		Bio:          p.Bio,
@@ -46,13 +47,17 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 
 type profileQuery struct {
 	UniversityID string
-	Name         string
+	Search       string
 	Cursor       string
 	Limit        int
 }
 
 func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSummary, *string, error) {
-	filter := profileFilter{UniversityID: q.UniversityID, Name: q.Name, Limit: q.Limit + 1}
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
+		return nil, nil, ErrInvalidInput
+	}
+	filter := profileFilter{UniversityID: q.UniversityID, Words: words, Limit: q.Limit + 1}
 	if q.Cursor != "" {
 		var after profileCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
@@ -66,15 +71,11 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 		return nil, nil, err
 	}
 
-	var next *string
-	if len(rows) > q.Limit {
-		rows = rows[:q.Limit]
-		last := rows[len(rows)-1]
-		cursor, err := httpapi.EncodeCursor(profileCursor{CreatedAt: last.CreatedAt, ID: last.ID})
-		if err != nil {
-			return nil, nil, err
-		}
-		next = &cursor
+	rows, next, err := httpapi.Page(rows, q.Limit, func(last profileRow) any {
+		return profileCursor{SearchRank: last.SearchRank, CreatedAt: last.CreatedAt, ID: last.ID}
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	items := make([]ProfileSummary, 0, len(rows))
@@ -83,6 +84,7 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 			ID:           p.ID,
 			FirstName:    p.FirstName,
 			LastName:     p.LastName,
+			Gender:       p.Gender,
 			UniversityID: p.UniversityID,
 			AvatarURL:    m.avatarURL(ctx, p.Avatar),
 		})

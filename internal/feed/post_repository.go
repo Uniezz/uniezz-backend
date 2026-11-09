@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
@@ -56,15 +56,8 @@ func scanPost(row pgx.Row) (*postRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.Author.Avatar = mediaRef(avatarKind, avatarKey)
+	p.Author.Avatar = media.RefOf(avatarKind, avatarKey)
 	return &p, nil
-}
-
-func mediaRef(kind, key *string) *media.Ref {
-	if kind == nil || key == nil {
-		return nil
-	}
-	return &media.Ref{Kind: media.Kind(*kind), ObjectKey: *key}
 }
 
 type postRepository struct {
@@ -136,7 +129,9 @@ type pageCursor struct {
 }
 
 type postFilter struct {
+	Words        []string
 	ViewerID     uuid.UUID
+	AuthorID     string
 	UniversityID string
 	Type         string
 	From         *time.Time
@@ -145,14 +140,12 @@ type postFilter struct {
 	Limit        int
 }
 
-func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
-	args := []any{f.ViewerID}
-	arg := func(v any) string {
-		args = append(args, v)
-		return "$" + strconv.Itoa(len(args))
-	}
-
+func postWhere(f postFilter, args *database.Args) string {
+	arg := args.Add
 	var where []string
+	if f.AuthorID != "" {
+		where = append(where, "p.author_id = "+arg(f.AuthorID))
+	}
 	switch f.UniversityID {
 	case "":
 	case allUniversities:
@@ -169,15 +162,31 @@ func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, err
 	if f.To != nil {
 		where = append(where, "p.created_at < "+arg(*f.To))
 	}
+	for _, word := range f.Words {
+		pattern := database.SearchPattern(arg(word))
+		// UNION lets each search branch use its own index; IN avoids duplicate posts.
+		where = append(where, `p.id IN (
+			SELECT id FROM feed_posts
+			WHERE public.search_text(title || ' ' || content) LIKE `+pattern+`
+			UNION ALL
+			SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
+			WHERE author.name_search LIKE `+pattern+`
+			UNION ALL
+			SELECT id FROM feed_posts WHERE university_id IN (`+auth.MatchingUniversities(args, pattern)+`))`)
+	}
 	if f.After != nil {
 		where = append(where, "(p.created_at, p.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
 
-	query := postSelect
-	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
+	if len(where) == 0 {
+		return ""
 	}
-	query += " ORDER BY p.created_at DESC, p.id DESC LIMIT " + arg(f.Limit)
+	return " WHERE " + strings.Join(where, " AND ")
+}
+
+func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
+	args := database.Args{f.ViewerID}
+	query := postSelect + postWhere(f, &args) + " ORDER BY p.created_at DESC, p.id DESC LIMIT " + args.Add(f.Limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -339,4 +348,73 @@ func (r *postRepository) reportTarget(ctx context.Context, postID uuid.UUID) (uu
 		return uuid.Nil, nil, fmt.Errorf("get reported post: %w", err)
 	}
 	return authorID, map[string]any{"title": title, "content": content}, nil
+}
+
+func (r *postRepository) adjacent(ctx context.Context, postID uuid.UUID, f postFilter) (*PostNavigation, error) {
+	var args database.Args
+	where := postWhere(f, &args)
+	query := `WITH filtered AS NOT MATERIALIZED (
+		SELECT p.id, p.created_at FROM feed_posts p
+		JOIN public_profiles a ON a.id = p.author_id` + where + `
+	)
+	SELECT
+		(SELECT id FROM filtered WHERE (created_at, id) > (current.created_at, current.id)
+		 ORDER BY created_at ASC, id ASC LIMIT 1),
+		(SELECT id FROM filtered WHERE (created_at, id) < (current.created_at, current.id)
+		 ORDER BY created_at DESC, id DESC LIMIT 1)
+	FROM filtered current WHERE current.id = ` + args.Add(postID)
+	var out PostNavigation
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, args...).Scan(&out.PreviousID, &out.NextID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get adjacent posts: %w", err)
+	}
+	return &out, nil
+}
+
+type featuredRow struct {
+	ID           uuid.UUID
+	Title        string
+	UniversityID string
+	EventDate    *time.Time
+	Image        *media.Ref
+}
+
+func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `
+		SELECT p.id, p.title, p.university_id, p.event_date, image.kind, image.object_key
+		FROM feed_post_weekly_likes weekly
+		JOIN feed_posts p ON p.id = weekly.post_id
+		JOIN public_profiles a ON a.id = p.author_id
+		LEFT JOIN LATERAL (
+			SELECT m.kind, m.object_key
+			FROM feed_post_media pm
+			JOIN ready_media m ON m.id = pm.media_id
+			WHERE pm.post_id = p.id
+			ORDER BY pm.position
+			LIMIT 1
+		) image ON true
+		WHERE weekly.week = `+weekOf("NOW()")+` AND weekly.likes > 0
+		ORDER BY weekly.likes DESC, weekly.post_created_at DESC, weekly.post_id DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list featured posts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []featuredRow
+	for rows.Next() {
+		var f featuredRow
+		var imageKind, imageKey *string
+		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &imageKind, &imageKey); err != nil {
+			return nil, fmt.Errorf("scan featured post: %w", err)
+		}
+		f.Image = media.RefOf(imageKind, imageKey)
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list featured posts: %w", err)
+	}
+	return out, nil
 }

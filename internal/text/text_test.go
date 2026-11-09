@@ -56,3 +56,31 @@ func TestTags(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchWords(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want []string
+		err  bool
+	}{
+		{in: "", want: nil},
+		{in: "   ", want: nil},
+		{in: "  sesja   umcs ", want: []string{"sesja", "umcs"}},
+		{in: "żółć", want: []string{"żółć"}},
+		{in: "ab", err: true},
+		{in: "sesja ab", err: true},
+		{in: "one two three four five", want: []string{"one", "two", "three", "four", "five"}},
+		{in: "one two three four five six", err: true},
+	} {
+		got, err := SearchWords(tc.in)
+		if tc.err {
+			if !errors.Is(err, ErrInvalid) {
+				t.Errorf("SearchWords(%q): expected ErrInvalid, got %v", tc.in, err)
+			}
+			continue
+		}
+		if err != nil || !slices.Equal(got, tc.want) {
+			t.Errorf("SearchWords(%q) = %q, %v; want %q", tc.in, got, err, tc.want)
+		}
+	}
+}

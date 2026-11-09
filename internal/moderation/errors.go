@@ -15,27 +15,10 @@ var (
 	ErrRateLimited   = errors.New("too many reports")
 )
 
-var errorResponses = []struct {
-	err    error
-	status int
-	code   string
-}{
-	{ErrNotFound, http.StatusNotFound, "not_found"},
-	{ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
-	{ErrSelfReport, http.StatusBadRequest, "self_report"},
-	{ErrAlreadyReport, http.StatusConflict, "already_reported"},
-	{ErrRateLimited, http.StatusTooManyRequests, "rate_limited"},
-}
-
-func apiError(err error) error {
-	for _, e := range errorResponses {
-		if errors.Is(err, e.err) {
-			return httpapi.Error(e.status, e.code, err)
-		}
-	}
-	return httpapi.Error(http.StatusInternalServerError, "internal_error", err)
-}
-
-func unauthorized() error {
-	return httpapi.Error(http.StatusUnauthorized, "unauthorized", nil)
+var errorResponses = httpapi.ErrorResponses{
+	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
+	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
+	{Err: ErrSelfReport, Status: http.StatusBadRequest, Code: "self_report"},
+	{Err: ErrAlreadyReport, Status: http.StatusConflict, Code: "already_reported"},
+	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 }

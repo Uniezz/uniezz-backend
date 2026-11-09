@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -51,7 +52,7 @@ var createReportOperation = auth.Protected(huma.Operation{
 func (h *reportHandler) createReport(ctx context.Context, in *createReportInput) (*createReportOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
-		return nil, unauthorized()
+		return nil, httpapi.Unauthorized()
 	}
 
 	report, err := h.moderation.createReport(ctx, userID, reportInput{
@@ -61,7 +62,7 @@ func (h *reportHandler) createReport(ctx context.Context, in *createReportInput)
 		Details:    in.Body.Details,
 	})
 	if err != nil {
-		return nil, apiError(err)
+		return nil, errorResponses.Error(err)
 	}
 	return &createReportOutput{Body: *report}, nil
 }

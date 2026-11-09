@@ -455,6 +455,101 @@ func sorted(s []string) []string {
 	return out
 }
 
+func TestListPostsByAuthor(t *testing.T) {
+	e := newTestEnv(t)
+	author := e.user(t)
+	viewer := e.newUser(t, "kul")
+	ctx := context.Background()
+
+	makePost := func(user testUser, university, typ, createdAt string) Post {
+		t.Helper()
+		post := e.createPost(t, user, map[string]any{"university": university, "type": typ})
+		if _, err := e.pool.Exec(ctx, "UPDATE feed_posts SET created_at = $2 WHERE id = $1", post.ID, createdAt); err != nil {
+			t.Fatal(err)
+		}
+		return post
+	}
+	oldest := makePost(author, "umcs", "announcement", "2026-01-01T00:00:00Z")
+	first := makePost(author, "umcs", "announcement", "2026-01-02T00:00:00Z")
+	second := makePost(author, "all", "announcement", "2026-01-02T00:00:00Z")
+	newest := makePost(author, "umcs", "question", "2026-01-03T00:00:00Z")
+	makePost(viewer, "all", "announcement", "2026-01-02T00:00:00Z")
+	deleted := makePost(author, "umcs", "announcement", "2026-01-04T00:00:00Z")
+	expectStatus(t, e.api.Delete("/feed/posts/"+deleted.ID.String(), author.bearer), 204)
+
+	tied := []uuid.UUID{first.ID, second.ID}
+	if tied[0].String() < tied[1].String() {
+		tied[0], tied[1] = tied[1], tied[0]
+	}
+	for _, tc := range []struct {
+		name  string
+		query url.Values
+		want  []uuid.UUID
+	}{
+		{"newest first including equal timestamps", url.Values{}, []uuid.UUID{newest.ID, tied[0], tied[1], oldest.ID}},
+		{"university", url.Values{"university": {"all"}}, []uuid.UUID{second.ID}},
+		{"type", url.Values{"type": {"question"}}, []uuid.UUID{newest.ID}},
+		{"combined filters", url.Values{
+			"university": {"umcs"}, "type": {"announcement"},
+			"from": {"2026-01-02T00:00:00Z"}, "to": {"2026-01-03T00:00:00Z"},
+		}, tied},
+		{"unknown author", url.Values{"authorId": {uuid.NewString()}}, nil},
+		{"zero UUID", url.Values{"authorId": {uuid.Nil.String()}}, nil},
+		{"author without posts", url.Values{"authorId": {e.user(t).id.String()}}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if !tc.query.Has("authorId") {
+				tc.query.Set("authorId", author.id.String())
+			}
+			tc.query.Set("limit", "1")
+			var got []uuid.UUID
+			for pageNumber := 0; ; pageNumber++ {
+				if pageNumber > len(tc.want) {
+					t.Fatal("pagination did not end")
+				}
+				page := decode[postPage](t, e.api.Get("/feed/posts?"+tc.query.Encode(), viewer.bearer), 200)
+				if page.Items == nil || len(page.Items) > 1 {
+					t.Fatalf("expected an array of at most one post, got %v", page.Items)
+				}
+				for _, post := range page.Items {
+					if post.Author.ID != author.id {
+						t.Fatalf("unexpected author %s", post.Author.ID)
+					}
+					got = append(got, post.ID)
+				}
+				if page.NextCursor == nil {
+					break
+				}
+				tc.query.Set("cursor", *page.NextCursor)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+
+	expectError(t, e.api.Get("/feed/posts?authorId=not-a-uuid", viewer.bearer), 400, "invalid_input")
+	expectError(t, e.api.Get("/feed/posts?authorId="+author.id.String()), 401, "unauthorized")
+
+	t.Run("deleted author", func(t *testing.T) {
+		if err := e.module.ForgetUser(ctx, author.id); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", author.id); err != nil {
+			t.Fatal(err)
+		}
+		page := decode[postPage](t, e.api.Get("/feed/posts?authorId="+author.id.String(), viewer.bearer), 200)
+		if page.Items == nil || len(page.Items) != 0 || page.NextCursor != nil {
+			t.Fatalf("expected an empty page, got %+v", page)
+		}
+	})
+}
+
 func TestGetPost(t *testing.T) {
 	e := newTestEnv(t)
 	viewer := e.user(t)
