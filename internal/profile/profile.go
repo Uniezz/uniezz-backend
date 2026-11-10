@@ -26,7 +26,8 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		Language:     p.Language,
 		UniversityID: p.UniversityID,
 		Programmes:   make([]Programme, 0, len(programmes)),
-		AvatarURL:    m.avatarURL(ctx, p.Avatar),
+		AvatarURL:    m.mediaURL(ctx, p.Avatar),
+		BannerURL:    m.mediaURL(ctx, p.Banner),
 		Bio:          p.Bio,
 		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
@@ -63,6 +64,7 @@ type profileChange struct {
 	Interests     *[]string
 	Privacy       Privacy
 	AvatarMediaID *uuid.UUID
+	BannerMediaID *uuid.UUID
 }
 
 func (c profileChange) fields() (profileFields, error) {
@@ -96,14 +98,16 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		return err
 	}
 
-	var avatarID *uuid.UUID
-	if change.AvatarMediaID != nil {
-		if avatarID, err = m.claimAvatar(ctx, userID, *change.AvatarMediaID); err != nil {
-			return err
-		}
+	avatarID, err := m.claimMedia(ctx, userID, avatarSlot, change.AvatarMediaID)
+	if err != nil {
+		return err
+	}
+	bannerID, err := m.claimMedia(ctx, userID, bannerSlot, change.BannerMediaID)
+	if err != nil {
+		return err
 	}
 
-	var previous *uuid.UUID
+	var previousAvatar, previousBanner *uuid.UUID
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if change.Gender != nil {
 			if err := m.profiles.setGender(ctx, userID, *change.Gender); err != nil {
@@ -113,18 +117,25 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		if err := m.profiles.update(ctx, userID, fields); err != nil {
 			return err
 		}
-		if avatarID == nil {
-			return nil
-		}
 		var err error
-		previous, err = m.swapAvatar(ctx, userID, avatarID)
-		return err
+		if avatarID != nil {
+			if previousAvatar, err = m.swapMedia(ctx, userID, avatarSlot, avatarID); err != nil {
+				return err
+			}
+		}
+		if bannerID != nil {
+			if previousBanner, err = m.swapMedia(ctx, userID, bannerSlot, bannerID); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	m.deleteMedia(ctx, previous)
+	m.deleteMedia(ctx, previousAvatar)
+	m.deleteMedia(ctx, previousBanner)
 	return nil
 }
 

@@ -25,7 +25,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 		LastName:     p.LastName,
 		Gender:       p.Gender,
 		UniversityID: p.UniversityID,
-		AvatarURL:    m.avatarURL(ctx, p.Avatar),
+		AvatarURL:    m.mediaURL(ctx, p.Avatar),
 		Bio:          p.Bio,
 		Interests:    text.NonNil(p.Interests),
 		Programmes:   make([]PublicProgramme, 0, len(programmes)),
@@ -86,7 +86,7 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 			LastName:     p.LastName,
 			Gender:       p.Gender,
 			UniversityID: p.UniversityID,
-			AvatarURL:    m.avatarURL(ctx, p.Avatar),
+			AvatarURL:    m.mediaURL(ctx, p.Avatar),
 		})
 	}
 	return items, next, nil

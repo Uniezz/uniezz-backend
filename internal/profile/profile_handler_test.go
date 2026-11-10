@@ -9,6 +9,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +26,7 @@ func TestGetMe(t *testing.T) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		want := []string{"avatarUrl", "bio", "createdAt", "email", "firstName", "gender", "id", "interests", "language", "lastName", "privacy", "programmes", "universityId"}
+		want := []string{"avatarUrl", "bannerUrl", "bio", "createdAt", "email", "firstName", "gender", "id", "interests", "language", "lastName", "privacy", "programmes", "universityId"}
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
 		}
@@ -144,6 +145,38 @@ func TestUpdateMe(t *testing.T) {
 			t.Error("someone else's media must stay untouched")
 		}
 	})
+
+	t.Run("sets a banner next to the avatar, then replaces it and deletes the old one", func(t *testing.T) {
+		u := e.otpUser(t)
+		avatar := insertMedia(ctx, e.pool, u.id, "pending")
+		first := insertMediaOf(ctx, e.pool, u.id, media.KindBanner, "pending")
+		second := insertMediaOf(ctx, e.pool, u.id, media.KindBanner, "pending")
+
+		body := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+			"avatarMediaId": avatar.String(), "bannerMediaId": first.String(),
+		}), http.StatusOK)
+		if body.BannerURL == nil || *body.BannerURL != bannerURL(first) || body.AvatarURL == nil || *body.AvatarURL != avatarURL(avatar) {
+			t.Fatalf("expected the avatar and the first banner, got %v %v", body.AvatarURL, body.BannerURL)
+		}
+
+		body = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"bannerMediaId": second.String()}), http.StatusOK)
+		if body.BannerURL == nil || *body.BannerURL != bannerURL(second) {
+			t.Fatalf("expected the second banner, got %v", body.BannerURL)
+		}
+		if mediaStatus(t, e.pool, first) != "gone" || mediaStatus(t, e.pool, avatar) != "ready" {
+			t.Errorf("expected only the first banner deleted, banner=%s avatar=%s", mediaStatus(t, e.pool, first), mediaStatus(t, e.pool, avatar))
+		}
+	})
+
+	t.Run("an avatar upload is not a banner", func(t *testing.T) {
+		u := e.otpUser(t)
+		avatar := insertMedia(ctx, e.pool, u.id, "pending")
+
+		expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{"bannerMediaId": avatar.String()}), http.StatusBadRequest, "invalid_banner")
+		if mediaStatus(t, e.pool, avatar) != "pending" {
+			t.Error("the avatar upload must stay untouched")
+		}
+	})
 }
 
 func TestDeleteAvatar(t *testing.T) {
@@ -167,6 +200,32 @@ func TestDeleteAvatar(t *testing.T) {
 
 	if rec := e.api.Delete("/profile/avatar", u.bearer); rec.Code != http.StatusNoContent {
 		t.Errorf("deleting a missing avatar should still be 204, got %d", rec.Code)
+	}
+}
+
+func TestDeleteBanner(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	u := e.otpUser(t)
+	avatar := insertMedia(ctx, e.pool, u.id, "pending")
+	banner := insertMediaOf(ctx, e.pool, u.id, media.KindBanner, "pending")
+	decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"avatarMediaId": avatar.String(), "bannerMediaId": banner.String(),
+	}), http.StatusOK)
+
+	if rec := e.api.Delete("/profile/banner", u.bearer); rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := decode[Profile](t, e.api.Get("/profile/me", u.bearer), http.StatusOK)
+	if body.BannerURL != nil || body.AvatarURL == nil {
+		t.Errorf("expected no banner and the avatar kept, got banner %v avatar %v", body.BannerURL, body.AvatarURL)
+	}
+	if mediaStatus(t, e.pool, banner) != "gone" {
+		t.Errorf("expected the banner media deleted, got %s", mediaStatus(t, e.pool, banner))
+	}
+
+	if rec := e.api.Delete("/profile/banner", u.bearer); rec.Code != http.StatusNoContent {
+		t.Errorf("deleting a missing banner should still be 204, got %d", rec.Code)
 	}
 }
 

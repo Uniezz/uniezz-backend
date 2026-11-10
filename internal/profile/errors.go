@@ -11,8 +11,8 @@ var (
 	ErrGenderImmutable = errors.New("gender cannot be changed or cleared once set")
 	ErrNotFound        = errors.New("not found")
 	ErrInvalidInput    = errors.New("invalid input")
-	ErrInvalidAvatar = errors.New("avatar media is missing, not owned by the user or not uploaded")
-	ErrInvalidBanner = errors.New("banner media is missing, not owned by the user or not uploaded")
+	ErrInvalidAvatar   = errors.New("avatar media is missing, not owned by the user or not uploaded")
+	ErrInvalidBanner   = errors.New("banner media is missing, not owned by the user or not uploaded")
 )
 
 var errorResponses = httpapi.ErrorResponses{
