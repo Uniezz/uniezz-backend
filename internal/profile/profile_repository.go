@@ -24,6 +24,8 @@ type profileRow struct {
 	Language      Language
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
+	BannerMediaID *uuid.UUID
+	Banner        *media.Ref
 	Bio           *string
 	SongURL       *string
 	Interests     []string
@@ -39,8 +41,6 @@ const profileColumns = `
 const profileFrom = `
 	FROM users u
 	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id`
-
-const profileSelect = `SELECT ` + profileColumns + profileFrom
 
 func scanProfile(row pgx.Row, extra ...any) (*profileRow, error) {
 	var p profileRow
@@ -63,13 +63,20 @@ func newProfileRepository(db database.DB) *profileRepository {
 }
 
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
-	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, profileSelect+` WHERE u.id = $1`, userID))
+	query := `SELECT ` + profileColumns + `, u.banner_media_id, banner.kind, banner.object_key` + profileFrom + `
+		LEFT JOIN ready_media banner ON banner.id = u.banner_media_id
+		WHERE u.id = $1`
+	var bannerID *uuid.UUID
+	var bannerKind, bannerKey *string
+	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, query, userID), &bannerID, &bannerKind, &bannerKey)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get profile: %w", err)
 	}
+	p.BannerMediaID = bannerID
+	p.Banner = media.RefOf(bannerKind, bannerKey)
 	return p, nil
 }
 
@@ -191,18 +198,18 @@ func (r *profileRepository) setGender(ctx context.Context, userID uuid.UUID, gen
 	return nil
 }
 
-func (r *profileRepository) replaceAvatar(ctx context.Context, userID uuid.UUID, mediaID *uuid.UUID) (*uuid.UUID, error) {
+func (r *profileRepository) replaceMedia(ctx context.Context, userID uuid.UUID, slot mediaSlot, mediaID *uuid.UUID) (*uuid.UUID, error) {
 	var previous *uuid.UUID
-	err := r.db.Conn(ctx).QueryRow(ctx, `SELECT avatar_media_id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&previous)
+	err := r.db.Conn(ctx).QueryRow(ctx, `SELECT `+slot.column+` FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&previous)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("lock avatar: %w", err)
+		return nil, fmt.Errorf("lock %s: %w", slot.kind, err)
 	}
 
-	if _, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET avatar_media_id = $2 WHERE id = $1`, userID, mediaID); err != nil {
-		return nil, fmt.Errorf("set avatar: %w", err)
+	if _, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET `+slot.column+` = $2 WHERE id = $1`, userID, mediaID); err != nil {
+		return nil, fmt.Errorf("set %s: %w", slot.kind, err)
 	}
 	return previous, nil
 }

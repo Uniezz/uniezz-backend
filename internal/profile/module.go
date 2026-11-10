@@ -59,6 +59,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, getMeOperation, profiles.getMe)
 	huma.Register(api, updateMeOperation, profiles.updateMe)
 	huma.Register(api, deleteAvatarOperation, profiles.deleteAvatar)
+	huma.Register(api, deleteBannerOperation, profiles.deleteBanner)
 	huma.Register(api, listProgrammesOperation, programmes.listProgrammes)
 	huma.Register(api, createProgrammeOperation, programmes.createProgramme)
 	huma.Register(api, replaceProgrammeOperation, programmes.replaceProgramme)

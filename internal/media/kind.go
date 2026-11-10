@@ -4,6 +4,7 @@ type Kind string
 
 const (
 	KindAvatar Kind = "avatar"
+	KindBanner Kind = "banner"
 	KindFeed   Kind = "feed"
 	KindChat   Kind = "chat"
 )
@@ -16,6 +17,7 @@ type kindRule struct {
 
 var kindRules = map[Kind]kindRule{
 	KindAvatar: {prefix: "avatars", maxSize: 5 << 20, public: true},
+	KindBanner: {prefix: "banners", maxSize: 10 << 20, public: true},
 	KindFeed:   {prefix: "feed", maxSize: 10 << 20, public: true},
 	KindChat:   {prefix: "chat", maxSize: 10 << 20, public: false},
 }

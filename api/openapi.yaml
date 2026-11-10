@@ -198,11 +198,12 @@ components:
           description: What the file will be used for
           enum:
             - avatar
+            - banner
             - feed
             - chat
           type: string
         size:
-          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for feed and chat
+          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for banners, feed and chat
           format: int64
           minimum: 1
           type: integer
@@ -551,6 +552,11 @@ components:
           type:
             - string
             - "null"
+        bannerUrl:
+          description: URL of the banner image, null when the student has none
+          type:
+            - string
+            - "null"
         bio:
           description: Plain text, up to 500 characters
           examples:
@@ -655,6 +661,7 @@ components:
         - universityId
         - programmes
         - avatarUrl
+        - bannerUrl
         - bio
         - songUrl
         - interests
@@ -1042,6 +1049,10 @@ components:
           description: mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted
           format: uuid
           type: string
+        bannerMediaId:
+          description: mediaId of a banner uploaded through createMediaUpload; the previous banner is deleted
+          format: uuid
+          type: string
         bio:
           description: Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it.
           maxLength: 2000
@@ -1127,7 +1138,7 @@ components:
           description: Headers the PUT must send exactly as given; If-None-Match makes the URL write the file only once
           type: object
         mediaId:
-          description: ID to pass to the endpoint that uses the file, e.g. avatarMediaId
+          description: ID to pass to the endpoint that uses the file, e.g. avatarMediaId or bannerMediaId
           format: uuid
           type: string
         uploadUrl:
@@ -2678,6 +2689,30 @@ paths:
       security:
         - bearer: []
       summary: Remove the logged-in student's avatar
+      tags:
+        - profile
+  /profile/banner:
+    delete:
+      description: Clears the banner and deletes its file. Succeeds when there is no banner.
+      operationId: deleteMyBanner
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove the logged-in student's banner
       tags:
         - profile
   /profile/me:

@@ -25,6 +25,7 @@ type Profile struct {
 	UniversityID string      `json:"universityId" example:"umcs"`
 	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
 	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
+	BannerURL    *string     `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
 	Bio          *string     `json:"bio" nullable:"true" doc:"Plain text, up to 500 characters" example:"Second-year CS student, into climbing."`
 	SongURL      *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
 	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
@@ -69,6 +70,7 @@ type updateMeInput struct {
 		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
 		Privacy       Privacy    `json:"privacy,omitempty"`
 		AvatarMediaID *uuid.UUID `json:"avatarMediaId,omitempty" format:"uuid" doc:"mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted"`
+		BannerMediaID *uuid.UUID `json:"bannerMediaId,omitempty" format:"uuid" doc:"mediaId of a banner uploaded through createMediaUpload; the previous banner is deleted"`
 	}
 }
 
@@ -102,6 +104,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		Interests:     in.Body.Interests,
 		Privacy:       in.Body.Privacy,
 		AvatarMediaID: in.Body.AvatarMediaID,
+		BannerMediaID: in.Body.BannerMediaID,
 	})
 	if err != nil {
 		return nil, errorResponses.Error(err)
@@ -130,7 +133,29 @@ func (h *profileHandler) deleteAvatar(ctx context.Context, _ *struct{}) (*struct
 		return nil, httpapi.Unauthorized()
 	}
 
-	if err := h.profile.removeAvatar(ctx, userID); err != nil {
+	if err := h.profile.removeMedia(ctx, userID, avatarSlot); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
+var deleteBannerOperation = auth.Protected(huma.Operation{
+	OperationID:   "deleteMyBanner",
+	Method:        http.MethodDelete,
+	Path:          "/profile/banner",
+	Summary:       "Remove the logged-in student's banner",
+	Description:   "Clears the banner and deletes its file. Succeeds when there is no banner.",
+	Tags:          []string{"profile"},
+	DefaultStatus: http.StatusNoContent,
+})
+
+func (h *profileHandler) deleteBanner(ctx context.Context, _ *struct{}) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.profile.removeMedia(ctx, userID, bannerSlot); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil

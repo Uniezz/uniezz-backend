@@ -76,6 +76,10 @@ func avatarURL(mediaID uuid.UUID) string {
 	return "https://media.test/avatars/" + mediaID.String() + ".jpg"
 }
 
+func bannerURL(mediaID uuid.UUID) string {
+	return "https://media.test/banners/" + mediaID.String() + ".jpg"
+}
+
 func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
 	result, err := database.New(f.pool).Conn(ctx).Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = $1 AND status = 'ready'", mediaID)
 	if err != nil {
@@ -106,10 +110,14 @@ func (f *fakeMedia) Import(ctx context.Context, ownerUserID uuid.UUID, kind medi
 }
 
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
+	return insertMediaOf(ctx, pool, ownerID, media.KindAvatar, status)
+}
+
+func insertMediaOf(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, kind media.Kind, status string) uuid.UUID {
 	id := uuid.New()
 	_, err := pool.Exec(ctx, `
 		INSERT INTO media (id, owner_user_id, kind, object_key, content_type, size_bytes, status)
-		VALUES ($1, $2, 'avatar', $3, 'image/jpeg', 10, $4)`, id, ownerID, "avatars/"+id.String()+".jpg", status)
+		VALUES ($1, $2, $3, $4, 'image/jpeg', 10, $5)`, id, ownerID, kind, string(kind)+"s/"+id.String()+".jpg", status)
 	if err != nil {
 		panic(err)
 	}
