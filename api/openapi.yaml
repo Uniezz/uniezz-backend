@@ -278,7 +278,6 @@ components:
             - user
             - candidate
           type: string
-          x-extensible-enum: true
       required:
         - targetType
         - targetId
@@ -1179,13 +1178,12 @@ components:
           format: uuid
           type: string
         targetType:
-          enum:
+          type: string
+          x-extensible-enum:
             - post
             - comment
             - user
             - candidate
-          type: string
-          x-extensible-enum: true
       required:
         - id
         - targetType

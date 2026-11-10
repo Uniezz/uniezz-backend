@@ -20,16 +20,19 @@ type reportHandler struct {
 type reportTargetType string
 
 func (reportTargetType) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema {
+	schema.Enum = nil
 	if schema.Extensions == nil {
 		schema.Extensions = map[string]any{}
 	}
-	schema.Extensions["x-extensible-enum"] = true
+	// oasdiff treats this list as the enum. The enum keyword itself must stay
+	// off the response, or adding a value is a breaking change.
+	schema.Extensions["x-extensible-enum"] = []any{"post", "comment", "user", "candidate"}
 	return schema
 }
 
 type Report struct {
 	ID         uuid.UUID        `json:"id" format:"uuid"`
-	TargetType reportTargetType `json:"targetType" enum:"post,comment,user,candidate"`
+	TargetType reportTargetType `json:"targetType"`
 	TargetID   uuid.UUID        `json:"targetId" format:"uuid"`
 	Reason     string           `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
 	Details    *string          `json:"details" nullable:"true"`
@@ -39,10 +42,10 @@ type Report struct {
 
 type createReportInput struct {
 	Body struct {
-		TargetType reportTargetType `json:"targetType" enum:"post,comment,user,candidate"`
-		TargetID   uuid.UUID        `json:"targetId" format:"uuid"`
-		Reason     string           `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
-		Details    *string          `json:"details,omitempty" maxLength:"4000" doc:"Up to 1000 characters after HTML is stripped"`
+		TargetType string    `json:"targetType" enum:"post,comment,user,candidate"`
+		TargetID   uuid.UUID `json:"targetId" format:"uuid"`
+		Reason     string    `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
+		Details    *string   `json:"details,omitempty" maxLength:"4000" doc:"Up to 1000 characters after HTML is stripped"`
 	}
 }
 
@@ -68,7 +71,7 @@ func (h *reportHandler) createReport(ctx context.Context, in *createReportInput)
 	}
 
 	report, err := h.moderation.createReport(ctx, userID, reportInput{
-		TargetType: string(in.Body.TargetType),
+		TargetType: in.Body.TargetType,
 		TargetID:   in.Body.TargetID,
 		Reason:     in.Body.Reason,
 		Details:    in.Body.Details,
