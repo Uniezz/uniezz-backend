@@ -26,12 +26,24 @@ func newEntryRepository(db database.DB) *entryRepository {
 	return &entryRepository{db: db}
 }
 
-func (r *entryRepository) insert(ctx context.Context, authorID uuid.UUID, question, answer string) (*entryRow, error) {
+func (r *entryRepository) insert(ctx context.Context, authorID uuid.UUID, question, answer, status string) (*entryRow, error) {
 	row := r.db.Conn(ctx).QueryRow(ctx, `
 		INSERT INTO faq_entries (author_id, question, answer, status)
-		VALUES ($1, $2, $3, 'proposed')
-		RETURNING id, question, answer, status, created_at`, authorID, question, answer)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, question, answer, status, created_at`, authorID, question, answer, status)
 	return scanEntry(row)
+}
+
+func (r *entryRepository) userEmail(ctx context.Context, userID uuid.UUID) (string, error) {
+	var email *string
+	err := r.db.Conn(ctx).QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, userID).Scan(&email)
+	if err != nil {
+		return "", fmt.Errorf("faq user email: %w", err)
+	}
+	if email == nil {
+		return "", nil
+	}
+	return *email, nil
 }
 
 func (r *entryRepository) list(ctx context.Context, authorID *uuid.UUID, status string, after *pageCursor, limit int) ([]entryRow, error) {

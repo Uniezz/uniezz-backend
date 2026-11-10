@@ -34,6 +34,29 @@ var listEntriesOperation = auth.Protected(huma.Operation{
 	Errors:      []int{http.StatusBadRequest},
 })
 
+var publishEntryOperation = auth.Protected(huma.Operation{
+	OperationID:   "publishFaqEntry",
+	Method:        http.MethodPost,
+	Path:          "/faq",
+	Summary:       "Publish an FAQ entry",
+	Description:   "Stores the question and answer as published. Only one hardcoded address may call this. Everyone else gets 403.",
+	Tags:          []string{"faq"},
+	DefaultStatus: http.StatusCreated,
+	Errors:        []int{http.StatusBadRequest, http.StatusForbidden},
+})
+
+func (h *entryHandler) publishEntry(ctx context.Context, in *createProposalInput) (*createProposalOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+	entry, err := h.faq.publish(ctx, userID, in.Body.Question, in.Body.Answer)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &createProposalOutput{Body: *entry}, nil
+}
+
 func (h *entryHandler) listEntries(ctx context.Context, in *listEntriesInput) (*listEntriesOutput, error) {
 	if _, ok := auth.UserIDFrom(ctx); !ok {
 		return nil, httpapi.Unauthorized()

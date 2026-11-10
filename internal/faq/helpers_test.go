@@ -88,12 +88,17 @@ type testUser struct {
 
 func (e *testEnv) user(t *testing.T) testUser {
 	t.Helper()
+	return e.userEmail(t, "faq-"+uuid.NewString()+"@example.test")
+}
+
+func (e *testEnv) userEmail(t *testing.T, email string) testUser {
+	t.Helper()
 	ctx := context.Background()
 
 	var id uuid.UUID
 	err := e.pool.QueryRow(ctx,
 		"INSERT INTO users (university_id, email, first_name, last_name) VALUES ('umcs', $1, 'Jan', 'Kowalski') RETURNING id",
-		"faq-"+uuid.NewString()+"@example.test").Scan(&id)
+		email).Scan(&id)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}

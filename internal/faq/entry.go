@@ -2,6 +2,7 @@ package faq
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
@@ -11,6 +12,9 @@ import (
 const (
 	statusProposed  = "proposed"
 	statusPublished = "published"
+
+	// shortcut: one address, replace when moderator sign-in exists
+	publisherEmail = "wtfcursed@gmail.com"
 )
 
 type Entry struct {
@@ -35,6 +39,21 @@ func (m Module) listMine(ctx context.Context, authorID uuid.UUID, cursor string,
 }
 
 func (m Module) propose(ctx context.Context, authorID uuid.UUID, question, answer string) (*Entry, error) {
+	return m.create(ctx, authorID, question, answer, statusProposed)
+}
+
+func (m Module) publish(ctx context.Context, authorID uuid.UUID, question, answer string) (*Entry, error) {
+	email, err := m.entries.userEmail(ctx, authorID)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(email, publisherEmail) {
+		return nil, ErrForbidden
+	}
+	return m.create(ctx, authorID, question, answer, statusPublished)
+}
+
+func (m Module) create(ctx context.Context, authorID uuid.UUID, question, answer, status string) (*Entry, error) {
 	question, err := cleanText(question, false, minQuestionLength, maxQuestionLength)
 	if err != nil {
 		return nil, err
@@ -43,7 +62,7 @@ func (m Module) propose(ctx context.Context, authorID uuid.UUID, question, answe
 	if err != nil {
 		return nil, err
 	}
-	row, err := m.entries.insert(ctx, authorID, question, answer)
+	row, err := m.entries.insert(ctx, authorID, question, answer, status)
 	if err != nil {
 		return nil, err
 	}

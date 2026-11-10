@@ -19,6 +19,7 @@ func New(pool *pgxpool.Pool) Module {
 func (m Module) Register(api huma.API) {
 	h := &entryHandler{faq: m}
 	huma.Register(api, listEntriesOperation, h.listEntries)
+	huma.Register(api, publishEntryOperation, h.publishEntry)
 	huma.Register(api, createProposalOperation, h.createProposal)
 	huma.Register(api, listProposalsOperation, h.listProposals)
 }

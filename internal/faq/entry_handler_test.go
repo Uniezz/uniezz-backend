@@ -78,4 +78,19 @@ func TestFAQ(t *testing.T) {
 			t.Fatalf("second page = %#v", next)
 		}
 	})
+
+	t.Run("only the staff address can publish", func(t *testing.T) {
+		body := map[string]any{"question": "Where is the dean?", "answer": "In the main building."}
+		expectError(t, e.api.Post("/faq", author.bearer, body), 403, "forbidden")
+
+		staff := e.userEmail(t, publisherEmail)
+		published := decode[Entry](t, e.api.Post("/faq", staff.bearer, body), 201)
+		if published.Status != statusPublished {
+			t.Fatalf("got %#v", published)
+		}
+		page := decode[entryPage](t, e.api.Get("/faq?limit=1", author.bearer), 200)
+		if len(page.Items) != 1 || page.Items[0].ID != published.ID {
+			t.Fatalf("published list = %#v", page.Items)
+		}
+	})
 }
