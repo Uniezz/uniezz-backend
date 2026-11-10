@@ -387,7 +387,7 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 		FROM feed_post_weekly_likes weekly
 		JOIN feed_posts p ON p.id = weekly.post_id
 		JOIN public_profiles a ON a.id = p.author_id
-		LEFT JOIN LATERAL (
+		JOIN LATERAL (
 			SELECT m.kind, m.object_key
 			FROM feed_post_media pm
 			JOIN ready_media m ON m.id = pm.media_id

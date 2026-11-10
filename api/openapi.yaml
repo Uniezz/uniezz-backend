@@ -1839,7 +1839,7 @@ paths:
         - feed
   /feed/posts/featured:
     get:
-      description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, or when the week changes. An empty section returns items: []."
+      description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week and at least one ready image. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, when the last image is gone, or when the week changes. Every item has an image. An empty section returns items: []."
       operationId: listFeaturedFeedPosts
       responses:
         "200":

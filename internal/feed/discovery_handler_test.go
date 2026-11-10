@@ -203,10 +203,10 @@ func TestFeaturedPosts(t *testing.T) {
 
 	var want []uuid.UUID
 	// Any post age/type qualifies, including an event whose date has passed.
+	// A post also needs a ready image; likes alone do not feature it.
 	for i, count := range []int{6, 5, 4, 3, 1, 1} {
-		fields := map[string]any{}
-		if i == 0 {
-			fields["mediaIds"] = []uuid.UUID{e.insertMedia(t, author.id, media.KindFeed)}
+		fields := map[string]any{
+			"mediaIds": []uuid.UUID{e.insertMedia(t, author.id, media.KindFeed)},
 		}
 		if i == 1 {
 			fields["type"] = "event"
@@ -227,10 +227,14 @@ func TestFeaturedPosts(t *testing.T) {
 	}
 	slices.SortFunc(want[4:], func(a, b uuid.UUID) int { return -strings.Compare(a.String(), b.String()) })
 
-	lastWeek := e.createPost(t, author, nil)
+	lastWeek := e.createPost(t, author, map[string]any{
+		"mediaIds": []uuid.UUID{e.insertMedia(t, author.id, media.KindFeed)},
+	})
 	like(lastWeek.ID, likers[0])
 	moveToLastWeek(lastWeek.ID, likers[0])
 	e.createPost(t, author, nil) // No likes: never featured.
+	noImage := e.createPost(t, author, nil)
+	like(noImage.ID, likers...) // Most likes, but no image: not featured.
 
 	type cards struct {
 		Items []FeaturedPost `json:"items"`
@@ -244,13 +248,16 @@ func TestFeaturedPosts(t *testing.T) {
 		t.Fatalf("cards = %+v", items)
 	}
 	for i, card := range items {
-		if card.ID != want[i] || card.Title == "" || card.University != "umcs" {
+		if card.ID != want[i] || card.Title == "" || card.University != "umcs" || card.ImageURL == nil {
 			t.Errorf("card %d = %+v", i, card)
+		}
+		if card.ID == noImage.ID {
+			t.Errorf("text-only post featured: %v", card.ID)
 		}
 		decode[Post](t, e.api.Get("/feed/posts/"+card.ID.String(), viewer.bearer), 200)
 	}
-	if items[0].ImageURL == nil || items[2].ImageURL != nil || items[0].EventDate != nil || items[1].EventDate == nil {
-		t.Error("incorrect image/event date null handling")
+	if items[0].EventDate != nil || items[1].EventDate == nil {
+		t.Error("incorrect event date null handling")
 	}
 
 	t.Run("a repeated like or unlike changes nothing", func(t *testing.T) {
@@ -258,6 +265,15 @@ func TestFeaturedPosts(t *testing.T) {
 		expectStatus(t, e.api.Delete("/feed/posts/"+want[5].String()+"/like", likers[5].bearer), 200)
 		if got := weekly(want[3]); got["this"] != 3 {
 			t.Errorf("weekly likes after a repeated like = %v", got)
+		}
+	})
+
+	t.Run("losing the last image drops the post", func(t *testing.T) {
+		exec("DELETE FROM feed_post_media WHERE post_id = $1", want[2])
+		for _, card := range get() {
+			if card.ID == want[2] {
+				t.Errorf("post without an image stayed featured: %v", card.ID)
+			}
 		}
 	})
 
