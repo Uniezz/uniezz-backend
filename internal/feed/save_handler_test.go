@@ -57,16 +57,14 @@ func TestSavedAndLikedPosts(t *testing.T) {
 
 	older := time.Now().Add(-time.Hour)
 	newer := older.Add(time.Minute)
-	setActivity := func(table string, postID uuid.UUID, at time.Time) {
+	setSavedAt := func(postID uuid.UUID, at time.Time) {
 		t.Helper()
-		if _, err := e.pool.Exec(ctx, "UPDATE "+table+" SET created_at = $3 WHERE post_id = $1 AND user_id = $2", postID, viewer.id, at); err != nil {
+		if _, err := e.pool.Exec(ctx, "UPDATE feed_post_saves SET created_at = $3 WHERE post_id = $1 AND user_id = $2", postID, viewer.id, at); err != nil {
 			t.Fatal(err)
 		}
 	}
-	setActivity("feed_post_likes", first.ID, older)
-	setActivity("feed_post_likes", second.ID, newer)
-	setActivity("feed_post_saves", first.ID, newer)
-	setActivity("feed_post_saves", second.ID, older)
+	setSavedAt(first.ID, newer)
+	setSavedAt(second.ID, older)
 
 	checkPages := func(path string, want []uuid.UUID) {
 		t.Helper()

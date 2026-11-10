@@ -291,7 +291,7 @@ func (m Module) listByActivity(ctx context.Context, table string, viewerID uuid.
 
 func (m Module) setPostSave(ctx context.Context, userID, postID uuid.UUID, saved bool) error {
 	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		if _, err := m.posts.lock(ctx, postID, false); err != nil {
+		if err := m.posts.lockKey(ctx, postID); err != nil {
 			return err
 		}
 		if saved {

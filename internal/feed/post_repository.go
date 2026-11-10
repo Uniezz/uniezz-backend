@@ -222,12 +222,7 @@ func (r *postRepository) listByActivity(ctx context.Context, table string, viewe
 	if after != nil {
 		where += " AND (mine.created_at, mine.post_id) < (" + args.Add(after.CreatedAt) + ", " + args.Add(after.ID) + ")"
 	}
-	from := `
-	FROM ` + table + ` mine
-	JOIN feed_posts p ON p.id = mine.post_id
-	JOIN public_profiles a ON a.id = p.author_id
-	LEFT JOIN ready_media avatar ON avatar.id = a.avatar_media_id`
-	query := postColumns + ", mine.created_at" + from + " WHERE " + where +
+	query := postColumns + ", mine.created_at" + postFrom + " JOIN " + table + " mine ON mine.post_id = p.id WHERE " + where +
 		" ORDER BY mine.created_at DESC, mine.post_id DESC LIMIT " + args.Add(limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
@@ -268,16 +263,12 @@ func (r *postRepository) unsave(ctx context.Context, postID, userID uuid.UUID) e
 	return nil
 }
 
-func (r *postRepository) savedIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := r.db.Conn(ctx).Query(ctx, `SELECT post_id FROM feed_post_saves WHERE user_id = $1 ORDER BY post_id`, userID)
+func (r *postRepository) unsaveAll(ctx context.Context, userID uuid.UUID) (int64, error) {
+	tag, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM feed_post_saves WHERE user_id = $1`, userID)
 	if err != nil {
-		return nil, fmt.Errorf("list saves: %w", err)
+		return 0, fmt.Errorf("unsave all posts: %w", err)
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
-	if err != nil {
-		return nil, fmt.Errorf("list saves: %w", err)
-	}
-	return ids, nil
+	return tag.RowsAffected(), nil
 }
 
 func (r *postRepository) mediaOf(ctx context.Context, postIDs []uuid.UUID) (map[uuid.UUID][]media.Ref, error) {
@@ -327,6 +318,17 @@ func (r *postRepository) lock(ctx context.Context, postID uuid.UUID, forDelete b
 		return nil, fmt.Errorf("lock post: %w", err)
 	}
 	return &p, nil
+}
+
+func (r *postRepository) lockKey(ctx context.Context, postID uuid.UUID) error {
+	var id uuid.UUID
+	if err := r.db.Conn(ctx).QueryRow(ctx, `SELECT id FROM feed_posts WHERE id = $1 FOR KEY SHARE`, postID).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("lock post: %w", err)
+	}
+	return nil
 }
 
 type postChange struct {
