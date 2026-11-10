@@ -98,3 +98,82 @@ jobs:
             echo "::error::Expected API version ${GITHUB_SHA::7}, got $version"
             exit 1
           fi
+
+  notify:
+    name: Telegram notification
+    needs: [test, image, deploy]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
+      - name: Load Telegram secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
+        run: |
+          token="$(doppler secrets get TELEGRAM_BOT_TOKEN --plain)"
+          chat="$(doppler secrets get TELEGRAM_CHAT_ID --plain)"
+          echo "::add-mask::$token"
+          echo "TELEGRAM_BOT_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "TELEGRAM_CHAT_ID=$chat" >> "$GITHUB_ENV"
+
+      - name: Build message
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+        run: |
+          repo_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          short="${GITHUB_SHA::7}"
+
+          if [ "$DEPLOY_RESULT" != success ]; then
+            printf '❌ Staging deploy failed: %s\n%s\nRun: %s\n' \
+              "$GITHUB_REF_NAME" "$short" "$repo_url/actions/runs/$GITHUB_RUN_ID" > message.txt
+            exit 0
+          fi
+
+          prev="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-stg.yaml/runs?status=success&per_page=5" \
+            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID)][0].head_sha // empty")"
+
+          if [ "$prev" = "$GITHUB_SHA" ]; then
+            echo "Same SHA as the previous deploy, nothing to announce"
+            exit 0
+          fi
+
+          if [ -n "$prev" ] && git merge-base --is-ancestor "$prev" "$GITHUB_SHA"; then
+            range=("$prev..$GITHUB_SHA")
+            compare="Compare: $repo_url/compare/${prev::7}...$short"
+          else
+            range=(-1 "$GITHUB_SHA")
+            compare="Commit: $repo_url/commit/$short"
+          fi
+
+          total="$(git rev-list --count --no-merges "${range[@]}")"
+          {
+            printf '🚀 Staging deployed: %s\n' "$GITHUB_REF_NAME"
+            printf '%s · %s commits\n' "$short" "$total"
+            git log --no-merges --max-count=30 --format='• %s — %an' "${range[@]}"
+            if [ "$total" -gt 30 ]; then
+              printf '… and %s more\n' "$((total - 30))"
+            fi
+            printf '%s\n' "$compare"
+          } > message.txt
+
+      - name: Send to Telegram
+        run: |
+          if [ ! -s message.txt ]; then
+            exit 0
+          fi
+          jq -n --rawfile text message.txt --arg chat "$TELEGRAM_CHAT_ID" \
+            '{chat_id: $chat, text: $text, link_preview_options: {is_disabled: true}}' \
+            | curl -fsS -X POST -H 'Content-Type: application/json' -d @- \
+              "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null
