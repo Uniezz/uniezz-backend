@@ -257,7 +257,7 @@ func (h *postHandler) deletePost(ctx context.Context, in *postPath) (*struct{}, 
 type FeaturedPost struct {
 	ID         uuid.UUID  `json:"id" format:"uuid"`
 	Title      string     `json:"title"`
-	ImageURL   *string    `json:"imageUrl" nullable:"true" doc:"First available post image, or null"`
+	ImageURL   string     `json:"imageUrl" doc:"First available post image"`
 	University string     `json:"university"`
 	EventDate  *time.Time `json:"eventDate" nullable:"true"`
 }
@@ -273,7 +273,7 @@ var featuredPostsOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/featured",
 	Summary:     "Get featured feed posts",
-	Description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, or when the week changes. An empty section returns items: [].",
+	Description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week and at least one ready image. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, when the last image is gone, or when the week changes. Every item has an image. An empty section returns items: [].",
 	Tags:        []string{"feed"},
 })
 

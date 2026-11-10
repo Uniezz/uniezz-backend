@@ -378,7 +378,7 @@ type featuredRow struct {
 	Title        string
 	UniversityID string
 	EventDate    *time.Time
-	Image        *media.Ref
+	Image        media.Ref
 }
 
 func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow, error) {
@@ -387,7 +387,7 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 		FROM feed_post_weekly_likes weekly
 		JOIN feed_posts p ON p.id = weekly.post_id
 		JOIN public_profiles a ON a.id = p.author_id
-		LEFT JOIN LATERAL (
+		JOIN LATERAL (
 			SELECT m.kind, m.object_key
 			FROM feed_post_media pm
 			JOIN ready_media m ON m.id = pm.media_id
@@ -406,11 +406,9 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 	var out []featuredRow
 	for rows.Next() {
 		var f featuredRow
-		var imageKind, imageKey *string
-		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &imageKind, &imageKey); err != nil {
+		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &f.Image.Kind, &f.Image.ObjectKey); err != nil {
 			return nil, fmt.Errorf("scan featured post: %w", err)
 		}
-		f.Image = media.RefOf(imageKind, imageKey)
 		out = append(out, f)
 	}
 	if err := rows.Err(); err != nil {

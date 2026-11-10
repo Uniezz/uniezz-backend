@@ -62,7 +62,8 @@ func (r *likeRepository) countWeekly(ctx context.Context, postID uuid.UUID, like
 	if delta > 0 {
 		query = `
 			INSERT INTO feed_post_weekly_likes (week, post_id, post_created_at, likes)
-			SELECT ` + weekOf("$2::timestamptz") + `, id, created_at, $3 FROM feed_posts WHERE id = $1
+			SELECT ` + weekOf("$2::timestamptz") + `, id, created_at, $3 FROM feed_posts
+			WHERE id = $1 AND EXISTS (SELECT 1 FROM feed_post_media WHERE post_id = $1)
 			ON CONFLICT (week, post_id) DO UPDATE SET likes = feed_post_weekly_likes.likes + EXCLUDED.likes`
 	}
 	if _, err := r.db.Conn(ctx).Exec(ctx, query, postID, likedAt, delta); err != nil {
