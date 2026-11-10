@@ -9,6 +9,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/faq"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/mail"
@@ -24,6 +25,7 @@ type Modules struct {
 	Media      media.Module
 	Profile    profile.Module
 	Feed       feed.Module
+	FAQ        faq.Module
 	Moderation moderation.Module
 	Jobs       *jobs.Runner
 }
@@ -45,6 +47,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
+	faqModule := faq.New(db)
 	moderationModule := moderation.New(db, feedModule, profileModule)
 
 	mailModule := mail.NewResendSender(cfg)
@@ -53,7 +56,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, Moderation: moderationModule, Jobs: runner}, nil
+	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Moderation: moderationModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -62,5 +65,6 @@ func (m Modules) Register(api huma.API) {
 	m.Media.Register(api)
 	m.Profile.Register(api)
 	m.Feed.Register(api)
+	m.FAQ.Register(api)
 	m.Moderation.Register(api)
 }

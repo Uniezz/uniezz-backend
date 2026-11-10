@@ -212,6 +212,32 @@ components:
         - contentType
         - size
       type: object
+    Entry:
+      additionalProperties: false
+      properties:
+        answer:
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        question:
+          type: string
+        status:
+          enum:
+            - proposed
+            - published
+            - rejected
+          type: string
+      required:
+        - id
+        - question
+        - answer
+        - status
+        - createdAt
+      type: object
     ErrorBody:
       additionalProperties: false
       properties:
@@ -343,6 +369,24 @@ components:
         items:
           items:
             $ref: "#/components/schemas/Comment"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListEntriesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Entry"
           type:
             - array
             - "null"
@@ -812,6 +856,23 @@ components:
       required:
         - faculty
         - programme
+      type: object
+    ProposalRequest:
+      additionalProperties: false
+      properties:
+        answer:
+          description: 1 to 2000 characters after HTML is stripped
+          maxLength: 8000
+          minLength: 1
+          type: string
+        question:
+          description: 3 to 200 characters after HTML is stripped
+          maxLength: 1000
+          minLength: 1
+          type: string
+      required:
+        - question
+        - answer
       type: object
     PublicProfile:
       additionalProperties: false
@@ -1421,6 +1482,171 @@ paths:
       summary: Start a USOS login
       tags:
         - auth
+  /faq:
+    get:
+      description: Published entries only, newest first. A proposal or a rejected entry is never returned. An empty FAQ is an empty list.
+      operationId: listFaqEntries
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEntriesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List published FAQ entries
+      tags:
+        - faq
+  /faq/proposals:
+    get:
+      description: The caller's proposals only, newest first, including proposed, published and rejected. Other students' proposals are absent.
+      operationId: listMyFaqProposals
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEntriesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the signed-in student's FAQ proposals
+      tags:
+        - faq
+    post:
+      description: Stores the question and answer as proposed. It stays out of the published list until a moderator decides.
+      operationId: createFaqProposal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposalRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Propose an FAQ entry
+      tags:
+        - faq
   /feed/comments/{id}:
     delete:
       description: A root comment with replies stays in the thread as deleted, without content or author.
