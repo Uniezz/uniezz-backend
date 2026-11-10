@@ -11,7 +11,8 @@ var (
 	ErrGenderImmutable = errors.New("gender cannot be changed or cleared once set")
 	ErrNotFound        = errors.New("not found")
 	ErrInvalidInput    = errors.New("invalid input")
-	ErrInvalidAvatar   = errors.New("avatar media is missing, not owned by the user or not uploaded")
+	ErrInvalidAvatar = errors.New("avatar media is missing, not owned by the user or not uploaded")
+	ErrInvalidBanner = errors.New("banner media is missing, not owned by the user or not uploaded")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -19,5 +20,6 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
 	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
 	{Err: ErrInvalidAvatar, Status: http.StatusBadRequest, Code: "invalid_avatar"},
+	{Err: ErrInvalidBanner, Status: http.StatusBadRequest, Code: "invalid_banner"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

@@ -12,7 +12,7 @@ import (
 const uploadURLTTL = 10 * time.Minute
 
 type Upload struct {
-	MediaID   uuid.UUID         `json:"mediaId" format:"uuid" doc:"ID to pass to the endpoint that uses the file, e.g. avatarMediaId"`
+	MediaID   uuid.UUID         `json:"mediaId" format:"uuid" doc:"ID to pass to the endpoint that uses the file, e.g. avatarMediaId or bannerMediaId"`
 	UploadURL string            `json:"uploadUrl" doc:"Presigned URL to PUT the file to, with the headers below"`
 	ExpiresAt time.Time         `json:"expiresAt" doc:"When the upload URL stops working"`
 	Headers   map[string]string `json:"headers" doc:"Headers the PUT must send exactly as given; If-None-Match makes the URL write the file only once"`

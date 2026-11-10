@@ -24,6 +24,8 @@ type profileRow struct {
 	Language      Language
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
+	BannerMediaID *uuid.UUID
+	Banner        *media.Ref
 	Bio           *string
 	Interests     []string
 	Privacy       Privacy
@@ -32,24 +34,28 @@ type profileRow struct {
 }
 
 const profileColumns = `
-	u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id,
-	u.bio, u.interests, u.privacy, u.created_at, u.gender, u.language, avatar.kind, avatar.object_key`
+	u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id, u.banner_media_id,
+	u.bio, u.interests, u.privacy, u.created_at, u.gender, u.language,
+	avatar.kind, avatar.object_key, banner.kind, banner.object_key`
 
 const profileFrom = `
 	FROM users u
-	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id`
+	LEFT JOIN ready_media avatar ON avatar.id = u.avatar_media_id
+	LEFT JOIN ready_media banner ON banner.id = u.banner_media_id`
 
 const profileSelect = `SELECT ` + profileColumns + profileFrom
 
 func scanProfile(row pgx.Row, extra ...any) (*profileRow, error) {
 	var p profileRow
-	var avatarKind, avatarKey *string
-	dest := []any{&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID,
-		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &p.Gender, &p.Language, &avatarKind, &avatarKey}
+	var avatarKind, avatarKey, bannerKind, bannerKey *string
+	dest := []any{&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID, &p.BannerMediaID,
+		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &p.Gender, &p.Language,
+		&avatarKind, &avatarKey, &bannerKind, &bannerKey}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
 	p.Avatar = media.RefOf(avatarKind, avatarKey)
+	p.Banner = media.RefOf(bannerKind, bannerKey)
 	return &p, nil
 }
 
@@ -199,6 +205,22 @@ func (r *profileRepository) replaceAvatar(ctx context.Context, userID uuid.UUID,
 
 	if _, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET avatar_media_id = $2 WHERE id = $1`, userID, mediaID); err != nil {
 		return nil, fmt.Errorf("set avatar: %w", err)
+	}
+	return previous, nil
+}
+
+func (r *profileRepository) replaceBanner(ctx context.Context, userID uuid.UUID, mediaID *uuid.UUID) (*uuid.UUID, error) {
+	var previous *uuid.UUID
+	err := r.db.Conn(ctx).QueryRow(ctx, `SELECT banner_media_id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&previous)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("lock banner: %w", err)
+	}
+
+	if _, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET banner_media_id = $2 WHERE id = $1`, userID, mediaID); err != nil {
+		return nil, fmt.Errorf("set banner: %w", err)
 	}
 	return previous, nil
 }
