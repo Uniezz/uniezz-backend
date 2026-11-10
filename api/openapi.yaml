@@ -278,6 +278,7 @@ components:
             - user
             - candidate
           type: string
+          x-extensible-enum: true
       required:
         - targetType
         - targetId
@@ -1184,6 +1185,7 @@ components:
             - user
             - candidate
           type: string
+          x-extensible-enum: true
       required:
         - id
         - targetType

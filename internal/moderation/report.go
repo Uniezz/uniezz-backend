@@ -71,7 +71,7 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 	}
 	return &Report{
 		ID:         row.ID,
-		TargetType: row.TargetType,
+		TargetType: reportTargetType(row.TargetType),
 		TargetID:   row.TargetID,
 		Reason:     row.Reason,
 		Details:    row.Details,
