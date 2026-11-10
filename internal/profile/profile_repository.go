@@ -25,6 +25,7 @@ type profileRow struct {
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
 	Bio           *string
+	SongURL       *string
 	Interests     []string
 	Privacy       Privacy
 	CreatedAt     time.Time
@@ -33,7 +34,7 @@ type profileRow struct {
 
 const profileColumns = `
 	u.id, u.university_id, u.email, u.first_name, u.last_name, u.avatar_media_id,
-	u.bio, u.interests, u.privacy, u.created_at, u.gender, u.language, avatar.kind, avatar.object_key`
+	u.bio, u.song_url, u.interests, u.privacy, u.created_at, u.gender, u.language, avatar.kind, avatar.object_key`
 
 const profileFrom = `
 	FROM users u
@@ -45,7 +46,7 @@ func scanProfile(row pgx.Row, extra ...any) (*profileRow, error) {
 	var p profileRow
 	var avatarKind, avatarKey *string
 	dest := []any{&p.ID, &p.UniversityID, &p.Email, &p.FirstName, &p.LastName, &p.AvatarMediaID,
-		&p.Bio, &p.Interests, &p.Privacy, &p.CreatedAt, &p.Gender, &p.Language, &avatarKind, &avatarKey}
+		&p.Bio, &p.SongURL, &p.Interests, &p.Privacy, &p.CreatedAt, &p.Gender, &p.Language, &avatarKind, &avatarKey}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
@@ -150,13 +151,15 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 }
 
 type profileFields struct {
-	FirstName *string
-	LastName  *string
-	Language  *Language
-	SetBio    bool
-	Bio       *string
-	Interests []string
-	Privacy   Privacy
+	FirstName  *string
+	LastName   *string
+	Language   *Language
+	SetBio     bool
+	Bio        *string
+	SetSongURL bool
+	SongURL    *string
+	Interests  []string
+	Privacy    Privacy
 }
 
 func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f profileFields) error {
@@ -165,12 +168,13 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 		SET first_name = COALESCE($2, first_name),
 			last_name = COALESCE($3, last_name),
 			bio = CASE WHEN $4 THEN $5 ELSE bio END,
-			interests = COALESCE($6, interests),
-			privacy = privacy || COALESCE($7::jsonb, '{}'::jsonb),
-			language = COALESCE($8, language)
+			song_url = CASE WHEN $6 THEN $7 ELSE song_url END,
+			interests = COALESCE($8, interests),
+			privacy = privacy || COALESCE($9::jsonb, '{}'::jsonb),
+			language = COALESCE($10, language)
 		WHERE id = $1`
 
-	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.Interests, f.Privacy, f.Language); err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.SetSongURL, f.SongURL, f.Interests, f.Privacy, f.Language); err != nil {
 		return fmt.Errorf("update profile: %w", err)
 	}
 	return nil

@@ -633,6 +633,13 @@ components:
           type:
             - array
             - "null"
+        songUrl:
+          description: Link to the song the student associates with themselves. Null when unset.
+          examples:
+            - https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
+          type:
+            - string
+            - "null"
         universityId:
           examples:
             - umcs
@@ -648,6 +655,7 @@ components:
         - programmes
         - avatarUrl
         - bio
+        - songUrl
         - interests
         - privacy
         - createdAt
@@ -849,6 +857,11 @@ components:
           type:
             - array
             - "null"
+        songUrl:
+          description: Link to the song the student associates with themselves. Null when unset. Always visible, with no privacy toggle.
+          type:
+            - string
+            - "null"
         universityId:
           examples:
             - umcs
@@ -862,6 +875,7 @@ components:
         - universityId
         - avatarUrl
         - bio
+        - songUrl
         - interests
         - programmes
       type: object
@@ -1067,6 +1081,10 @@ components:
               description: Show the year of study of each study programme
               type: boolean
           type: object
+        songUrl:
+          description: http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged.
+          maxLength: 2000
+          type: string
       type: object
     UpdatePostInputBody:
       additionalProperties: false

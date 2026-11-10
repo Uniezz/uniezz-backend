@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ReportTarget returns a copy of the student's names, bio and interests, kept
+// ReportTarget returns a copy of the student's names, bio, song link and interests, kept
 // with a report about them. Email and study programmes are left out.
 func (m Module) ReportTarget(ctx context.Context, userID uuid.UUID) (map[string]any, error) {
 	p, err := m.profiles.get(ctx, userID)
@@ -19,6 +19,7 @@ func (m Module) ReportTarget(ctx context.Context, userID uuid.UUID) (map[string]
 		"lastName":     p.LastName,
 		"universityId": p.UniversityID,
 		"bio":          p.Bio,
+		"songUrl":      p.SongURL,
 		"interests":    text.NonNil(p.Interests),
 	}, nil
 }
