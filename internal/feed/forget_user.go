@@ -16,7 +16,7 @@ const forgetPasses = 3
 // ForgetUser removes everything the user left in the feed through the same
 // per-item paths a user takes, so counters, threads and media stay consistent:
 // own posts go with their comments and media, own root comments that others
-// answered stay as anonymous tombstones, and likes are taken back. Each item
+// answered stay as anonymous tombstones, and likes and saves are taken back. Each item
 // commits on its own, so a failed run can simply be repeated, and it must not
 // run inside a caller's transaction: media leaves storage after each commit.
 // Call it after the user's sessions are revoked and before the user row is
@@ -55,6 +55,16 @@ func (m Module) forgetPass(ctx context.Context, userID uuid.UUID) (bool, error) 
 		}
 	}
 
+	savedPosts, err := m.posts.savedIDs(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range savedPosts {
+		if err := m.setPostSave(ctx, userID, id, false); ignoreGone(err) != nil {
+			return false, err
+		}
+	}
+
 	likedPosts, err := m.likes.postIDsLikedBy(ctx, userID)
 	if err != nil {
 		return false, err
@@ -74,7 +84,7 @@ func (m Module) forgetPass(ctx context.Context, userID uuid.UUID) (bool, error) 
 			return false, err
 		}
 	}
-	return len(postIDs)+len(commentIDs)+len(likedPosts)+len(likedComments) > 0, nil
+	return len(postIDs)+len(commentIDs)+len(savedPosts)+len(likedPosts)+len(likedComments) > 0, nil
 }
 
 func ignoreGone(err error) error {

@@ -34,25 +34,33 @@ type postRow struct {
 	LikesCount    int
 	CommentsCount int
 	LikedByMe     bool
+	SavedByMe     bool
 	CreatedAt     time.Time
 	EditedAt      *time.Time
+	ActivityAt    time.Time
 }
 
-const postSelect = `
+const postColumns = `
 	SELECT p.id, p.university_id, p.type, p.title, p.content, p.event_date, p.tags,
 		p.likes_count, p.comments_count, p.created_at, p.edited_at,
 		EXISTS (SELECT 1 FROM feed_post_likes l WHERE l.post_id = p.id AND l.user_id = $1),
-		a.id, a.first_name, a.last_name, a.university_id, avatar.kind, avatar.object_key
+		EXISTS (SELECT 1 FROM feed_post_saves s WHERE s.post_id = p.id AND s.user_id = $1),
+		a.id, a.first_name, a.last_name, a.university_id, avatar.kind, avatar.object_key`
+
+const postFrom = `
 	FROM feed_posts p
 	JOIN public_profiles a ON a.id = p.author_id
 	LEFT JOIN ready_media avatar ON avatar.id = a.avatar_media_id`
 
-func scanPost(row pgx.Row) (*postRow, error) {
+const postSelect = postColumns + postFrom
+
+func scanPost(row pgx.Row, extra ...any) (*postRow, error) {
 	var p postRow
 	var avatarKind, avatarKey *string
-	err := row.Scan(&p.ID, &p.UniversityID, &p.Type, &p.Title, &p.Content, &p.EventDate, &p.Tags,
-		&p.LikesCount, &p.CommentsCount, &p.CreatedAt, &p.EditedAt, &p.LikedByMe,
-		&p.Author.ID, &p.Author.FirstName, &p.Author.LastName, &p.Author.UniversityID, &avatarKind, &avatarKey)
+	dest := []any{&p.ID, &p.UniversityID, &p.Type, &p.Title, &p.Content, &p.EventDate, &p.Tags,
+		&p.LikesCount, &p.CommentsCount, &p.CreatedAt, &p.EditedAt, &p.LikedByMe, &p.SavedByMe,
+		&p.Author.ID, &p.Author.FirstName, &p.Author.LastName, &p.Author.UniversityID, &avatarKind, &avatarKey}
+	err := row.Scan(append(dest, extra...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +214,70 @@ func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, err
 		return nil, fmt.Errorf("list posts: %w", err)
 	}
 	return posts, nil
+}
+
+func (r *postRepository) listByActivity(ctx context.Context, table string, viewerID uuid.UUID, after *pageCursor, limit int) ([]postRow, error) {
+	args := database.Args{viewerID}
+	where := "mine.user_id = $1"
+	if after != nil {
+		where += " AND (mine.created_at, mine.post_id) < (" + args.Add(after.CreatedAt) + ", " + args.Add(after.ID) + ")"
+	}
+	from := `
+	FROM ` + table + ` mine
+	JOIN feed_posts p ON p.id = mine.post_id
+	JOIN public_profiles a ON a.id = p.author_id
+	LEFT JOIN ready_media avatar ON avatar.id = a.avatar_media_id`
+	query := postColumns + ", mine.created_at" + from + " WHERE " + where +
+		" ORDER BY mine.created_at DESC, mine.post_id DESC LIMIT " + args.Add(limit)
+
+	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	var posts []postRow
+	for rows.Next() {
+		var at time.Time
+		p, err := scanPost(rows, &at)
+		if err != nil {
+			return nil, fmt.Errorf("scan %s: %w", table, err)
+		}
+		p.ActivityAt = at
+		posts = append(posts, *p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list %s: %w", table, err)
+	}
+	return posts, nil
+}
+
+func (r *postRepository) save(ctx context.Context, postID, userID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `INSERT INTO feed_post_saves (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, postID, userID)
+	if err != nil {
+		return fmt.Errorf("save post: %w", err)
+	}
+	return nil
+}
+
+func (r *postRepository) unsave(ctx context.Context, postID, userID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM feed_post_saves WHERE post_id = $1 AND user_id = $2`, postID, userID)
+	if err != nil {
+		return fmt.Errorf("unsave post: %w", err)
+	}
+	return nil
+}
+
+func (r *postRepository) savedIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `SELECT post_id FROM feed_post_saves WHERE user_id = $1 ORDER BY post_id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list saves: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("list saves: %w", err)
+	}
+	return ids, nil
 }
 
 func (r *postRepository) mediaOf(ctx context.Context, postIDs []uuid.UUID) (map[uuid.UUID][]media.Ref, error) {

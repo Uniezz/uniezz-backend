@@ -178,6 +178,7 @@ func (e *testEnv) cleanup() {
 		"DELETE FROM feed_comments WHERE author_id = ANY($1) AND parent_id IS NOT NULL",
 		"DELETE FROM feed_comments WHERE author_id = ANY($1)",
 		"DELETE FROM feed_post_likes WHERE user_id = ANY($1)",
+		"DELETE FROM feed_post_saves WHERE user_id = ANY($1)",
 		"DELETE FROM reports WHERE reporter_id = ANY($1) OR target_author_id = ANY($1)",
 		"DELETE FROM users WHERE id = ANY($1)",
 	} {

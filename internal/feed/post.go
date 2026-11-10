@@ -256,6 +256,51 @@ func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, er
 	return posts, next, nil
 }
 
+func (m Module) listSavedPosts(ctx context.Context, viewerID uuid.UUID, cursor string, limit int) ([]Post, *string, error) {
+	return m.listByActivity(ctx, "feed_post_saves", viewerID, cursor, limit)
+}
+
+func (m Module) listLikedPosts(ctx context.Context, viewerID uuid.UUID, cursor string, limit int) ([]Post, *string, error) {
+	return m.listByActivity(ctx, "feed_post_likes", viewerID, cursor, limit)
+}
+
+func (m Module) listByActivity(ctx context.Context, table string, viewerID uuid.UUID, cursor string, limit int) ([]Post, *string, error) {
+	var after *pageCursor
+	if cursor != "" {
+		after = &pageCursor{}
+		if err := httpapi.DecodeCursor(cursor, after); err != nil {
+			return nil, nil, err
+		}
+	}
+	rows, err := m.posts.listByActivity(ctx, table, viewerID, after, limit+1)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, next, err := httpapi.Page(rows, limit, func(last postRow) any {
+		return pageCursor{CreatedAt: last.ActivityAt, ID: last.ID}
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	posts, err := m.toPosts(ctx, rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	return posts, next, nil
+}
+
+func (m Module) setPostSave(ctx context.Context, userID, postID uuid.UUID, saved bool) error {
+	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if _, err := m.posts.lock(ctx, postID, false); err != nil {
+			return err
+		}
+		if saved {
+			return m.posts.save(ctx, postID, userID)
+		}
+		return m.posts.unsave(ctx, postID, userID)
+	})
+}
+
 func (m Module) toPosts(ctx context.Context, rows []postRow) ([]Post, error) {
 	ids := make([]uuid.UUID, len(rows))
 	for i, row := range rows {
@@ -287,6 +332,7 @@ func (m Module) toPosts(ctx context.Context, rows []postRow) ([]Post, error) {
 			LikesCount:    row.LikesCount,
 			CommentsCount: row.CommentsCount,
 			LikedByMe:     row.LikedByMe,
+			SavedByMe:     row.SavedByMe,
 			CreatedAt:     row.CreatedAt,
 			EditedAt:      row.EditedAt,
 		})
