@@ -8,7 +8,18 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicProfile, error) {
+func (m Module) ShownProfile(ctx context.Context, viewerID, userID uuid.UUID) (*PublicProfile, error) {
+	return m.publicProfile(ctx, viewerID, userID)
+}
+
+func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (*PublicProfile, error) {
+	blocked, err := m.profiles.blocked(ctx, viewerID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, ErrNotFound
+	}
 	p, err := m.profiles.get(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -47,6 +58,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 }
 
 type profileQuery struct {
+	ViewerID     uuid.UUID
 	UniversityID string
 	Search       string
 	Cursor       string
@@ -58,7 +70,7 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 	if err != nil {
 		return nil, nil, ErrInvalidInput
 	}
-	filter := profileFilter{UniversityID: q.UniversityID, Words: words, Limit: q.Limit + 1}
+	filter := profileFilter{ViewerID: q.ViewerID, UniversityID: q.UniversityID, Words: words, Limit: q.Limit + 1}
 	if q.Cursor != "" {
 		var after profileCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {

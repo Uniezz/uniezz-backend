@@ -5,6 +5,7 @@ import (
 	"errors"
 	"unicode/utf8"
 
+	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
@@ -14,6 +15,7 @@ import (
 
 const (
 	targetUser       = "user"
+	targetCandidate  = "candidate"
 	maxDetailsLength = 1000
 )
 
@@ -33,7 +35,7 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 		return nil, err
 	}
 
-	authorID, snapshot, err := m.target(ctx, in.TargetType, in.TargetID)
+	authorID, snapshot, err := m.target(ctx, reporterID, in.TargetType, in.TargetID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,14 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 	}, nil
 }
 
-func (m Module) target(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
+func (m Module) target(ctx context.Context, reporterID uuid.UUID, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
+	if targetType == targetCandidate {
+		authorID, snapshot, err := m.candidates.CandidateReport(ctx, reporterID, id)
+		if errors.Is(err, connections.ErrNotFound) {
+			return uuid.Nil, nil, ErrNotFound
+		}
+		return authorID, snapshot, err
+	}
 	if targetType == targetUser {
 		snapshot, err := m.profiles.ReportTarget(ctx, id)
 		if errors.Is(err, profile.ErrNotFound) {

@@ -87,6 +87,7 @@ type profileCursor struct {
 }
 
 type profileFilter struct {
+	ViewerID     uuid.UUID
 	UniversityID string
 	Words        []string
 	After        *profileCursor
@@ -122,6 +123,13 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 				  AND owner.privacy->>'showFaculty' IS DISTINCT FROM 'false')`)
 		}
 		rank = "CASE WHEN " + strings.Join(nameMatches, " AND ") + " THEN 0 ELSE 1 END"
+	}
+	if f.ViewerID != uuid.Nil {
+		viewer := arg(f.ViewerID)
+		where = append(where, `NOT EXISTS (
+			SELECT 1 FROM blocks b
+			WHERE (b.blocker_id = `+viewer+` AND b.blocked_id = u.id)
+			   OR (b.blocked_id = `+viewer+` AND b.blocker_id = u.id))`)
 	}
 	if f.After != nil {
 		afterRank := arg(f.After.SearchRank)
@@ -185,6 +193,19 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 		return fmt.Errorf("update profile: %w", err)
 	}
 	return nil
+}
+
+func (r *profileRepository) blocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
+	var found bool
+	err := r.db.Conn(ctx).QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM blocks
+			WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
+		)`, a, b).Scan(&found)
+	if err != nil {
+		return false, fmt.Errorf("check block: %w", err)
+	}
+	return found, nil
 }
 
 func (r *profileRepository) setGender(ctx context.Context, userID uuid.UUID, gender Gender) error {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
@@ -22,8 +23,9 @@ const (
 )
 
 var (
-	_ feedTargets    = feed.Module{}
-	_ profileTargets = profile.Module{}
+	_ feedTargets      = feed.Module{}
+	_ profileTargets   = profile.Module{}
+	_ candidateTargets = connections.Module{}
 )
 
 type feedTargets interface {
@@ -34,26 +36,32 @@ type profileTargets interface {
 	ReportTarget(ctx context.Context, userID uuid.UUID) (map[string]any, error)
 }
 
+type candidateTargets interface {
+	CandidateReport(ctx context.Context, viewerID, candidateID uuid.UUID) (uuid.UUID, map[string]any, error)
+}
+
 type limiter interface {
 	Allow(ctx context.Context, key string) error
 }
 
 type Module struct {
-	tx       database.Transactor
-	reports  *reportRepository
-	feed     feedTargets
-	profiles profileTargets
-	limiter  limiter
+	tx         database.Transactor
+	reports    *reportRepository
+	feed       feedTargets
+	profiles   profileTargets
+	candidates candidateTargets
+	limiter    limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets) Module {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets) Module {
 	db := database.New(pool)
 	return Module{
-		tx:       db,
-		reports:  newReportRepository(db),
-		feed:     feedModule,
-		profiles: profileModule,
-		limiter:  ratelimit.New(pool, "report", reportLimit, reportWindow),
+		tx:         db,
+		reports:    newReportRepository(db),
+		feed:       feedModule,
+		profiles:   profileModule,
+		candidates: candidates,
+		limiter:    ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
 }
 

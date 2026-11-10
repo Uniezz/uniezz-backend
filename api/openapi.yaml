@@ -1,5 +1,33 @@
 components:
   schemas:
+    ActInputBody:
+      additionalProperties: false
+      properties:
+        action:
+          enum:
+            - like
+            - pass
+          type: string
+        mode:
+          enum:
+            - friends
+            - studyBuddy
+            - dating
+          type: string
+      required:
+        - mode
+        - action
+      type: object
+    ActionResult:
+      additionalProperties: false
+      properties:
+        connection:
+          $ref: "#/components/schemas/Connection"
+        matched:
+          type: boolean
+      required:
+        - matched
+      type: object
     Author:
       additionalProperties: false
       properties:
@@ -32,6 +60,53 @@ components:
         - lastName
         - universityId
         - avatarUrl
+      type: object
+    Card:
+      additionalProperties: false
+      properties:
+        age:
+          format: int64
+          type:
+            - integer
+            - "null"
+        bio:
+          type:
+            - string
+            - "null"
+        candidateId:
+          format: uuid
+          type: string
+        intent:
+          type:
+            - string
+            - "null"
+        interests:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        level:
+          type:
+            - string
+            - "null"
+        sharedInterests:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        universityId:
+          type: string
+      required:
+        - candidateId
+        - intent
+        - bio
+        - interests
+        - sharedInterests
+        - universityId
+        - level
+        - age
       type: object
     Comment:
       additionalProperties: false
@@ -91,6 +166,29 @@ components:
         - likedByMe
         - createdAt
         - editedAt
+      type: object
+    Connection:
+      additionalProperties: false
+      properties:
+        connectedAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        mode:
+          enum:
+            - friends
+            - studyBuddy
+            - dating
+          type: string
+        profile:
+          $ref: "#/components/schemas/PublicProfile"
+      required:
+        - id
+        - mode
+        - connectedAt
+        - profile
       type: object
     CreateCommentInputBody:
       additionalProperties: false
@@ -178,6 +276,7 @@ components:
             - post
             - comment
             - user
+            - candidate
           type: string
       required:
         - targetType
@@ -211,6 +310,18 @@ components:
         - kind
         - contentType
         - size
+      type: object
+    DiscoverOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Card"
+          type:
+            - array
+            - "null"
+      required:
+        - items
       type: object
     Entry:
       additionalProperties: false
@@ -392,6 +503,23 @@ components:
             - "null"
         nextCursor:
           description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Connection"
+          type:
+            - array
+            - "null"
+        nextCursor:
           type:
             - string
             - "null"
@@ -587,6 +715,24 @@ components:
       required:
         - previousId
         - nextId
+      type: object
+    PreferencesInputBody:
+      additionalProperties: false
+      properties:
+        birthDate:
+          description: YYYY-MM-DD
+          format: date
+          type: string
+        intent:
+          maxLength: 200
+          type: string
+        openTo:
+          description: friends, studyBuddy, dating
+          items:
+            type: string
+          type:
+            - array
+            - "null"
       type: object
     Profile:
       additionalProperties: false
@@ -1036,6 +1182,7 @@ components:
             - post
             - comment
             - user
+            - candidate
           type: string
       required:
         - id
@@ -1482,6 +1629,392 @@ paths:
       summary: Start a USOS login
       tags:
         - auth
+  /blocks/{profileId}:
+    delete:
+      operationId: unblockStudent
+      parameters:
+        - in: path
+          name: profileId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove a block
+      tags:
+        - connections
+    post:
+      description: A block hides each student from the other's discovery, profile list and connections.
+      operationId: blockStudent
+      parameters:
+        - in: path
+          name: profileId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Block a student
+      tags:
+        - connections
+  /connections:
+    get:
+      operationId: listConnections
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List matches
+      tags:
+        - connections
+  /connections/candidates/{candidateId}:
+    put:
+      description: A like cannot be undone. A pass hides the student for 30 days. Mutual likes in the same mode create one connection. A candidateId from another viewer returns 404.
+      operationId: actOnCandidate
+      parameters:
+        - in: path
+          name: candidateId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Like or pass a discovery card
+      tags:
+        - connections
+  /connections/discover:
+    get:
+      description: A card never contains the user id, name, photos, faculty, programme or year. candidateId is an opaque token for this viewer.
+      operationId: discoverConnections
+      parameters:
+        - explode: false
+          in: query
+          name: mode
+          required: true
+          schema:
+            enum:
+              - friends
+              - studyBuddy
+              - dating
+            type: string
+        - explode: false
+          in: query
+          name: university
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: false
+          in: query
+          name: faculty
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: level
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: false
+          in: query
+          name: gender
+          schema:
+            enum:
+              - male
+              - female
+              - ""
+            type: string
+        - explode: false
+          in: query
+          name: interests
+          schema:
+            enum:
+              - shared
+              - ""
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 1
+            format: int64
+            maximum: 20
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Discover anonymous students
+      tags:
+        - connections
+  /connections/me:
+    patch:
+      description: Birth date is used only to compute age. openTo is who the student can discover and be discovered as.
+      operationId: saveConnectionPreferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferencesInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Set what Connections may show
+      tags:
+        - connections
+  /connections/{id}:
+    delete:
+      operationId: deleteConnection
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove a match for both students
+      tags:
+        - connections
   /faq:
     get:
       description: Published entries only, newest first. A proposal or a rejected entry is never returned. An empty FAQ is an empty list.

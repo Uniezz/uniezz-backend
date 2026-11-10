@@ -17,7 +17,7 @@ type reportHandler struct {
 
 type Report struct {
 	ID         uuid.UUID `json:"id" format:"uuid"`
-	TargetType string    `json:"targetType" enum:"post,comment,user"`
+	TargetType string    `json:"targetType" enum:"post,comment,user,candidate"`
 	TargetID   uuid.UUID `json:"targetId" format:"uuid"`
 	Reason     string    `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
 	Details    *string   `json:"details" nullable:"true"`
@@ -27,7 +27,7 @@ type Report struct {
 
 type createReportInput struct {
 	Body struct {
-		TargetType string    `json:"targetType" enum:"post,comment,user"`
+		TargetType string    `json:"targetType" enum:"post,comment,user,candidate"`
 		TargetID   uuid.UUID `json:"targetId" format:"uuid"`
 		Reason     string    `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
 		Details    *string   `json:"details,omitempty" maxLength:"4000" doc:"Up to 1000 characters after HTML is stripped"`

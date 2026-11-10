@@ -11,6 +11,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
@@ -55,6 +56,12 @@ func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uu
 	return author, map[string]any{"content": "reported text"}, nil
 }
 
+type missingCandidates struct{}
+
+func (missingCandidates) CandidateReport(context.Context, uuid.UUID, uuid.UUID) (uuid.UUID, map[string]any, error) {
+	return uuid.Nil, nil, connections.ErrNotFound
+}
+
 type fakeProfiles struct {
 	users map[uuid.UUID]bool
 }
@@ -78,7 +85,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	e := &testEnv{pool: pool, targets: fakeTargets{authors: map[uuid.UUID]uuid.UUID{}}, users: fakeProfiles{users: map[uuid.UUID]bool{}}}
-	m := New(pool, e.targets, e.users)
+	m := New(pool, e.targets, e.users, missingCandidates{})
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
