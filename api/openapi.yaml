@@ -266,10 +266,8 @@ components:
           format: uuid
           type: string
         imageUrl:
-          description: First available post image, or null
-          type:
-            - string
-            - "null"
+          description: First available post image
+          type: string
         title:
           type: string
         university:

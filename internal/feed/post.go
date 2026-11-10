@@ -442,10 +442,14 @@ func (m Module) featuredPosts(ctx context.Context) ([]FeaturedPost, error) {
 	}
 	cards := make([]FeaturedPost, 0, len(rows))
 	for _, row := range rows {
+		imageURL := m.mediaURL(ctx, &row.Image)
+		if imageURL == nil {
+			continue
+		}
 		cards = append(cards, FeaturedPost{
 			ID:         row.ID,
 			Title:      row.Title,
-			ImageURL:   m.mediaURL(ctx, row.Image),
+			ImageURL:   *imageURL,
 			University: row.UniversityID,
 			EventDate:  row.EventDate,
 		})

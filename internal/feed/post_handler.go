@@ -257,7 +257,7 @@ func (h *postHandler) deletePost(ctx context.Context, in *postPath) (*struct{}, 
 type FeaturedPost struct {
 	ID         uuid.UUID  `json:"id" format:"uuid"`
 	Title      string     `json:"title"`
-	ImageURL   *string    `json:"imageUrl" nullable:"true" doc:"First available post image, or null"`
+	ImageURL   string     `json:"imageUrl" doc:"First available post image"`
 	University string     `json:"university"`
 	EventDate  *time.Time `json:"eventDate" nullable:"true"`
 }

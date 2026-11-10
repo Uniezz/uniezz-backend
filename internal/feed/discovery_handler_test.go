@@ -234,7 +234,10 @@ func TestFeaturedPosts(t *testing.T) {
 	moveToLastWeek(lastWeek.ID, likers[0])
 	e.createPost(t, author, nil) // No likes: never featured.
 	noImage := e.createPost(t, author, nil)
-	like(noImage.ID, likers...) // Most likes, but no image: not featured.
+	like(noImage.ID, likers...) // Most likes, but no image: not counted, not featured.
+	if counts := weekly(noImage.ID); len(counts) != 0 {
+		t.Errorf("text-only post counted weekly: %v", counts)
+	}
 
 	type cards struct {
 		Items []FeaturedPost `json:"items"`
@@ -248,11 +251,8 @@ func TestFeaturedPosts(t *testing.T) {
 		t.Fatalf("cards = %+v", items)
 	}
 	for i, card := range items {
-		if card.ID != want[i] || card.Title == "" || card.University != "umcs" || card.ImageURL == nil {
+		if card.ID != want[i] || card.Title == "" || card.University != "umcs" || card.ImageURL == "" {
 			t.Errorf("card %d = %+v", i, card)
-		}
-		if card.ID == noImage.ID {
-			t.Errorf("text-only post featured: %v", card.ID)
 		}
 		decode[Post](t, e.api.Get("/feed/posts/"+card.ID.String(), viewer.bearer), 200)
 	}
@@ -268,12 +268,14 @@ func TestFeaturedPosts(t *testing.T) {
 		}
 	})
 
-	t.Run("losing the last image drops the post", func(t *testing.T) {
-		exec("DELETE FROM feed_post_media WHERE post_id = $1", want[2])
+	t.Run("losing the last ready image drops the post", func(t *testing.T) {
+		exec("UPDATE media SET status = 'deleting' WHERE id IN (SELECT media_id FROM feed_post_media WHERE post_id = $1)", want[2])
+		var got []uuid.UUID
 		for _, card := range get() {
-			if card.ID == want[2] {
-				t.Errorf("post without an image stayed featured: %v", card.ID)
-			}
+			got = append(got, card.ID)
+		}
+		if expected := []uuid.UUID{want[0], want[1], want[3], want[4], want[5]}; !slices.Equal(got, expected) {
+			t.Errorf("featured = %v, want %v", got, expected)
 		}
 	})
 
@@ -286,7 +288,9 @@ func TestFeaturedPosts(t *testing.T) {
 	})
 
 	t.Run("taking back a like from last week leaves this week alone", func(t *testing.T) {
-		post := e.createPost(t, author, nil)
+		post := e.createPost(t, author, map[string]any{
+			"mediaIds": []uuid.UUID{e.insertMedia(t, author.id, media.KindFeed)},
+		})
 		like(post.ID, likers[0])
 		moveToLastWeek(post.ID, likers[0])
 		like(post.ID, likers[1], likers[2])
