@@ -267,10 +267,8 @@ components:
           format: uuid
           type: string
         imageUrl:
-          description: First available post image, or null
-          type:
-            - string
-            - "null"
+          description: First available post image
+          type: string
         title:
           type: string
         university:
@@ -489,6 +487,8 @@ components:
           type:
             - array
             - "null"
+        savedByMe:
+          type: boolean
         tags:
           items:
             type: string
@@ -521,6 +521,7 @@ components:
         - likesCount
         - commentsCount
         - likedByMe
+        - savedByMe
         - createdAt
         - editedAt
       type: object
@@ -639,6 +640,13 @@ components:
           type:
             - array
             - "null"
+        songUrl:
+          description: Link to the song the student associates with themselves. Null when unset.
+          examples:
+            - https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
+          type:
+            - string
+            - "null"
         universityId:
           examples:
             - umcs
@@ -655,6 +663,7 @@ components:
         - avatarUrl
         - bannerUrl
         - bio
+        - songUrl
         - interests
         - privacy
         - createdAt
@@ -856,6 +865,11 @@ components:
           type:
             - array
             - "null"
+        songUrl:
+          description: Link to the song the student associates with themselves. Null when unset. Always visible, with no privacy toggle.
+          type:
+            - string
+            - "null"
         universityId:
           examples:
             - umcs
@@ -869,6 +883,7 @@ components:
         - universityId
         - avatarUrl
         - bio
+        - songUrl
         - interests
         - programmes
       type: object
@@ -969,6 +984,14 @@ components:
         - details
         - status
         - createdAt
+      type: object
+    SaveState:
+      additionalProperties: false
+      properties:
+        saved:
+          type: boolean
+      required:
+        - saved
       type: object
     UniversityDTO:
       additionalProperties: false
@@ -1078,6 +1101,10 @@ components:
               description: Show the year of study of each study programme
               type: boolean
           type: object
+        songUrl:
+          description: http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged.
+          maxLength: 2000
+          type: string
       type: object
     UpdatePostInputBody:
       additionalProperties: false
@@ -1850,7 +1877,7 @@ paths:
         - feed
   /feed/posts/featured:
     get:
-      description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, or when the week changes. An empty section returns items: []."
+      description: "Up to five posts visible in the regular feed, ranked by likes received during the current calendar week (Monday 00:00 to next Monday 00:00, Europe/Warsaw). Posts of any age and type qualify with at least one remaining like from that week and at least one ready image. Ties use createdAt and ID descending. Rankings update when likes are added or removed; posts leave on deletion, when outranked, when the last image is gone, or when the week changes. Every item has an image. An empty section returns items: []."
       operationId: listFeaturedFeedPosts
       responses:
         "200":
@@ -1874,6 +1901,126 @@ paths:
       security:
         - bearer: []
       summary: Get featured feed posts
+      tags:
+        - feed
+  /feed/posts/liked:
+    get:
+      description: The caller's likes only, newest like first, then post ID descending. Each item is the same post as in the feed, including likedByMe and savedByMe. A deleted post, or a like that was removed, is absent. Keep the same limit when following a cursor.
+      operationId: listLikedFeedPosts
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPostsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List posts liked by the signed-in student
+      tags:
+        - feed
+  /feed/posts/saved:
+    get:
+      description: The caller's saves only, newest save first, then post ID descending. Each item is the same post as in the feed, including likedByMe and savedByMe. A deleted post is absent. Keep the same limit when following a cursor.
+      operationId: listSavedFeedPosts
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPostsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List posts saved by the signed-in student
       tags:
         - feed
   /feed/posts/{id}:
@@ -2379,6 +2526,99 @@ paths:
       security:
         - bearer: []
       summary: Get previous and next feed post IDs
+      tags:
+        - feed
+  /feed/posts/{id}/save:
+    delete:
+      description: "Idempotent: removing a save that is not there changes nothing. A missing post returns 404."
+      operationId: unsaveFeedPost
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveState"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove a saved post
+      tags:
+        - feed
+    put:
+      description: "Idempotent: saving a post again changes nothing. A missing post returns 404."
+      operationId: saveFeedPost
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveState"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Save a post
       tags:
         - feed
   /media/uploads:

@@ -29,6 +29,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		AvatarURL:    m.mediaURL(ctx, p.Avatar),
 		BannerURL:    m.mediaURL(ctx, p.Banner),
 		Bio:          p.Bio,
+		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
 		CreatedAt:    p.CreatedAt,
@@ -61,6 +62,7 @@ type profileChange struct {
 	Gender        *Gender
 	Language      *Language
 	Bio           *string
+	SongURL       *string
 	Interests     *[]string
 	Privacy       Privacy
 	AvatarMediaID *uuid.UUID
@@ -77,6 +79,9 @@ func (c profileChange) fields() (profileFields, error) {
 		return profileFields{}, err
 	}
 	if f.Bio, f.SetBio, err = cleanBio(c.Bio); err != nil {
+		return profileFields{}, err
+	}
+	if f.SongURL, f.SetSongURL, err = cleanSongURL(c.SongURL); err != nil {
 		return profileFields{}, err
 	}
 	if f.Interests, err = cleanInterests(c.Interests); err != nil {

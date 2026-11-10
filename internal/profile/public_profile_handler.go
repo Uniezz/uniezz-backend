@@ -23,6 +23,7 @@ type PublicProfile struct {
 	UniversityID string            `json:"universityId" example:"umcs"`
 	AvatarURL    *string           `json:"avatarUrl" nullable:"true"`
 	Bio          *string           `json:"bio" nullable:"true"`
+	SongURL      *string           `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset. Always visible, with no privacy toggle."`
 	Interests    []string          `json:"interests"`
 	Programmes   []PublicProgramme `json:"programmes" doc:"Primary first"`
 }

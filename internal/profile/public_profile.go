@@ -27,6 +27,7 @@ func (m Module) publicProfile(ctx context.Context, userID uuid.UUID) (*PublicPro
 		UniversityID: p.UniversityID,
 		AvatarURL:    m.mediaURL(ctx, p.Avatar),
 		Bio:          p.Bio,
+		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
 		Programmes:   make([]PublicProgramme, 0, len(programmes)),
 	}

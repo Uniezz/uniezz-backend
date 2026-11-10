@@ -34,25 +34,33 @@ type postRow struct {
 	LikesCount    int
 	CommentsCount int
 	LikedByMe     bool
+	SavedByMe     bool
 	CreatedAt     time.Time
 	EditedAt      *time.Time
+	ActivityAt    time.Time
 }
 
-const postSelect = `
+const postColumns = `
 	SELECT p.id, p.university_id, p.type, p.title, p.content, p.event_date, p.tags,
 		p.likes_count, p.comments_count, p.created_at, p.edited_at,
 		EXISTS (SELECT 1 FROM feed_post_likes l WHERE l.post_id = p.id AND l.user_id = $1),
-		a.id, a.first_name, a.last_name, a.university_id, avatar.kind, avatar.object_key
+		EXISTS (SELECT 1 FROM feed_post_saves s WHERE s.post_id = p.id AND s.user_id = $1),
+		a.id, a.first_name, a.last_name, a.university_id, avatar.kind, avatar.object_key`
+
+const postFrom = `
 	FROM feed_posts p
 	JOIN public_profiles a ON a.id = p.author_id
 	LEFT JOIN ready_media avatar ON avatar.id = a.avatar_media_id`
 
-func scanPost(row pgx.Row) (*postRow, error) {
+const postSelect = postColumns + postFrom
+
+func scanPost(row pgx.Row, extra ...any) (*postRow, error) {
 	var p postRow
 	var avatarKind, avatarKey *string
-	err := row.Scan(&p.ID, &p.UniversityID, &p.Type, &p.Title, &p.Content, &p.EventDate, &p.Tags,
-		&p.LikesCount, &p.CommentsCount, &p.CreatedAt, &p.EditedAt, &p.LikedByMe,
-		&p.Author.ID, &p.Author.FirstName, &p.Author.LastName, &p.Author.UniversityID, &avatarKind, &avatarKey)
+	dest := []any{&p.ID, &p.UniversityID, &p.Type, &p.Title, &p.Content, &p.EventDate, &p.Tags,
+		&p.LikesCount, &p.CommentsCount, &p.CreatedAt, &p.EditedAt, &p.LikedByMe, &p.SavedByMe,
+		&p.Author.ID, &p.Author.FirstName, &p.Author.LastName, &p.Author.UniversityID, &avatarKind, &avatarKey}
+	err := row.Scan(append(dest, extra...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +216,61 @@ func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, err
 	return posts, nil
 }
 
+func (r *postRepository) listByActivity(ctx context.Context, table string, viewerID uuid.UUID, after *pageCursor, limit int) ([]postRow, error) {
+	args := database.Args{viewerID}
+	where := "mine.user_id = $1"
+	if after != nil {
+		where += " AND (mine.created_at, mine.post_id) < (" + args.Add(after.CreatedAt) + ", " + args.Add(after.ID) + ")"
+	}
+	query := postColumns + ", mine.created_at" + postFrom + " JOIN " + table + " mine ON mine.post_id = p.id WHERE " + where +
+		" ORDER BY mine.created_at DESC, mine.post_id DESC LIMIT " + args.Add(limit)
+
+	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	var posts []postRow
+	for rows.Next() {
+		var at time.Time
+		p, err := scanPost(rows, &at)
+		if err != nil {
+			return nil, fmt.Errorf("scan %s: %w", table, err)
+		}
+		p.ActivityAt = at
+		posts = append(posts, *p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list %s: %w", table, err)
+	}
+	return posts, nil
+}
+
+func (r *postRepository) save(ctx context.Context, postID, userID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `INSERT INTO feed_post_saves (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, postID, userID)
+	if err != nil {
+		return fmt.Errorf("save post: %w", err)
+	}
+	return nil
+}
+
+func (r *postRepository) unsave(ctx context.Context, postID, userID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM feed_post_saves WHERE post_id = $1 AND user_id = $2`, postID, userID)
+	if err != nil {
+		return fmt.Errorf("unsave post: %w", err)
+	}
+	return nil
+}
+
+func (r *postRepository) unsaveAll(ctx context.Context, userID uuid.UUID) (int64, error) {
+	tag, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM feed_post_saves WHERE user_id = $1`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("unsave all posts: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (r *postRepository) mediaOf(ctx context.Context, postIDs []uuid.UUID) (map[uuid.UUID][]media.Ref, error) {
 	rows, err := r.db.Conn(ctx).Query(ctx, `
 		SELECT pm.post_id, m.kind, m.object_key
@@ -255,6 +318,17 @@ func (r *postRepository) lock(ctx context.Context, postID uuid.UUID, forDelete b
 		return nil, fmt.Errorf("lock post: %w", err)
 	}
 	return &p, nil
+}
+
+func (r *postRepository) lockKey(ctx context.Context, postID uuid.UUID) error {
+	var id uuid.UUID
+	if err := r.db.Conn(ctx).QueryRow(ctx, `SELECT id FROM feed_posts WHERE id = $1 FOR KEY SHARE`, postID).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("lock post: %w", err)
+	}
+	return nil
 }
 
 type postChange struct {
@@ -378,7 +452,7 @@ type featuredRow struct {
 	Title        string
 	UniversityID string
 	EventDate    *time.Time
-	Image        *media.Ref
+	Image        media.Ref
 }
 
 func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow, error) {
@@ -387,7 +461,7 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 		FROM feed_post_weekly_likes weekly
 		JOIN feed_posts p ON p.id = weekly.post_id
 		JOIN public_profiles a ON a.id = p.author_id
-		LEFT JOIN LATERAL (
+		JOIN LATERAL (
 			SELECT m.kind, m.object_key
 			FROM feed_post_media pm
 			JOIN ready_media m ON m.id = pm.media_id
@@ -406,11 +480,9 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 	var out []featuredRow
 	for rows.Next() {
 		var f featuredRow
-		var imageKind, imageKey *string
-		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &imageKind, &imageKey); err != nil {
+		if err := rows.Scan(&f.ID, &f.Title, &f.UniversityID, &f.EventDate, &f.Image.Kind, &f.Image.ObjectKey); err != nil {
 			return nil, fmt.Errorf("scan featured post: %w", err)
 		}
-		f.Image = media.RefOf(imageKind, imageKey)
 		out = append(out, f)
 	}
 	if err := rows.Err(); err != nil {

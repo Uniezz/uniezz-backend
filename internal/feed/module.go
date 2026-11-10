@@ -71,6 +71,8 @@ func (m Module) Register(api huma.API) {
 
 	huma.Register(api, createPostOperation, posts.createPost)
 	huma.Register(api, listPostsOperation, posts.listPosts)
+	huma.Register(api, listSavedPostsOperation, posts.listSavedPosts)
+	huma.Register(api, listLikedPostsOperation, posts.listLikedPosts)
 	huma.Register(api, featuredPostsOperation, posts.featuredPosts)
 	huma.Register(api, adjacentPostsOperation, posts.adjacentPosts)
 	huma.Register(api, getPostOperation, posts.getPost)
@@ -78,6 +80,8 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, deletePostOperation, posts.deletePost)
 	huma.Register(api, likePostOperation, likes.likePost)
 	huma.Register(api, unlikePostOperation, likes.unlikePost)
+	huma.Register(api, savePostOperation, posts.savePost)
+	huma.Register(api, unsavePostOperation, posts.unsavePost)
 	huma.Register(api, createCommentOperation, comments.createComment)
 	huma.Register(api, listCommentsOperation, comments.listComments)
 	huma.Register(api, listRepliesOperation, comments.listReplies)

@@ -29,6 +29,7 @@ func TestForgetUser(t *testing.T) {
 	e.comment(t, leaving, otherPost.ID, &ownThread.ID, "Talking to myself")
 
 	expectStatus(t, e.api.Put("/feed/posts/"+otherPost.ID.String()+"/like", leaving.bearer), 200)
+	expectStatus(t, e.api.Put("/feed/posts/"+otherPost.ID.String()+"/save", leaving.bearer), 200)
 	expectStatus(t, e.api.Put("/feed/comments/"+stayingRoot.ID.String()+"/like", leaving.bearer), 200)
 	expectStatus(t, e.api.Post("/feed/posts", leaving.bearer, "Idempotency-Key: "+uuid.NewString(), postBody(nil)), 201)
 
@@ -44,6 +45,7 @@ func TestForgetUser(t *testing.T) {
 		SELECT (SELECT count(*) FROM feed_posts WHERE author_id = $1)
 		     + (SELECT count(*) FROM feed_comments WHERE author_id = $1)
 		     + (SELECT count(*) FROM feed_post_likes WHERE user_id = $1)
+		     + (SELECT count(*) FROM feed_post_saves WHERE user_id = $1)
 		     + (SELECT count(*) FROM feed_comment_likes WHERE user_id = $1)`, leaving.id).Scan(&left)
 	if err != nil {
 		t.Fatal(err)

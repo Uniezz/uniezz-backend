@@ -27,6 +27,7 @@ type Profile struct {
 	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
 	BannerURL    *string     `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
 	Bio          *string     `json:"bio" nullable:"true" doc:"Plain text, up to 500 characters" example:"Second-year CS student, into climbing."`
+	SongURL      *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
 	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
 	Privacy      Privacy     `json:"privacy"`
 	CreatedAt    time.Time   `json:"createdAt"`
@@ -65,6 +66,7 @@ type updateMeInput struct {
 		Gender        *Gender    `json:"gender,omitempty" enum:"male,female" doc:"Can be set only once: when a gender is already saved, returns 400 gender_immutable"`
 		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru"`
 		Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
+		SongURL       *string    `json:"songUrl,omitempty" maxLength:"2000" doc:"http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged."`
 		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
 		Privacy       Privacy    `json:"privacy,omitempty"`
 		AvatarMediaID *uuid.UUID `json:"avatarMediaId,omitempty" format:"uuid" doc:"mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted"`
@@ -98,6 +100,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		Gender:        in.Body.Gender,
 		Language:      in.Body.Language,
 		Bio:           in.Body.Bio,
+		SongURL:       in.Body.SongURL,
 		Interests:     in.Body.Interests,
 		Privacy:       in.Body.Privacy,
 		AvatarMediaID: in.Body.AvatarMediaID,
