@@ -36,6 +36,7 @@ type Post struct {
 	LikesCount    int        `json:"likesCount"`
 	CommentsCount int        `json:"commentsCount"`
 	LikedByMe     bool       `json:"likedByMe"`
+	SavedByMe     bool       `json:"savedByMe"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	EditedAt      *time.Time `json:"editedAt" nullable:"true"`
 }
@@ -154,6 +155,102 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 	out.Body.Items = items
 	out.Body.NextCursor = next
 	return out, nil
+}
+
+var (
+	listSavedPostsOperation = auth.Protected(huma.Operation{
+		OperationID: "listSavedFeedPosts",
+		Method:      http.MethodGet,
+		Path:        "/feed/posts/saved",
+		Summary:     "List posts saved by the signed-in student",
+		Description: "The caller's saves only, newest save first, then post ID descending. Each item is the same post as in the feed, including likedByMe and savedByMe. A deleted post is absent. Keep the same limit when following a cursor.",
+		Tags:        []string{"feed"},
+		Errors:      []int{http.StatusBadRequest},
+	})
+	listLikedPostsOperation = auth.Protected(huma.Operation{
+		OperationID: "listLikedFeedPosts",
+		Method:      http.MethodGet,
+		Path:        "/feed/posts/liked",
+		Summary:     "List posts liked by the signed-in student",
+		Description: "The caller's likes only, newest like first, then post ID descending. Each item is the same post as in the feed, including likedByMe and savedByMe. A deleted post, or a like that was removed, is absent. Keep the same limit when following a cursor.",
+		Tags:        []string{"feed"},
+		Errors:      []int{http.StatusBadRequest},
+	})
+)
+
+type activityPostsInput struct {
+	httpapi.PageQuery
+}
+
+func (h *postHandler) listSavedPosts(ctx context.Context, in *activityPostsInput) (*listPostsOutput, error) {
+	return h.listActivity(ctx, in, h.feed.listSavedPosts)
+}
+
+func (h *postHandler) listLikedPosts(ctx context.Context, in *activityPostsInput) (*listPostsOutput, error) {
+	return h.listActivity(ctx, in, h.feed.listLikedPosts)
+}
+
+func (h *postHandler) listActivity(ctx context.Context, in *activityPostsInput, list func(context.Context, uuid.UUID, string, int) ([]Post, *string, error)) (*listPostsOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+	items, next, err := list(ctx, userID, in.Cursor, in.Limit)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	out := &listPostsOutput{}
+	out.Body.Items = items
+	out.Body.NextCursor = next
+	return out, nil
+}
+
+type saveState struct {
+	Saved bool `json:"saved"`
+}
+
+type saveOutput struct {
+	Body saveState
+}
+
+var (
+	savePostOperation = auth.Protected(huma.Operation{
+		OperationID: "saveFeedPost",
+		Method:      http.MethodPut,
+		Path:        "/feed/posts/{id}/save",
+		Summary:     "Save a post",
+		Description: "Idempotent: saving a post again changes nothing. A missing post returns 404.",
+		Tags:        []string{"feed"},
+		Errors:      []int{http.StatusNotFound},
+	})
+	unsavePostOperation = auth.Protected(huma.Operation{
+		OperationID: "unsaveFeedPost",
+		Method:      http.MethodDelete,
+		Path:        "/feed/posts/{id}/save",
+		Summary:     "Remove a saved post",
+		Description: "Idempotent: removing a save that is not there changes nothing. A missing post returns 404.",
+		Tags:        []string{"feed"},
+		Errors:      []int{http.StatusNotFound},
+	})
+)
+
+func (h *postHandler) savePost(ctx context.Context, in *likeInput) (*saveOutput, error) {
+	return h.setSave(ctx, in.ID, true)
+}
+
+func (h *postHandler) unsavePost(ctx context.Context, in *likeInput) (*saveOutput, error) {
+	return h.setSave(ctx, in.ID, false)
+}
+
+func (h *postHandler) setSave(ctx context.Context, postID uuid.UUID, saved bool) (*saveOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+	if err := h.feed.setPostSave(ctx, userID, postID, saved); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &saveOutput{Body: saveState{Saved: saved}}, nil
 }
 
 func optionalTime(t time.Time) *time.Time {
