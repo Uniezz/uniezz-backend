@@ -24,6 +24,25 @@ func TestCleanBio(t *testing.T) {
 	}
 }
 
+func TestCleanSongURL(t *testing.T) {
+	ptr := func(s string) *string { return &s }
+
+	if url, set, err := cleanSongURL(nil); url != nil || set || err != nil {
+		t.Errorf("nil must leave the link unchanged, got %v %v %v", url, set, err)
+	}
+	if url, set, err := cleanSongURL(ptr("  ")); url != nil || !set || err != nil {
+		t.Errorf("blank must clear the link, got %v %v %v", url, set, err)
+	}
+	if url, set, err := cleanSongURL(ptr("  https://open.spotify.com/track/abc  ")); err != nil || !set || url == nil || *url != "https://open.spotify.com/track/abc" {
+		t.Errorf("trimmed https link = %v %v %v", url, set, err)
+	}
+	for _, raw := range []string{"ftp://example.com/a", "javascript:alert(1)", "not a url", "https://", strings.Repeat("https://example.com/", 30)} {
+		if _, _, err := cleanSongURL(ptr(raw)); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("%q: error = %v, want ErrInvalidInput", raw, err)
+		}
+	}
+}
+
 func TestCleanInterests(t *testing.T) {
 	got, err := cleanInterests(&[]string{" Go ", "go", "<b>Climbing</b>"})
 	if err != nil || !slices.Equal(got, []string{"Go", "Climbing"}) {
