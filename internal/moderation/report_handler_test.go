@@ -15,6 +15,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
@@ -91,6 +92,7 @@ type testEnv struct {
 	targets    fakeTargets
 	users      fakeProfiles
 	candidates fakeCandidates
+	module     Module
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -103,7 +105,10 @@ func newTestEnv(t *testing.T) *testEnv {
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
 	}
-	m := New(pool, e.targets, e.users, e.candidates, e.targets)
+	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, jobs.NewRunner(pool, 1, time.Minute))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
@@ -120,6 +125,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	api.UseMiddleware(authModule.Guard(api))
 	m.Register(api)
 	e.api = api
+	e.module = m
 	return e
 }
 

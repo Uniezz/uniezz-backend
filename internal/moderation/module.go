@@ -5,11 +5,13 @@ package moderation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/study"
@@ -19,8 +21,9 @@ import (
 )
 
 const (
-	reportLimit  = 5
-	reportWindow = time.Hour
+	reportLimit           = 5
+	reportWindow          = time.Hour
+	anonymiseReportsEvery = 24 * time.Hour
 )
 
 var (
@@ -61,9 +64,9 @@ type Module struct {
 	limiter    limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets) Module {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
-	return Module{
+	m := Module{
 		tx:         db,
 		reports:    newReportRepository(db),
 		feed:       feedModule,
@@ -72,6 +75,14 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		study:      studyModule,
 		limiter:    ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
+
+	if err := jobs.Register(runner, m.anonymiseReports, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	if err := jobs.Schedule(runner, "moderation-anonymise-reports", AnonymiseReportsArgs{}, anonymiseReportsEvery); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	return m, nil
 }
 
 func (m Module) Register(api huma.API) {
