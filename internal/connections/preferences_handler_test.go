@@ -1,47 +1,83 @@
 package connections
 
 import (
-	"context"
+	"net/http/httptest"
+
+	"github.com/google/uuid"
+	"net/http"
 	"testing"
 	"time"
 )
 
 func TestSavePreferences(t *testing.T) {
 	e := newTestEnv(t)
-	u := e.user(t)
 	today := time.Now().UTC()
 	minor := today.AddDate(-17, 0, 0).Format(time.DateOnly)
 	child := today.AddDate(-10, 0, 0).Format(time.DateOnly)
 	future := today.AddDate(0, 0, 2).Format(time.DateOnly)
 
-	expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"openTo": []string{"dating"}}), 400, "dating_requires_adult")
-	expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": minor, "openTo": []string{"dating"}}), 400, "dating_requires_adult")
-	expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": child}), 400, "invalid_input")
-	expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": future}), 400, "invalid_input")
+	t.Run("a new student has empty preferences", func(t *testing.T) {
+		u := e.user(t)
+		got := decode[Preferences](t, e.api.Get("/connections/me", u.bearer), http.StatusOK)
+		if got.BirthDate != nil || got.Intent != nil || got.OpenTo == nil || len(got.OpenTo) != 0 {
+			t.Errorf("preferences = %+v", got)
+		}
+	})
 
-	if rec := e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": minor, "openTo": []string{"friends", "friends"}, "intent": " <b>Climbing</b> "}); rec.Code != 204 {
-		t.Fatalf("minor friends: %d %s", rec.Code, rec.Body.String())
-	}
-	expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"openTo": []string{"friends", "dating"}}), 400, "dating_requires_adult")
+	t.Run("dating needs an adult birth date", func(t *testing.T) {
+		u := e.user(t)
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"openTo": []string{"dating"}}), http.StatusBadRequest, "dating_requires_adult")
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": minor, "openTo": []string{"dating"}}), http.StatusBadRequest, "dating_requires_adult")
 
-	var openTo []string
-	var intent *string
-	err := e.pool.QueryRow(context.Background(), "SELECT open_to, intent FROM connection_profiles WHERE user_id = $1", u.id).Scan(&openTo, &intent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(openTo) != 1 || openTo[0] != "friends" || intent == nil || *intent != "Climbing" {
-		t.Errorf("saved open_to = %v intent = %v", openTo, intent)
-	}
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": minor, "openTo": []string{"friends"}}), http.StatusOK)
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"openTo": []string{"friends", "dating"}}), http.StatusBadRequest, "dating_requires_adult")
+	})
 
-	if rec := e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01", "openTo": []string{"dating"}, "intent": ""}); rec.Code != 204 {
-		t.Fatalf("adult dating: %d %s", rec.Code, rec.Body.String())
+	t.Run("a birth date outside 16 to 100 years is a 400", func(t *testing.T) {
+		u := e.user(t)
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": child}), http.StatusBadRequest, "invalid_input")
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": future}), http.StatusBadRequest, "invalid_input")
+	})
+
+	t.Run("saved values come back cleaned and a missing field keeps its value", func(t *testing.T) {
+		u := e.user(t)
+		got := decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{
+			"birthDate": "2000-01-01", "openTo": []string{"friends", "dating", "friends"}, "intent": " <b>Climbing</b> ",
+		}), http.StatusOK)
+		if got.BirthDate == nil || *got.BirthDate != "2000-01-01" || len(got.OpenTo) != 2 || got.Intent == nil || *got.Intent != "Climbing" {
+			t.Fatalf("saved = %+v", got)
+		}
+
+		got = decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"intent": ""}), http.StatusOK)
+		if got.Intent != nil || len(got.OpenTo) != 2 || got.BirthDate == nil {
+			t.Errorf("after clearing the intent = %+v", got)
+		}
+		if again := decode[Preferences](t, e.api.Get("/connections/me", u.bearer), http.StatusOK); again.Intent != nil || len(again.OpenTo) != 2 {
+			t.Errorf("read back = %+v", again)
+		}
+	})
+}
+
+func TestOperationsNeedASession(t *testing.T) {
+	e := newTestEnv(t)
+	id := uuid.NewString()
+	requests := []struct {
+		name string
+		rec  *httptest.ResponseRecorder
+	}{
+		{"get preferences", e.api.Get("/connections/me")},
+		{"save preferences", e.api.Patch("/connections/me", map[string]any{"openTo": []string{"friends"}})},
+		{"discover", e.api.Get("/connections/discover?mode=friends")},
+		{"act on a candidate", e.api.Put("/connections/candidates/"+id, map[string]any{"mode": "friends", "action": "like"})},
+		{"list connections", e.api.Get("/connections")},
+		{"delete a connection", e.api.Delete("/connections/" + id)},
+		{"block", e.api.Put("/connections/blocks/" + id)},
+		{"unblock", e.api.Delete("/connections/blocks/" + id)},
 	}
-	if err := e.pool.QueryRow(context.Background(), "SELECT intent FROM connection_profiles WHERE user_id = $1", u.id).Scan(&intent); err != nil {
-		t.Fatal(err)
-	}
-	if intent != nil {
-		t.Errorf("intent = %q, want cleared", *intent)
+	for _, tc := range requests {
+		t.Run(tc.name, func(t *testing.T) {
+			expectError(t, tc.rec, http.StatusUnauthorized, "unauthorized")
+		})
 	}
 }
 

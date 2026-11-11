@@ -2,92 +2,98 @@ package connections
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
-	"unicode/utf8"
 
-	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
-const (
-	modeFriends = "friends"
-	modeStudy   = "studyBuddy"
-	modeDating  = "dating"
-
-	minAge          = 16
-	maxAge          = 100
-	adultAge        = 18
-	maxIntentLength = 200
-)
-
 type preferencesChange struct {
-	BirthDate *time.Time
-	OpenTo    []string
-	SetIntent bool
+	BirthDate *string
+	OpenTo    []Mode
 	Intent    *string
 }
 
-func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c preferencesChange) error {
-	today := time.Now().UTC()
+func (c preferencesChange) fields(today time.Time) (preferencesFields, error) {
+	f := preferencesFields{SetIntent: c.Intent != nil}
 	if c.BirthDate != nil {
-		if age := ageOn(*c.BirthDate, today); age < minAge || age > maxAge {
-			return ErrInvalidInput
+		birthDate, err := parseBirthDate(*c.BirthDate, today)
+		if err != nil {
+			return f, err
 		}
+		f.BirthDate = birthDate
 	}
-	for _, mode := range c.OpenTo {
-		if !validMode(mode) {
-			return ErrInvalidInput
+	if c.OpenTo != nil {
+		for _, mode := range c.OpenTo {
+			if !mode.valid() {
+				return f, ErrInvalidInput
+			}
+		}
+		f.OpenTo = slices.Compact(slices.Sorted(slices.Values(c.OpenTo)))
+		if f.OpenTo == nil {
+			f.OpenTo = []Mode{}
 		}
 	}
 	intent, err := cleanIntent(c.Intent)
 	if err != nil {
-		return err
+		return f, err
+	}
+	f.Intent = intent
+	return f, nil
+}
+
+func (m Module) getPreferences(ctx context.Context, userID uuid.UUID) (*Preferences, error) {
+	row, err := m.preferences.get(ctx, userID)
+	if errors.Is(err, ErrNotFound) {
+		return &Preferences{OpenTo: []Mode{}}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return row.preferences(), nil
+}
+
+func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c preferencesChange) (*Preferences, error) {
+	today := time.Now().UTC()
+	f, err := c.fields(today)
+	if err != nil {
+		return nil, err
 	}
 
-	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		current, err := m.preferences.lock(ctx, userID)
+	var saved *preferencesRow
+	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		current, err := m.preferences.lockOrCreate(ctx, userID)
 		if err != nil {
 			return err
 		}
-		if c.BirthDate != nil {
-			current.BirthDate = c.BirthDate
+		birthDate, openTo := current.BirthDate, current.OpenTo
+		if f.BirthDate != nil {
+			birthDate = f.BirthDate
 		}
-		if c.OpenTo != nil {
-			current.OpenTo = text.NonNil(slices.Compact(slices.Sorted(slices.Values(c.OpenTo))))
+		if f.OpenTo != nil {
+			openTo = f.OpenTo
 		}
-		if c.SetIntent {
-			current.Intent = intent
-		}
-		if slices.Contains(current.OpenTo, modeDating) && (current.BirthDate == nil || ageOn(*current.BirthDate, today) < adultAge) {
+		if slices.Contains(openTo, ModeDating) && (birthDate == nil || ageOn(*birthDate, today) < adultAge) {
 			return ErrDatingRequiresAdult
 		}
-		return m.preferences.update(ctx, userID, *current)
+		saved, err = m.preferences.update(ctx, userID, f)
+		return err
 	})
+	if err != nil {
+		return nil, err
+	}
+	return saved.preferences(), nil
 }
 
-func cleanIntent(intent *string) (*string, error) {
-	if intent == nil {
-		return nil, nil
+func (row preferencesRow) preferences() *Preferences {
+	p := &Preferences{OpenTo: row.OpenTo, Intent: row.Intent}
+	if p.OpenTo == nil {
+		p.OpenTo = []Mode{}
 	}
-	clean := text.Plain(*intent, false)
-	if utf8.RuneCountInString(clean) > maxIntentLength {
-		return nil, ErrInvalidInput
+	if row.BirthDate != nil {
+		birthDate := row.BirthDate.Format(time.DateOnly)
+		p.BirthDate = &birthDate
 	}
-	if clean == "" {
-		return nil, nil
-	}
-	return &clean, nil
-}
-
-func ageOn(birthDate, day time.Time) int {
-	age := day.Year() - birthDate.Year()
-	if day.Month() < birthDate.Month() || (day.Month() == birthDate.Month() && day.Day() < birthDate.Day()) {
-		age--
-	}
-	return age
-}
-
-func validMode(mode string) bool {
-	return mode == modeFriends || mode == modeStudy || mode == modeDating
+	return p
 }

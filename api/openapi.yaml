@@ -66,19 +66,22 @@ components:
       additionalProperties: false
       properties:
         age:
+          description: Null when the student has not set a birth date
           format: int64
           type:
             - integer
             - "null"
         bio:
+          description: Null when the student has none
           type:
             - string
             - "null"
         candidateId:
-          description: Opaque token, valid only for this viewer
+          description: Opaque token, valid only for this viewer, for 30 days after it was first issued
           format: uuid
           type: string
         intent:
+          description: Null when the student has none
           type:
             - string
             - "null"
@@ -89,6 +92,7 @@ components:
             - array
             - "null"
         level:
+          description: Of the primary programme; null when unknown
           enum:
             - first_cycle
             - second_cycle
@@ -99,6 +103,7 @@ components:
             - string
             - "null"
         sharedInterests:
+          description: The interests the viewer also has
           items:
             type: string
           type:
@@ -727,6 +732,40 @@ components:
         - previousId
         - nextId
       type: object
+    Preferences:
+      additionalProperties: false
+      properties:
+        birthDate:
+          description: Null until set
+          examples:
+            - "2003-05-17"
+          format: date
+          type:
+            - string
+            - "null"
+        intent:
+          description: Shown on the student's discovery card. Null when unset.
+          examples:
+            - Looking for a climbing partner
+          type:
+            - string
+            - "null"
+        openTo:
+          description: Who the student can discover and be discovered as
+          items:
+            enum:
+              - friends
+              - studyBuddy
+              - dating
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - birthDate
+        - openTo
+        - intent
+      type: object
     Profile:
       additionalProperties: false
       properties:
@@ -1190,21 +1229,24 @@ components:
       additionalProperties: false
       properties:
         birthDate:
-          description: YYYY-MM-DD. Age must be 16 to 100.
+          description: Age must be 16 to 100
+          examples:
+            - "2003-05-17"
           format: date
           type: string
         intent:
-          description: Shown on the student's discovery card. An empty string clears it.
-          maxLength: 200
+          description: Up to 200 characters after HTML is stripped. An empty string clears it.
+          maxLength: 1000
           type: string
         openTo:
-          description: Who the student can discover and be discovered as. dating needs an age of at least 18.
+          description: dating needs an age of at least 18, else returns 400 dating_requires_adult
           items:
             enum:
               - friends
               - studyBuddy
               - dating
             type: string
+          maxItems: 3
           type:
             - array
             - "null"
@@ -1645,91 +1687,6 @@ paths:
       summary: Start a USOS login
       tags:
         - auth
-  /blocks/{profileId}:
-    delete:
-      description: Removing a block that does not exist changes nothing.
-      operationId: unblockStudent
-      parameters:
-        - in: path
-          name: profileId
-          required: true
-          schema:
-            format: uuid
-            type: string
-      responses:
-        "204":
-          description: No Content
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Unauthorized
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Unprocessable Entity
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Internal Server Error
-      security:
-        - bearer: []
-      summary: Remove a block
-      tags:
-        - connections
-    post:
-      description: A block hides each student from the other's discovery, profile list, profile and connections. Blocking twice changes nothing.
-      operationId: blockStudent
-      parameters:
-        - in: path
-          name: profileId
-          required: true
-          schema:
-            format: uuid
-            type: string
-      responses:
-        "204":
-          description: No Content
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Unauthorized
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Not Found
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Unprocessable Entity
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Internal Server Error
-      security:
-        - bearer: []
-      summary: Block a student
-      tags:
-        - connections
   /connections:
     get:
       description: Newest first, paginated by cursor. Students blocked either way are left out.
@@ -1787,16 +1744,105 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: List matches
+      summary: List the logged-in student's matches
       tags:
         - connections
-  /connections/candidates/{candidateId}:
+  /connections/blocks/{id}:
+    delete:
+      description: Succeeds when there is no such block.
+      operationId: unblockStudent
+      parameters:
+        - description: The blocked student's profile id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: The blocked student's profile id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove a block
+      tags:
+        - connections
     put:
-      description: "A like cannot be undone; at most 50 likes per 24 hours. A pass hides the student for 30 days from the latest pass. Mutual likes in the same mode create one connection. Returns 404 when the candidateId belongs to another viewer, or when the two students can no longer meet in this mode: one left the mode, blocked the other, or they are already connected."
+      description: Each student stops seeing the other in discovery, the profile list, the profile and connections. Blocking twice changes nothing.
+      operationId: blockStudent
+      parameters:
+        - description: The blocked student's profile id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: The blocked student's profile id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Block a student
+      tags:
+        - connections
+  /connections/candidates/{id}:
+    put:
+      description: A like cannot be undone; at most 50 likes per 24 hours. A pass hides the student for 30 days from the latest pass. Mutual likes in the same mode create one connection. Returns 404 when the candidate id belongs to another viewer or has expired, or when the two students can no longer meet in this mode.
       operationId: actOnCandidate
       parameters:
         - in: path
-          name: candidateId
+          name: id
           required: true
           schema:
             format: uuid
@@ -1857,7 +1903,7 @@ paths:
         - connections
   /connections/discover:
     get:
-      description: Both students must be open to the mode; dating shows only adults. A card never contains the user id, name, photos, faculty, programme or year. Liked, hidden, blocked and connected students are left out, and so are students passed in the last 30 days.
+      description: "A deck of up to limit cards, best match first, with no cursor: liked, hidden, blocked and connected students and those passed in the last 30 days are left out, so the next call shows the next cards. Both students must be open to the mode, and dating shows only adults. A card never contains the user id, name, photos, faculty, programme or year; issuing its candidateId is the only write."
       operationId: discoverConnections
       parameters:
         - explode: false
@@ -1870,12 +1916,14 @@ paths:
               - studyBuddy
               - dating
             type: string
-        - description: Only students of these universities
+        - description: Only students of these universities; repeat the parameter for several
           explode: false
           in: query
           name: university
           schema:
-            description: Only students of these universities
+            description: Only students of these universities; repeat the parameter for several
+            examples:
+              - - umcs
             items:
               type: string
             maxItems: 10
@@ -1904,6 +1952,7 @@ paths:
                 - third_cycle
                 - phd_school
               type: string
+            maxItems: 5
             type:
               - array
               - "null"
@@ -1914,18 +1963,14 @@ paths:
             enum:
               - male
               - female
-              - ""
             type: string
-        - description: "shared: only students with at least one interest in common"
+        - description: Only students with at least one interest in common
           explode: false
           in: query
-          name: interests
+          name: sharedInterests
           schema:
-            description: "shared: only students with at least one interest in common"
-            enum:
-              - shared
-              - ""
-            type: string
+            description: Only students with at least one interest in common
+            type: boolean
         - explode: false
           in: query
           name: limit
@@ -1972,9 +2017,35 @@ paths:
       tags:
         - connections
   /connections/me:
+    get:
+      operationId: getMyConnectionPreferences
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preferences"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get what Connections may show about the logged-in student
+      tags:
+        - connections
     patch:
       description: A missing field keeps its current value. Birth date is used only to compute age.
-      operationId: saveConnectionPreferences
+      operationId: updateMyConnectionPreferences
       requestBody:
         content:
           application/json:
@@ -1982,8 +2053,12 @@ paths:
               $ref: "#/components/schemas/SavePreferencesInputBody"
         required: true
       responses:
-        "204":
-          description: No Content
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preferences"
+          description: OK
         "400":
           content:
             application/json:
@@ -2010,7 +2085,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Set what Connections may show
+      summary: Set what Connections may show about the logged-in student
       tags:
         - connections
   /connections/{id}:

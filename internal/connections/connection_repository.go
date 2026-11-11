@@ -12,8 +12,13 @@ import (
 type connectionRow struct {
 	ID        uuid.UUID
 	OtherID   uuid.UUID
-	Mode      string
+	Mode      Mode
 	CreatedAt time.Time
+}
+
+type connectionCursor struct {
+	CreatedAt time.Time `json:"c"`
+	ID        uuid.UUID `json:"i"`
 }
 
 type connectionRepository struct {
@@ -24,12 +29,13 @@ func newConnectionRepository(db database.DB) *connectionRepository {
 	return &connectionRepository{db: db}
 }
 
-func (r *connectionRepository) create(ctx context.Context, userID, otherID uuid.UUID, mode string) (*connectionRow, error) {
-	c := connectionRow{OtherID: otherID}
-	err := r.db.Conn(ctx).QueryRow(ctx, `
+func (r *connectionRepository) create(ctx context.Context, userID, otherID uuid.UUID, mode Mode) (*connectionRow, error) {
+	const query = `
 		INSERT INTO connections (user_low, user_high, mode)
 		VALUES (LEAST($1, $2)::uuid, GREATEST($1, $2)::uuid, $3)
-		RETURNING id, mode, created_at`, userID, otherID, mode).Scan(&c.ID, &c.Mode, &c.CreatedAt)
+		RETURNING id, mode, created_at`
+	c := connectionRow{OtherID: otherID}
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, otherID, mode).Scan(&c.ID, &c.Mode, &c.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create connection: %w", err)
 	}
@@ -74,9 +80,8 @@ func (r *connectionRepository) list(ctx context.Context, userID uuid.UUID, after
 }
 
 func (r *connectionRepository) delete(ctx context.Context, userID, id uuid.UUID) error {
-	result, err := r.db.Conn(ctx).Exec(ctx, `
-		DELETE FROM connections
-		WHERE id = $1 AND (user_low = $2 OR user_high = $2)`, id, userID)
+	const query = `DELETE FROM connections WHERE id = $1 AND (user_low = $2 OR user_high = $2)`
+	result, err := r.db.Conn(ctx).Exec(ctx, query, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete connection: %w", err)
 	}

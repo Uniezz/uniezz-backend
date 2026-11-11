@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -51,9 +52,14 @@ func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 
 	pool := setupTestDB(t)
-	profiles, err := profile.New(pool, media.Module{}, jobs.NewRunner(pool, 1, time.Hour))
+	runner := newRunner(pool)
+	profiles, err := profile.New(pool, media.Module{}, runner)
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
+	}
+	module, err := New(pool, profiles, runner)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
 	}
 
 	usos := map[string]config.UsosCredentials{}
@@ -70,8 +76,12 @@ func newTestEnv(t *testing.T) *testEnv {
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
 	api.UseMiddleware(authModule.Guard(api))
 	profiles.Register(api)
-	New(pool, profiles).Register(api)
+	module.Register(api)
 	return &testEnv{pool: pool, api: api, tag: "test-" + uuid.NewString()}
+}
+
+func newRunner(pool *pgxpool.Pool) *jobs.Runner {
+	return jobs.NewRunner(pool, 1, time.Hour)
 }
 
 type testUser struct {
@@ -104,22 +114,37 @@ func (e *testEnv) user(t *testing.T) testUser {
 	return testUser{id: id, bearer: "Authorization: Bearer " + token.String()}
 }
 
-func (e *testEnv) openTo(t *testing.T, u testUser, modes ...string) {
+func (e *testEnv) openTo(t *testing.T, u testUser, modes ...Mode) {
 	t.Helper()
 	body := map[string]any{"birthDate": "2000-01-01", "openTo": modes}
-	if rec := e.api.Patch("/connections/me", u.bearer, body); rec.Code != 204 {
+	if rec := e.api.Patch("/connections/me", u.bearer, body); rec.Code != http.StatusOK {
 		t.Fatalf("save preferences: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
 func (e *testEnv) discover(t *testing.T, u testUser, query string) []Card {
 	t.Helper()
-	rec := e.api.Get("/connections/discover?interests=shared&limit=20&"+query, u.bearer)
-	return decode[struct{ Items []Card }](t, rec, 200).Items
+	rec := e.api.Get("/connections/discover?sharedInterests=true&limit=20&"+query, u.bearer)
+	return decode[struct{ Items []Card }](t, rec, http.StatusOK).Items
 }
 
-func (e *testEnv) act(u testUser, candidateID uuid.UUID, mode, action string) *httptest.ResponseRecorder {
+func (e *testEnv) act(u testUser, candidateID uuid.UUID, mode Mode, action string) *httptest.ResponseRecorder {
 	return e.api.Put("/connections/candidates/"+candidateID.String(), u.bearer, map[string]any{"mode": mode, "action": action})
+}
+
+func (e *testEnv) match(t *testing.T, a, b testUser) {
+	t.Helper()
+	e.openTo(t, a, ModeFriends)
+	e.openTo(t, b, ModeFriends)
+	decode[ActionResult](t, e.act(b, e.discover(t, b, "mode=friends")[0].CandidateID, ModeFriends, "like"), http.StatusOK)
+	result := decode[ActionResult](t, e.act(a, e.discover(t, a, "mode=friends")[0].CandidateID, ModeFriends, "like"), http.StatusOK)
+	if !result.Matched {
+		t.Fatalf("no match: %+v", result)
+	}
+}
+
+func (e *testEnv) blockPath(u testUser) string {
+	return "/connections/blocks/" + u.id.String()
 }
 
 func decode[T any](t *testing.T, rec *httptest.ResponseRecorder, wantStatus int) T {

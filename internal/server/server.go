@@ -43,7 +43,10 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 	if err != nil {
 		return Modules{}, err
 	}
-	connectionsModule := connections.New(db, profileModule)
+	connectionsModule, err := connections.New(db, profileModule, runner)
+	if err != nil {
+		return Modules{}, err
+	}
 
 	feedModule, err := feed.New(db, mediaModule, runner)
 	if err != nil {

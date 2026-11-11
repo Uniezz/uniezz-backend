@@ -21,9 +21,8 @@ func newBlockRepository(db database.DB) *blockRepository {
 }
 
 func (r *blockRepository) insert(ctx context.Context, blockerID, blockedID uuid.UUID) error {
-	_, err := r.db.Conn(ctx).Exec(ctx, `
-		INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)
-		ON CONFLICT DO NOTHING`, blockerID, blockedID)
+	const query = `INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+	_, err := r.db.Conn(ctx).Exec(ctx, query, blockerID, blockedID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
 		return ErrNotFound
@@ -35,7 +34,8 @@ func (r *blockRepository) insert(ctx context.Context, blockerID, blockedID uuid.
 }
 
 func (r *blockRepository) delete(ctx context.Context, blockerID, blockedID uuid.UUID) error {
-	_, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2`, blockerID, blockedID)
+	const query = `DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2`
+	_, err := r.db.Conn(ctx).Exec(ctx, query, blockerID, blockedID)
 	if err != nil {
 		return fmt.Errorf("unblock student: %w", err)
 	}

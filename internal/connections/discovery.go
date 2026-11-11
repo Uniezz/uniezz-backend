@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -10,33 +11,52 @@ import (
 )
 
 const (
-	actionLike = "like"
-	actionPass = "pass"
+	passCooldown      = 30 * 24 * time.Hour
+	candidateLifetime = 30 * 24 * time.Hour
 )
 
-type discoverQuery struct {
-	ViewerID     uuid.UUID
-	Mode         string
-	Universities []string
-	Faculty      string
-	Levels       []string
-	Gender       string
-	Shared       bool
-	Limit        int
+type discoveryQuery struct {
+	ViewerID        uuid.UUID
+	Mode            Mode
+	Universities    []string
+	Faculty         string
+	Levels          []string
+	Gender          string
+	SharedInterests bool
+	Limit           int
 }
 
-func (m Module) discover(ctx context.Context, q discoverQuery) ([]Card, error) {
-	if !validMode(q.Mode) {
-		return nil, ErrInvalidInput
+func (q discoveryQuery) filter() (discoveryFilter, error) {
+	if !q.Mode.valid() {
+		return discoveryFilter{}, ErrInvalidInput
 	}
-	if q.Mode != modeStudy {
-		q.Faculty = ""
-		q.Levels = nil
+	f := discoveryFilter{
+		ViewerID:        q.ViewerID,
+		Mode:            q.Mode,
+		Universities:    q.Universities,
+		Gender:          q.Gender,
+		SharedInterests: q.SharedInterests,
+		PassCooldown:    passCooldown,
+		Limit:           q.Limit,
 	}
+	if q.Mode == ModeStudyBuddy {
+		f.Faculty = q.Faculty
+		f.Levels = q.Levels
+	}
+	return f, nil
+}
 
-	rows, err := m.discovery.find(ctx, q)
-	if err != nil || len(rows) == 0 {
-		return []Card{}, err
+func (m Module) discover(ctx context.Context, q discoveryQuery) ([]Card, error) {
+	f, err := q.filter()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := m.discovery.find(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []Card{}, nil
 	}
 
 	userIDs := make([]uuid.UUID, 0, len(rows))
@@ -68,8 +88,8 @@ func (m Module) discover(ctx context.Context, q discoverQuery) ([]Card, error) {
 	return cards, nil
 }
 
-func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode, action string) (*ActionResult, error) {
-	if !validMode(mode) || (action != actionLike && action != actionPass) {
+func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode Mode, a action) (*ActionResult, error) {
+	if !mode.valid() || (a != actionLike && a != actionPass) {
 		return nil, ErrInvalidInput
 	}
 	targetID, err := m.discovery.lookup(ctx, viewerID, candidateID)
@@ -79,14 +99,17 @@ func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode, 
 
 	var match *connectionRow
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
-		eligible, err := m.discovery.lockPair(ctx, viewerID, targetID, mode)
+		if err := m.discovery.lockPair(ctx, viewerID, targetID); err != nil {
+			return err
+		}
+		ok, err := m.discovery.canMeet(ctx, viewerID, targetID, mode)
 		if err != nil {
 			return err
 		}
-		if !eligible {
+		if !ok {
 			return ErrNotFound
 		}
-		if action == actionLike {
+		if a == actionLike {
 			if err := m.likes.Allow(ctx, viewerID.String()); err != nil {
 				if errors.Is(err, ratelimit.ErrLimited) {
 					return errors.Join(ErrRateLimited, err)
@@ -94,10 +117,10 @@ func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode, 
 				return err
 			}
 		}
-		if err := m.discovery.act(ctx, viewerID, targetID, mode, action); err != nil {
+		if err := m.discovery.act(ctx, viewerID, targetID, mode, a); err != nil {
 			return err
 		}
-		if action != actionLike {
+		if a != actionLike {
 			return nil
 		}
 

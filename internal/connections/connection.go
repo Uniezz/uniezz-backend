@@ -2,16 +2,10 @@ package connections
 
 import (
 	"context"
-	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/google/uuid"
 )
-
-type connectionCursor struct {
-	CreatedAt time.Time `json:"c"`
-	ID        uuid.UUID `json:"i"`
-}
 
 func (m Module) list(ctx context.Context, userID uuid.UUID, cursor string, limit int) ([]Connection, *string, error) {
 	var after *connectionCursor
@@ -59,4 +53,8 @@ func (m Module) withProfiles(ctx context.Context, rows []connectionRow) ([]Conne
 		items = append(items, Connection{ID: row.ID, Mode: row.Mode, ConnectedAt: row.CreatedAt, Profile: summary})
 	}
 	return items, nil
+}
+
+func (m Module) deleteConnection(ctx context.Context, userID, id uuid.UUID) error {
+	return m.connections.delete(ctx, userID, id)
 }

@@ -15,14 +15,14 @@ type discoveryHandler struct {
 }
 
 type Card struct {
-	CandidateID     uuid.UUID `json:"candidateId" format:"uuid" doc:"Opaque token, valid only for this viewer"`
-	Intent          *string   `json:"intent" nullable:"true"`
-	Bio             *string   `json:"bio" nullable:"true"`
+	CandidateID     uuid.UUID `json:"candidateId" format:"uuid" doc:"Opaque token, valid only for this viewer, for 30 days after it was first issued"`
+	Intent          *string   `json:"intent" nullable:"true" doc:"Null when the student has none"`
+	Bio             *string   `json:"bio" nullable:"true" doc:"Null when the student has none"`
 	Interests       []string  `json:"interests"`
-	SharedInterests []string  `json:"sharedInterests"`
+	SharedInterests []string  `json:"sharedInterests" doc:"The interests the viewer also has"`
 	UniversityID    string    `json:"universityId" example:"umcs"`
-	Level           *string   `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
-	Age             *int      `json:"age" nullable:"true"`
+	Level           *string   `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school" doc:"Of the primary programme; null when unknown"`
+	Age             *int      `json:"age" nullable:"true" doc:"Null when the student has not set a birth date"`
 }
 
 type ActionResult struct {
@@ -31,13 +31,13 @@ type ActionResult struct {
 }
 
 type discoverInput struct {
-	Mode       string   `query:"mode" required:"true" enum:"friends,studyBuddy,dating"`
-	University []string `query:"university" maxItems:"10" doc:"Only students of these universities"`
-	Faculty    string   `query:"faculty" maxLength:"255" doc:"studyBuddy only. Students who hide their faculty never match."`
-	Level      []string `query:"level" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school" doc:"studyBuddy only"`
-	Gender     string   `query:"gender" enum:"male,female,"`
-	Interests  string   `query:"interests" enum:"shared," doc:"shared: only students with at least one interest in common"`
-	Limit      int      `query:"limit" minimum:"1" maximum:"20" default:"1"`
+	Mode            Mode     `query:"mode" required:"true" enum:"friends,studyBuddy,dating"`
+	University      []string `query:"university" maxItems:"10" doc:"Only students of these universities; repeat the parameter for several" example:"umcs"`
+	Faculty         string   `query:"faculty" maxLength:"255" doc:"studyBuddy only. Students who hide their faculty never match."`
+	Level           []string `query:"level" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school" maxItems:"5" doc:"studyBuddy only"`
+	Gender          string   `query:"gender" enum:"male,female"`
+	SharedInterests bool     `query:"sharedInterests" doc:"Only students with at least one interest in common"`
+	Limit           int      `query:"limit" minimum:"1" maximum:"20" default:"1"`
 }
 
 type discoverOutput struct {
@@ -51,7 +51,7 @@ var discoverOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/connections/discover",
 	Summary:     "Discover anonymous students",
-	Description: "Both students must be open to the mode; dating shows only adults. A card never contains the user id, name, photos, faculty, programme or year. Liked, hidden, blocked and connected students are left out, and so are students passed in the last 30 days.",
+	Description: "A deck of up to limit cards, best match first, with no cursor: liked, hidden, blocked and connected students and those passed in the last 30 days are left out, so the next call shows the next cards. Both students must be open to the mode, and dating shows only adults. A card never contains the user id, name, photos, faculty, programme or year; issuing its candidateId is the only write.",
 	Tags:        []string{"connections"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -62,15 +62,15 @@ func (h *discoveryHandler) discover(ctx context.Context, in *discoverInput) (*di
 		return nil, httpapi.Unauthorized()
 	}
 
-	items, err := h.connections.discover(ctx, discoverQuery{
-		ViewerID:     userID,
-		Mode:         in.Mode,
-		Universities: in.University,
-		Faculty:      in.Faculty,
-		Levels:       in.Level,
-		Gender:       in.Gender,
-		Shared:       in.Interests == "shared",
-		Limit:        in.Limit,
+	items, err := h.connections.discover(ctx, discoveryQuery{
+		ViewerID:        userID,
+		Mode:            in.Mode,
+		Universities:    in.University,
+		Faculty:         in.Faculty,
+		Levels:          in.Level,
+		Gender:          in.Gender,
+		SharedInterests: in.SharedInterests,
+		Limit:           in.Limit,
 	})
 	if err != nil {
 		return nil, errorResponses.Error(err)
@@ -82,10 +82,10 @@ func (h *discoveryHandler) discover(ctx context.Context, in *discoverInput) (*di
 }
 
 type actOnCandidateInput struct {
-	CandidateID uuid.UUID `path:"candidateId" format:"uuid"`
-	Body        struct {
-		Mode   string `json:"mode" enum:"friends,studyBuddy,dating"`
-		Action string `json:"action" enum:"like,pass"`
+	ID   uuid.UUID `path:"id" format:"uuid"`
+	Body struct {
+		Mode   Mode   `json:"mode" enum:"friends,studyBuddy,dating"`
+		Action action `json:"action" enum:"like,pass"`
 	}
 }
 
@@ -96,9 +96,9 @@ type actOnCandidateOutput struct {
 var actOnCandidateOperation = auth.Protected(huma.Operation{
 	OperationID: "actOnCandidate",
 	Method:      http.MethodPut,
-	Path:        "/connections/candidates/{candidateId}",
+	Path:        "/connections/candidates/{id}",
 	Summary:     "Like or pass a discovery card",
-	Description: "A like cannot be undone; at most 50 likes per 24 hours. A pass hides the student for 30 days from the latest pass. Mutual likes in the same mode create one connection. Returns 404 when the candidateId belongs to another viewer, or when the two students can no longer meet in this mode: one left the mode, blocked the other, or they are already connected.",
+	Description: "A like cannot be undone; at most 50 likes per 24 hours. A pass hides the student for 30 days from the latest pass. Mutual likes in the same mode create one connection. Returns 404 when the candidate id belongs to another viewer or has expired, or when the two students can no longer meet in this mode.",
 	Tags:        []string{"connections"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusTooManyRequests},
 })
@@ -109,7 +109,7 @@ func (h *discoveryHandler) actOnCandidate(ctx context.Context, in *actOnCandidat
 		return nil, httpapi.Unauthorized()
 	}
 
-	result, err := h.connections.act(ctx, userID, in.CandidateID, in.Body.Mode, in.Body.Action)
+	result, err := h.connections.act(ctx, userID, in.ID, in.Body.Mode, in.Body.Action)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

@@ -18,7 +18,3 @@ func (m Module) ReportTarget(ctx context.Context, viewerID, candidateID uuid.UUI
 	}
 	return userID, map[string]any{"intent": s.Intent, "bio": s.Bio, "interests": text.NonNil(s.Interests)}, nil
 }
-
-func (m Module) HideCandidate(ctx context.Context, viewerID, userID uuid.UUID) error {
-	return m.discovery.hide(ctx, viewerID, userID)
-}

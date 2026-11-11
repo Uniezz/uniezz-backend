@@ -18,7 +18,7 @@ type connectionHandler struct {
 
 type Connection struct {
 	ID          uuid.UUID              `json:"id" format:"uuid"`
-	Mode        string                 `json:"mode" enum:"friends,studyBuddy,dating"`
+	Mode        Mode                   `json:"mode" enum:"friends,studyBuddy,dating"`
 	ConnectedAt time.Time              `json:"connectedAt"`
 	Profile     profile.ProfileSummary `json:"profile"`
 }
@@ -38,7 +38,7 @@ var listConnectionsOperation = auth.Protected(huma.Operation{
 	OperationID: "listConnections",
 	Method:      http.MethodGet,
 	Path:        "/connections",
-	Summary:     "List matches",
+	Summary:     "List the logged-in student's matches",
 	Description: "Newest first, paginated by cursor. Students blocked either way are left out.",
 	Tags:        []string{"connections"},
 	Errors:      []int{http.StatusBadRequest},
@@ -66,12 +66,13 @@ type deleteConnectionInput struct {
 }
 
 var deleteConnectionOperation = auth.Protected(huma.Operation{
-	OperationID: "deleteConnection",
-	Method:      http.MethodDelete,
-	Path:        "/connections/{id}",
-	Summary:     "Remove a match for both students",
-	Tags:        []string{"connections"},
-	Errors:      []int{http.StatusNotFound},
+	OperationID:   "deleteConnection",
+	Method:        http.MethodDelete,
+	Path:          "/connections/{id}",
+	Summary:       "Remove a match for both students",
+	Tags:          []string{"connections"},
+	DefaultStatus: http.StatusNoContent,
+	Errors:        []int{http.StatusNotFound},
 })
 
 func (h *connectionHandler) deleteConnection(ctx context.Context, in *deleteConnectionInput) (*struct{}, error) {
@@ -80,8 +81,8 @@ func (h *connectionHandler) deleteConnection(ctx context.Context, in *deleteConn
 		return nil, httpapi.Unauthorized()
 	}
 
-	if err := h.connections.connections.delete(ctx, userID, in.ID); err != nil {
+	if err := h.connections.deleteConnection(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
-	return &struct{}{}, nil
+	return nil, nil
 }

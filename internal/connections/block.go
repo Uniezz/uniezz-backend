@@ -12,3 +12,7 @@ func (m Module) block(ctx context.Context, blockerID, blockedID uuid.UUID) error
 	}
 	return m.blocks.insert(ctx, blockerID, blockedID)
 }
+
+func (m Module) unblock(ctx context.Context, blockerID, blockedID uuid.UUID) error {
+	return m.blocks.delete(ctx, blockerID, blockedID)
+}

@@ -1,10 +1,14 @@
+// Package connections owns how students meet: anonymous discovery cards,
+// likes and passes, matches, and blocks between students.
 package connections
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/danielgtaylor/huma/v2"
@@ -13,8 +17,9 @@ import (
 )
 
 const (
-	likeLimit  = 50
-	likeWindow = 24 * time.Hour
+	likeLimit           = 50
+	likeWindow          = 24 * time.Hour
+	pruneDiscoveryEvery = 24 * time.Hour
 )
 
 var _ profiles = profile.Module{}
@@ -22,6 +27,8 @@ var _ profiles = profile.Module{}
 type profiles interface {
 	Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]profile.ProfileSummary, error)
 }
+
+var _ limiter = (*ratelimit.Limiter)(nil)
 
 type limiter interface {
 	Allow(ctx context.Context, key string) error
@@ -37,9 +44,9 @@ type Module struct {
 	likes       limiter
 }
 
-func New(pool *pgxpool.Pool, profileModule profiles) Module {
+func New(pool *pgxpool.Pool, profileModule profiles, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
-	return Module{
+	m := Module{
 		tx:          db,
 		preferences: newPreferencesRepository(db),
 		discovery:   newDiscoveryRepository(db),
@@ -48,6 +55,14 @@ func New(pool *pgxpool.Pool, profileModule profiles) Module {
 		profiles:    profileModule,
 		likes:       ratelimit.New(pool, "connection-like", likeLimit, likeWindow),
 	}
+
+	if err := jobs.Register(runner, m.pruneDiscovery, jobs.Options{Timeout: 5 * time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("connections: %w", err)
+	}
+	if err := jobs.Schedule(runner, PruneDiscoveryArgs{}, pruneDiscoveryEvery); err != nil {
+		return Module{}, fmt.Errorf("connections: %w", err)
+	}
+	return m, nil
 }
 
 func (m Module) Register(api huma.API) {
@@ -56,6 +71,7 @@ func (m Module) Register(api huma.API) {
 	connections := &connectionHandler{connections: m}
 	blocks := &blockHandler{connections: m}
 
+	huma.Register(api, getPreferencesOperation, preferences.getPreferences)
 	huma.Register(api, savePreferencesOperation, preferences.savePreferences)
 	huma.Register(api, discoverOperation, discovery.discover)
 	huma.Register(api, actOnCandidateOperation, discovery.actOnCandidate)

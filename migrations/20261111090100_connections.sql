@@ -71,15 +71,7 @@ SELECT blocker_id AS user_id, blocked_id AS other_id FROM blocks
 UNION ALL
 SELECT blocked_id, blocker_id FROM blocks;
 
-ALTER TABLE reports DROP CONSTRAINT reports_target_type_check;
-ALTER TABLE reports ADD CONSTRAINT reports_target_type_check
-    CHECK (target_type IN ('post', 'comment', 'user', 'candidate'));
-
 -- +goose Down
-ALTER TABLE reports DROP CONSTRAINT reports_target_type_check;
-ALTER TABLE reports ADD CONSTRAINT reports_target_type_check
-    CHECK (target_type IN ('post', 'comment', 'user'));
-
 DROP VIEW blocked_pairs;
 DROP TABLE blocks;
 DROP TABLE connections;
