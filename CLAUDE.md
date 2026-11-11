@@ -1,6 +1,8 @@
 # Working with Claude in this repository
 
-File layout and naming: [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
+@AGENTS.md
+
+The rules above say what the code must look like. The rules below say how Claude works with the developer.
 
 ## The developer writes the code
 
