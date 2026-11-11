@@ -95,13 +95,13 @@ Export only `Module`, `New`, sentinel errors, response types, enum types and the
 
 ## Between modules
 
-- A module reads only its own tables. To read another module's data, it joins a view that the owner publishes in its own migration (`ready_media`, `public_profiles`, `anonymous_profiles`, `blocked_pairs`). The view is the owner's contract, and it applies the owner's privacy rules, so readers cannot bypass them. Anything that needs code, such as building a URL, stays a Go call to the owner (`media.URLOf`).
-- `users` belongs to auth and profile. Every other module reads `public_profiles` or `anonymous_profiles`, or calls profile.
+- A module reads only its own tables. To read another module's data, it joins a view that the owner publishes in its own migration (`ready_media`, `public_profiles`, `anonymous_profiles`, `user_emails`, `blocked_pairs`). The view is the owner's contract, and it applies the owner's privacy rules, so readers cannot bypass them. Anything that needs code, such as building a URL, stays a Go call to the owner (`media.URLOf`).
+- `users` belongs to auth and profile. Every other module reads one of their views (`public_profiles`, `anonymous_profiles`, `user_emails`) or calls profile; when a module needs a column no view has, the owner adds a view in its own migration.
 - Use another module through a small unexported interface in `module.go` that lists only the methods called. On the line above it, assert the real type: `var _ mediaService = media.Module{}`, or `var _ limiter = (*ratelimit.Limiter)(nil)`.
 - When a lower module calls back into a higher one, the lower module declares the exported interface (`auth.ProfileInitializer`) and the higher one asserts it. `internal/server` wires them together.
 - Map another module's sentinel errors to your own at the boundary (`media.ErrNotFound` becomes `ErrInvalidAvatar`).
 - A method that another module calls inside its own transaction takes that `ctx` and does its writes there.
-- A student blocked in either direction (`blocked_pairs`) does not appear in any read of other students, and a direct read of them returns 404 `not_found`.
+- A student blocked in either direction (`blocked_pairs`) does not appear in any read of other students or of their content (profiles, cards, connections, posts, comments, rankings), and a direct read or a like, save or reply on that content returns 404 `not_found`. Undoing a like or save still works.
 
 ## HTTP API
 
@@ -153,7 +153,7 @@ Every list endpoint paginates by cursor:
 - Clean all user-written text with `text.Plain(s, keepNewlines)` and count length with `utf8.RuneCountInString` after cleaning. Use `text.Tags` for tag lists and `text.SearchWords` for search input, and translate their errors into `ErrInvalidInput`. A helper two modules need goes into `internal/text`, not into a second copy.
 - A field where an empty string clears the value is a `*string` stored with a set flag: `CASE WHEN $set THEN $value ELSE col END`.
 - A set-once field rejects any new value with its own error code, and an omitted field leaves it unchanged.
-- No personal data, secrets or hardcoded identities in source. Authorisation never depends on matching an email string; privileged users come from configuration.
+- No personal data, secrets or hardcoded identities in source. Privileged users come from configuration (`FAQ_PUBLISHER_EMAILS`), read in `internal/config` and passed to `New`.
 
 ## Migrations
 
