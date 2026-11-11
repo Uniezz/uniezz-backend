@@ -1399,6 +1399,11 @@ components:
           type:
             - string
             - "null"
+        bannerUrl:
+          description: URL of the banner image, null when the student has none
+          type:
+            - string
+            - "null"
         bio:
           type:
             - string
@@ -1461,6 +1466,7 @@ components:
         - gender
         - universityId
         - avatarUrl
+        - bannerUrl
         - bio
         - songUrl
         - interests

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
 )
 
@@ -86,6 +87,16 @@ func TestGetProfile(t *testing.T) {
 		}
 		if p.Programmes[0].Programme != "Informatyka" {
 			t.Errorf("programme name must stay, got %q", p.Programmes[0].Programme)
+		}
+	})
+
+	t.Run("shows the student's banner", func(t *testing.T) {
+		banner := insertMediaOf(ctx, e.pool, student.id, media.KindBanner, "pending")
+		decode[Profile](t, e.api.Patch("/profile/me", student.bearer, map[string]any{"bannerMediaId": banner.String()}), http.StatusOK)
+
+		p := decode[PublicProfile](t, e.api.Get("/profiles/"+student.id.String(), viewer.bearer), http.StatusOK)
+		if p.BannerURL == nil || *p.BannerURL != bannerURL(banner) {
+			t.Errorf("bannerUrl = %v, want %s", p.BannerURL, bannerURL(banner))
 		}
 	})
 

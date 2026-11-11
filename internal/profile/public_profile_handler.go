@@ -22,6 +22,7 @@ type PublicProfile struct {
 	Gender       *Gender           `json:"gender" nullable:"true" enum:"male,female" doc:"Null until set; always visible to other students, with no privacy toggle"`
 	UniversityID string            `json:"universityId" example:"umcs"`
 	AvatarURL    *string           `json:"avatarUrl" nullable:"true"`
+	BannerURL    *string           `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
 	Bio          *string           `json:"bio" nullable:"true"`
 	SongURL      *string           `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset. Always visible, with no privacy toggle."`
 	Interests    []string          `json:"interests"`
