@@ -138,6 +138,72 @@ func TestListCourses(t *testing.T) {
 		viewer := e.student(t)
 		expectError(t, e.api.Get("/study/courses?cursor=@@@", viewer.bearer), http.StatusBadRequest, "invalid_cursor")
 	})
+
+	t.Run("q matches the name or the subject, ignoring case and accents", func(t *testing.T) {
+		author := e.student(t)
+		marker := uuid.NewString()[:8]
+		byName := e.course(t, author, map[string]any{"name": "Zażółć " + marker})
+		bySubject := e.course(t, author, map[string]any{"subject": "Topology " + marker})
+
+		page := decode[itemPage[Course]](t, e.api.Get("/study/courses?q="+marker, author.bearer), http.StatusOK)
+		got := map[uuid.UUID]bool{}
+		for _, c := range page.Items {
+			got[c.ID] = true
+		}
+		if len(page.Items) != 2 || !got[byName.ID] || !got[bySubject.ID] {
+			t.Fatalf("courses = %#v", page.Items)
+		}
+
+		page = decode[itemPage[Course]](t, e.api.Get("/study/courses?q="+url.QueryEscape("ZAZOLC "+marker), author.bearer), http.StatusOK)
+		if len(page.Items) != 1 || page.Items[0].ID != byName.ID {
+			t.Fatalf("courses = %#v", page.Items)
+		}
+	})
+
+	t.Run("q combines with the other filters", func(t *testing.T) {
+		author := e.student(t)
+		marker := uuid.NewString()[:8]
+		match := e.course(t, author, map[string]any{"name": "Algebra " + marker, "semester": 2})
+		e.course(t, author, map[string]any{"name": "Algebra " + marker, "semester": 3})
+
+		page := decode[itemPage[Course]](t, e.api.Get("/study/courses?universityId=umcs&semester=2&q="+marker, author.bearer), http.StatusOK)
+		if len(page.Items) != 1 || page.Items[0].ID != match.ID {
+			t.Fatalf("courses = %#v", page.Items)
+		}
+	})
+
+	t.Run("pages with q follow the cursor without gaps or repeats", func(t *testing.T) {
+		author := e.student(t)
+		marker := uuid.NewString()[:8]
+		want := map[uuid.UUID]bool{}
+		for range 3 {
+			want[e.course(t, author, map[string]any{"name": "Optics " + marker}).ID] = true
+		}
+
+		seen := map[uuid.UUID]bool{}
+		cursor := ""
+		for range 3 {
+			page := decode[itemPage[Course]](t, e.api.Get("/study/courses?limit=2&q="+marker+cursor, author.bearer), http.StatusOK)
+			for _, c := range page.Items {
+				if seen[c.ID] || !want[c.ID] {
+					t.Fatalf("unexpected or repeated course %s", c.ID)
+				}
+				seen[c.ID] = true
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			cursor = "&cursor=" + *page.NextCursor
+		}
+		if len(seen) != len(want) {
+			t.Fatalf("saw %d of %d courses", len(seen), len(want))
+		}
+	})
+
+	t.Run("a q word shorter than 3 characters is invalid input", func(t *testing.T) {
+		viewer := e.student(t)
+		expectError(t, e.api.Get("/study/courses?q=ab", viewer.bearer), http.StatusBadRequest, "invalid_input")
+	})
 }
 
 func TestUpdateCourse(t *testing.T) {
