@@ -33,6 +33,7 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 		Gender:       p.Gender,
 		UniversityID: p.UniversityID,
 		AvatarURL:    m.mediaURL(ctx, p.Avatar),
+		BannerURL:    m.mediaURL(ctx, p.Banner),
 		Bio:          p.Bio,
 		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
