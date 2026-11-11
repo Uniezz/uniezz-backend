@@ -23,8 +23,6 @@ const forgetPasses = 3
 // Call it after the user's sessions are revoked and before the user row is
 // deleted; the feed's foreign keys to users refuse the delete while anything
 // is left.
-//
-// TODO(#44): not called yet; the account deletion flow must run it.
 func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
 	for range forgetPasses {
 		found, err := m.forgetPass(ctx, userID)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,6 +110,38 @@ func (f *fakeMedia) Import(ctx context.Context, ownerUserID uuid.UUID, kind medi
 	return id, nil
 }
 
+func (f *fakeMedia) ForgetUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := f.pool.Exec(ctx, "DELETE FROM media WHERE owner_user_id = $1", userID)
+	return err
+}
+
+type fakeForgetter struct {
+	mu      sync.Mutex
+	forgot  []uuid.UUID
+	failFor map[uuid.UUID]error
+}
+
+func (f *fakeForgetter) ForgetUser(_ context.Context, userID uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.failFor[userID]; err != nil {
+		return err
+	}
+	f.forgot = append(f.forgot, userID)
+	return nil
+}
+
+func (f *fakeForgetter) forgotten(userID uuid.UUID) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, id := range f.forgot {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
 	return insertMediaOf(ctx, pool, ownerID, media.KindAvatar, status)
 }
@@ -142,6 +175,8 @@ type testEnv struct {
 	pool   *pgxpool.Pool
 	api    humatest.TestAPI
 	media  *fakeMedia
+	feed   *fakeForgetter
+	study  *fakeForgetter
 	module Module
 }
 
@@ -150,8 +185,10 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	fm := &fakeMedia{pool: pool}
+	feed := &fakeForgetter{failFor: map[uuid.UUID]error{}}
+	study := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	runner := jobs.NewRunner(pool, 1, 0)
-	m, err := New(pool, fm, runner)
+	m, err := New(pool, fm, feed, study, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
@@ -168,7 +205,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	api.UseMiddleware(authModule.Guard(api))
 	m.Register(api)
 
-	return &testEnv{pool: pool, api: api, media: fm, module: m}
+	return &testEnv{pool: pool, api: api, media: fm, feed: feed, study: study, module: m}
 }
 
 type testUser struct {
@@ -188,6 +225,7 @@ func (e *testEnv) newUser(t *testing.T, university, email string) testUser {
 		t.Fatalf("create user: %v", err)
 	}
 	t.Cleanup(func() {
+		_, _ = e.pool.Exec(context.Background(), "DELETE FROM media WHERE owner_user_id = $1", id)
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id)
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM jobs WHERE payload->>'userId' = $1", id.String())
 	})

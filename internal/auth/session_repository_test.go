@@ -125,4 +125,22 @@ func TestSessionRepository_Integration(t *testing.T) {
 			t.Fatalf("Expected ErrSessionNotFound for unknown hash, got: %v", err)
 		}
 	})
+
+	t.Run("Session of a user being deleted is not returned", func(t *testing.T) {
+		deletingID := createTestUser(t, pool)
+		token := GenerateSessionToken()
+		hash := token.Hash()
+
+		if _, err := repo.CreateSession(ctx, deletingID, hash[:], time.Now().Add(24*time.Hour)); err != nil {
+			t.Fatalf("Failed to create session: %v", err)
+		}
+		if _, err := pool.Exec(ctx, "UPDATE users SET deleted_at = NOW() WHERE id = $1", deletingID); err != nil {
+			t.Fatalf("Failed to mark user as deleting: %v", err)
+		}
+
+		_, err := repo.GetActiveSessionByHash(ctx, hash[:])
+		if !errors.Is(err, ErrSessionNotFound) {
+			t.Fatalf("Expected ErrSessionNotFound for a user being deleted, got: %v", err)
+		}
+	})
 }

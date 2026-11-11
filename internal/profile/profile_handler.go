@@ -117,6 +117,32 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	return &updateMeOutput{Body: *p}, nil
 }
 
+var deleteMeOperation = auth.Protected(huma.Operation{
+	OperationID: "deleteMyProfile",
+	Method:      http.MethodDelete,
+	Path:        "/profile/me",
+	Summary:     "Delete the logged-in student's profile and account",
+	Description: "Signs the student out everywhere and frees their university login, so signing in again creates a new, empty account. " +
+		"Posts, comments, likes, study files, uploads and the profile are removed in the background. " +
+		"Requires a sign-in within the last 15 minutes: on 403 reauthentication_required, sign in again and retry.",
+	Tags:          []string{"profile"},
+	DefaultStatus: http.StatusNoContent,
+	Errors:        []int{http.StatusForbidden},
+})
+
+func (h *profileHandler) deleteMe(ctx context.Context, _ *struct{}) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+	signedInAt, _ := auth.SignedInAt(ctx)
+
+	if err := h.profile.deleteAccount(ctx, userID, signedInAt); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
 var deleteAvatarOperation = auth.Protected(huma.Operation{
 	OperationID:   "deleteMyAvatar",
 	Method:        http.MethodDelete,

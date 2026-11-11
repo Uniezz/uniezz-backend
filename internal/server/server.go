@@ -41,7 +41,16 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, fmt.Errorf("initialize media: %w", err)
 	}
 
-	profileModule, err := profile.New(db, mediaModule, runner)
+	feedModule, err := feed.New(db, mediaModule, runner)
+	if err != nil {
+		return Modules{}, err
+	}
+	studyModule, err := study.New(db, mediaModule, runner)
+	if err != nil {
+		return Modules{}, err
+	}
+
+	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
@@ -50,16 +59,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	feedModule, err := feed.New(db, mediaModule, runner)
-	if err != nil {
-		return Modules{}, err
-	}
-
 	faqModule := faq.New(db, cfg.FAQPublisherEmails)
-	studyModule, err := study.New(db, mediaModule, runner)
-	if err != nil {
-		return Modules{}, err
-	}
 	moderationModule := moderation.New(db, feedModule, profileModule, connectionsModule, studyModule)
 
 	mailModule := mail.NewResendSender(cfg)

@@ -65,7 +65,7 @@ func newProfileRepository(db database.DB) *profileRepository {
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
 	query := `SELECT ` + profileColumns + `, u.banner_media_id, banner.kind, banner.object_key` + profileFrom + `
 		LEFT JOIN ready_media banner ON banner.id = u.banner_media_id
-		WHERE u.id = $1`
+		WHERE u.id = $1 AND u.deleted_at IS NULL`
 	var bannerID *uuid.UUID
 	var bannerKind, bannerKey *string
 	p, err := scanProfile(r.db.Conn(ctx).QueryRow(ctx, query, userID), &bannerID, &bannerKind, &bannerKey)
@@ -81,7 +81,7 @@ func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profile
 }
 
 func (r *profileRepository) getMany(ctx context.Context, userIDs []uuid.UUID) ([]profileRow, error) {
-	rows, err := r.db.Conn(ctx).Query(ctx, "SELECT "+profileColumns+profileFrom+" WHERE u.id = ANY($1)", userIDs)
+	rows, err := r.db.Conn(ctx).Query(ctx, "SELECT "+profileColumns+profileFrom+" WHERE u.id = ANY($1) AND u.deleted_at IS NULL", userIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get profiles: %w", err)
 	}
@@ -155,10 +155,10 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 			" AND (u.created_at, u.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")))")
 	}
 
+	where = append(where, "u.deleted_at IS NULL")
+
 	query := "SELECT " + profileColumns + ", " + rank + " AS search_rank" + profileFrom
-	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
-	}
+	query += " WHERE " + strings.Join(where, " AND ")
 	query += " ORDER BY search_rank, u.created_at DESC, u.id DESC LIMIT " + arg(f.Limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
@@ -256,4 +256,65 @@ func (r *profileRepository) setAvatarIfEmpty(ctx context.Context, userID, mediaI
 		return false, fmt.Errorf("set imported avatar: %w", err)
 	}
 	return result.RowsAffected() == 1, nil
+}
+
+func (r *profileRepository) markDeleting(ctx context.Context, userID uuid.UUID) (bool, error) {
+	const query = `
+		UPDATE users
+		SET deleted_at = NOW(), email = NULL, usos_user_id = NULL
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	result, err := r.db.Conn(ctx).Exec(ctx, query, userID)
+	if err != nil {
+		return false, fmt.Errorf("mark user deleting: %w", err)
+	}
+	return result.RowsAffected() == 1, nil
+}
+
+func (r *profileRepository) deleteDeleting(ctx context.Context, userID uuid.UUID) error {
+	if _, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM users WHERE id = $1 AND deleted_at IS NOT NULL`, userID); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	return nil
+}
+
+func (r *profileRepository) isDeleting(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var deleting bool
+	err := r.db.Conn(ctx).QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NOT NULL)`, userID).Scan(&deleting)
+	if err != nil {
+		return false, fmt.Errorf("check user deleting: %w", err)
+	}
+	return deleting, nil
+}
+
+func (r *profileRepository) restartStuckDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]uuid.UUID, error) {
+	const query = `
+		UPDATE users SET deleted_at = NOW()
+		WHERE id IN (
+			SELECT id FROM users
+			WHERE deleted_at < NOW() - $1::interval
+			ORDER BY deleted_at
+			LIMIT $2
+			FOR UPDATE SKIP LOCKED)
+		RETURNING id`
+
+	rows, err := r.db.Conn(ctx).Query(ctx, query, olderThan, limit)
+	if err != nil {
+		return nil, fmt.Errorf("restart stuck deletions: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan stuck deletion: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("restart stuck deletions: %w", err)
+	}
+	return ids, nil
 }

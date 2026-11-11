@@ -180,6 +180,7 @@ func (e *testEnv) cleanup() {
 		"DELETE FROM feed_post_likes WHERE user_id = ANY($1)",
 		"DELETE FROM feed_post_saves WHERE user_id = ANY($1)",
 		"DELETE FROM reports WHERE reporter_id = ANY($1) OR target_author_id = ANY($1)",
+		"DELETE FROM media WHERE owner_user_id = ANY($1)",
 		"DELETE FROM users WHERE id = ANY($1)",
 	} {
 		if _, err := e.pool.Exec(ctx, query, e.users); err != nil {

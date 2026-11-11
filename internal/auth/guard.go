@@ -18,13 +18,19 @@ import (
 type principalKey struct{}
 
 type principal struct {
-	userID    uuid.UUID
-	sessionID uuid.UUID
+	userID     uuid.UUID
+	sessionID  uuid.UUID
+	signedInAt time.Time
 }
 
 func UserIDFrom(ctx context.Context) (uuid.UUID, bool) {
 	p, ok := ctx.Value(principalKey{}).(principal)
 	return p.userID, ok
+}
+
+func SignedInAt(ctx context.Context) (time.Time, bool) {
+	p, ok := ctx.Value(principalKey{}).(principal)
+	return p.signedInAt, ok
 }
 
 type guard struct {
@@ -86,7 +92,7 @@ func (g *guard) authenticate(ctx context.Context, header string) (principal, err
 		}
 	}
 
-	return principal{userID: s.UserID, sessionID: s.ID}, nil
+	return principal{userID: s.UserID, sessionID: s.ID, signedInAt: s.CreatedAt}, nil
 }
 
 var bearerSecurity = []map[string][]string{{httpapi.BearerAuth: {}}}
