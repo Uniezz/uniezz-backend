@@ -34,8 +34,14 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 		}
 	}
 
+	if err := m.posts.visible(ctx, userID, in.PostID); err != nil {
+		return nil, false, err
+	}
 	var parentID *uuid.UUID
 	if in.ReplyToCommentID != nil {
+		if err := m.comments.visible(ctx, userID, *in.ReplyToCommentID); err != nil {
+			return nil, false, err
+		}
 		target, err := m.comments.ref(ctx, *in.ReplyToCommentID)
 		if err != nil {
 			return nil, false, err
@@ -101,7 +107,7 @@ func (m Module) comment(ctx context.Context, viewerID, commentID uuid.UUID) (*Co
 }
 
 func (m Module) listComments(ctx context.Context, viewerID, postID uuid.UUID, cursor string, limit int) ([]Comment, *string, error) {
-	if err := m.posts.exists(ctx, postID); err != nil {
+	if err := m.posts.visible(ctx, viewerID, postID); err != nil {
 		return nil, nil, err
 	}
 	return m.commentPage(ctx, cursor, limit, func(after *pageCursor) ([]commentRow, error) {
@@ -111,6 +117,9 @@ func (m Module) listComments(ctx context.Context, viewerID, postID uuid.UUID, cu
 
 func (m Module) listReplies(ctx context.Context, viewerID, rootID uuid.UUID, cursor string, limit int) ([]Comment, *string, error) {
 	if err := m.comments.isRoot(ctx, rootID); err != nil {
+		return nil, nil, err
+	}
+	if err := m.comments.visible(ctx, viewerID, rootID); err != nil {
 		return nil, nil, err
 	}
 	return m.commentPage(ctx, cursor, limit, func(after *pageCursor) ([]commentRow, error) {

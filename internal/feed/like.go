@@ -13,6 +13,11 @@ func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked
 		if _, err := m.posts.lock(ctx, postID, false); err != nil {
 			return err
 		}
+		if liked {
+			if err := m.posts.visible(ctx, userID, postID); err != nil {
+				return err
+			}
+		}
 		var err error
 		var change *likeChange
 		state, change, err = m.setLike(ctx, postLikes, postID, userID, liked)
@@ -29,6 +34,11 @@ func (m Module) setCommentLike(ctx context.Context, userID, commentID uuid.UUID,
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := m.comments.lockLive(ctx, commentID); err != nil {
 			return err
+		}
+		if liked {
+			if err := m.comments.visible(ctx, userID, commentID); err != nil {
+				return err
+			}
 		}
 		var err error
 		state, _, err = m.setLike(ctx, commentLikes, commentID, userID, liked)

@@ -15,19 +15,34 @@ type reportHandler struct {
 	moderation Module
 }
 
+// reportTargetType is the kind of reported thing. New values are allowed:
+// clients must ignore a targetType they do not know.
+type reportTargetType string
+
+func (reportTargetType) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema {
+	schema.Enum = nil
+	if schema.Extensions == nil {
+		schema.Extensions = map[string]any{}
+	}
+	// oasdiff treats this list as the enum. The enum keyword itself must stay
+	// off the response, or adding a value is a breaking change.
+	schema.Extensions["x-extensible-enum"] = []any{"post", "comment", "user", "candidate"}
+	return schema
+}
+
 type Report struct {
-	ID         uuid.UUID `json:"id" format:"uuid"`
-	TargetType string    `json:"targetType" enum:"post,comment,user"`
-	TargetID   uuid.UUID `json:"targetId" format:"uuid"`
-	Reason     string    `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
-	Details    *string   `json:"details" nullable:"true"`
-	Status     string    `json:"status" enum:"pending,reviewed,dismissed"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         uuid.UUID        `json:"id" format:"uuid"`
+	TargetType reportTargetType `json:"targetType"`
+	TargetID   uuid.UUID        `json:"targetId" format:"uuid"`
+	Reason     string           `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
+	Details    *string          `json:"details" nullable:"true"`
+	Status     string           `json:"status" enum:"pending,reviewed,dismissed"`
+	CreatedAt  time.Time        `json:"createdAt"`
 }
 
 type createReportInput struct {
 	Body struct {
-		TargetType string    `json:"targetType" enum:"post,comment,user"`
+		TargetType string    `json:"targetType" enum:"post,comment,user,candidate"`
 		TargetID   uuid.UUID `json:"targetId" format:"uuid"`
 		Reason     string    `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
 		Details    *string   `json:"details,omitempty" maxLength:"4000" doc:"Up to 1000 characters after HTML is stripped"`

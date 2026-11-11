@@ -11,6 +11,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
+	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
@@ -55,6 +56,24 @@ func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uu
 	return author, map[string]any{"content": "reported text"}, nil
 }
 
+type fakeCandidates struct {
+	users  map[uuid.UUID]uuid.UUID
+	hidden map[uuid.UUID][]uuid.UUID
+}
+
+func (f fakeCandidates) ReportTarget(_ context.Context, _ uuid.UUID, candidateID uuid.UUID) (uuid.UUID, map[string]any, error) {
+	userID, ok := f.users[candidateID]
+	if !ok {
+		return uuid.Nil, nil, connections.ErrNotFound
+	}
+	return userID, map[string]any{"bio": "reported bio"}, nil
+}
+
+func (f fakeCandidates) HideCandidate(_ context.Context, viewerID, userID uuid.UUID) error {
+	f.hidden[viewerID] = append(f.hidden[viewerID], userID)
+	return nil
+}
+
 type fakeProfiles struct {
 	users map[uuid.UUID]bool
 }
@@ -67,18 +86,24 @@ func (f fakeProfiles) ReportTarget(_ context.Context, id uuid.UUID) (map[string]
 }
 
 type testEnv struct {
-	pool    *pgxpool.Pool
-	api     humatest.TestAPI
-	targets fakeTargets
-	users   fakeProfiles
+	pool       *pgxpool.Pool
+	api        humatest.TestAPI
+	targets    fakeTargets
+	users      fakeProfiles
+	candidates fakeCandidates
 }
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 
 	pool := setupTestDB(t)
-	e := &testEnv{pool: pool, targets: fakeTargets{authors: map[uuid.UUID]uuid.UUID{}}, users: fakeProfiles{users: map[uuid.UUID]bool{}}}
-	m := New(pool, e.targets, e.users)
+	e := &testEnv{
+		pool:       pool,
+		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}},
+		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
+		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
+	}
+	m := New(pool, e.targets, e.users, e.candidates)
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
@@ -187,6 +212,25 @@ func TestCreateReport(t *testing.T) {
 	expectError(t, e.api.Post("/reports", reporter.bearer, map[string]any{"targetType": "post", "targetId": post, "reason": "boring"}), 400, "invalid_input")
 	decode[Report](t, e.api.Post("/reports", reporter.bearer, report("user", author.id)), 201)
 	expectError(t, e.api.Post("/reports", report("user", author.id)), 401, "unauthorized")
+}
+
+func TestCandidateReportHidesOnlyWhenStored(t *testing.T) {
+	e := newTestEnv(t)
+	reporter := e.user(t)
+	other := e.user(t)
+	candidate := uuid.New()
+	e.candidates.users[candidate] = other.id
+	own := uuid.New()
+	e.candidates.users[own] = reporter.id
+
+	decode[Report](t, e.api.Post("/reports", reporter.bearer, report("candidate", candidate)), 201)
+	expectError(t, e.api.Post("/reports", reporter.bearer, report("candidate", candidate)), 409, "already_reported")
+	expectError(t, e.api.Post("/reports", reporter.bearer, report("candidate", own)), 400, "self_report")
+	expectError(t, e.api.Post("/reports", reporter.bearer, report("candidate", uuid.New())), 404, "not_found")
+
+	if got := e.candidates.hidden[reporter.id]; len(got) != 1 || got[0] != other.id {
+		t.Errorf("hidden = %v, want only %s", got, other.id)
+	}
 }
 
 // awayFromHourBoundary keeps a limit test inside one fixed rate-limit window.

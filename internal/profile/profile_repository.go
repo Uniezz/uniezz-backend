@@ -80,6 +80,27 @@ func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profile
 	return p, nil
 }
 
+func (r *profileRepository) getMany(ctx context.Context, userIDs []uuid.UUID) ([]profileRow, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, "SELECT "+profileColumns+profileFrom+" WHERE u.id = ANY($1)", userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get profiles: %w", err)
+	}
+	defer rows.Close()
+
+	var profiles []profileRow
+	for rows.Next() {
+		p, err := scanProfile(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan profile: %w", err)
+		}
+		profiles = append(profiles, *p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get profiles: %w", err)
+	}
+	return profiles, nil
+}
+
 type profileCursor struct {
 	SearchRank int       `json:"r,omitempty"`
 	CreatedAt  time.Time `json:"c"`
@@ -87,6 +108,7 @@ type profileCursor struct {
 }
 
 type profileFilter struct {
+	ViewerID     uuid.UUID
 	UniversityID string
 	Words        []string
 	After        *profileCursor
@@ -122,6 +144,10 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 				  AND owner.privacy->>'showFaculty' IS DISTINCT FROM 'false')`)
 		}
 		rank = "CASE WHEN " + strings.Join(nameMatches, " AND ") + " THEN 0 ELSE 1 END"
+	}
+	if f.ViewerID != uuid.Nil {
+		viewer := arg(f.ViewerID)
+		where = append(where, "NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = "+viewer+" AND b.other_id = u.id)")
 	}
 	if f.After != nil {
 		afterRank := arg(f.After.SearchRank)
@@ -185,6 +211,16 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 		return fmt.Errorf("update profile: %w", err)
 	}
 	return nil
+}
+
+func (r *profileRepository) blocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
+	var found bool
+	err := r.db.Conn(ctx).QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM blocked_pairs WHERE user_id = $1 AND other_id = $2)`, a, b).Scan(&found)
+	if err != nil {
+		return false, fmt.Errorf("check block: %w", err)
+	}
+	return found, nil
 }
 
 func (r *profileRepository) setGender(ctx context.Context, userID uuid.UUID, gender Gender) error {

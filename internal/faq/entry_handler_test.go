@@ -1,6 +1,7 @@
 package faq
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -79,11 +80,11 @@ func TestFAQ(t *testing.T) {
 		}
 	})
 
-	t.Run("only the staff address can publish", func(t *testing.T) {
+	t.Run("only a configured publisher can publish", func(t *testing.T) {
 		body := map[string]any{"question": "Where is the dean?", "answer": "In the main building."}
 		expectError(t, e.api.Post("/faq", author.bearer, body), 403, "forbidden")
 
-		staff := e.userEmail(t, publisherEmail)
+		staff := e.userEmail(t, strings.ToLower(e.publisher))
 		published := decode[Entry](t, e.api.Post("/faq", staff.bearer, body), 201)
 		if published.Status != statusPublished {
 			t.Fatalf("got %#v", published)

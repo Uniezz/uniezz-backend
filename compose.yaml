@@ -97,6 +97,7 @@ services:
       OTP_EMAIL_TEMPLATE_ID: ${OTP_EMAIL_TEMPLATE_ID:-}
       OTP_HASH_KEY: ${OTP_HASH_KEY:-}
       OTP_TEST_EMAILS: ${OTP_TEST_EMAILS:-}
+      FAQ_PUBLISHER_EMAILS: ${FAQ_PUBLISHER_EMAILS:-}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-uniezz-media}
       S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}

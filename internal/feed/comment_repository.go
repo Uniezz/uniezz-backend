@@ -65,7 +65,7 @@ func newCommentRepository(db database.DB) *commentRepository {
 }
 
 func (r *commentRepository) get(ctx context.Context, viewerID, commentID uuid.UUID) (*commentRow, error) {
-	c, err := scanComment(r.db.Conn(ctx).QueryRow(ctx, commentSelect+` WHERE c.id = $2`, viewerID, commentID))
+	c, err := scanComment(r.db.Conn(ctx).QueryRow(ctx, commentSelect+` WHERE c.id = $2 AND `+notBlocked("$1", "c.author_id"), viewerID, commentID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -91,7 +91,7 @@ func (r *commentRepository) list(ctx context.Context, where string, viewerID, sc
 	}
 
 	rows, err := r.db.Conn(ctx).Query(ctx, commentSelect+`
-		WHERE `+where+`
+		WHERE `+where+` AND `+notBlocked("$1", "c.author_id")+`
 		ORDER BY c.created_at, c.id
 		LIMIT $3`, args...)
 	if err != nil {
@@ -142,6 +142,21 @@ func (r *commentRepository) isRoot(ctx context.Context, commentID uuid.UUID) err
 		`SELECT EXISTS (SELECT 1 FROM feed_comments WHERE id = $1 AND parent_id IS NULL)`, commentID).Scan(&found)
 	if err != nil {
 		return fmt.Errorf("check root comment: %w", err)
+	}
+	if !found {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *commentRepository) visible(ctx context.Context, viewerID, commentID uuid.UUID) error {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM feed_comments c JOIN feed_posts p ON p.id = c.post_id
+			WHERE c.id = $2 AND ` + notBlocked("$1", "c.author_id") + ` AND ` + notBlocked("$1", "p.author_id") + `)`
+	var found bool
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, viewerID, commentID).Scan(&found); err != nil {
+		return fmt.Errorf("check comment: %w", err)
 	}
 	if !found {
 		return ErrNotFound

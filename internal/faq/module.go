@@ -3,17 +3,24 @@
 package faq
 
 import (
+	"strings"
+
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Module struct {
-	entries *entryRepository
+	entries    *entryRepository
+	publishers map[string]bool
 }
 
-func New(pool *pgxpool.Pool) Module {
-	return Module{entries: newEntryRepository(database.New(pool))}
+func New(pool *pgxpool.Pool, publisherEmails []string) Module {
+	publishers := make(map[string]bool, len(publisherEmails))
+	for _, email := range publisherEmails {
+		publishers[strings.ToLower(email)] = true
+	}
+	return Module{entries: newEntryRepository(database.New(pool)), publishers: publishers}
 }
 
 func (m Module) Register(api huma.API) {

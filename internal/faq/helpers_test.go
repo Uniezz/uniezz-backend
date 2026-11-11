@@ -40,9 +40,10 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 }
 
 type testEnv struct {
-	pool  *pgxpool.Pool
-	api   humatest.TestAPI
-	users []uuid.UUID
+	pool      *pgxpool.Pool
+	api       humatest.TestAPI
+	users     []uuid.UUID
+	publisher string
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -62,9 +63,10 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
 	api.UseMiddleware(authModule.Guard(api))
-	New(pool).Register(api)
+	publisher := "Staff-" + uuid.NewString() + "@example.test"
+	New(pool, []string{publisher}).Register(api)
 
-	e := &testEnv{pool: pool, api: api}
+	e := &testEnv{pool: pool, api: api, publisher: publisher}
 	t.Cleanup(e.cleanup)
 	return e
 }

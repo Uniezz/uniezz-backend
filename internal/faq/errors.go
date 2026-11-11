@@ -8,8 +8,9 @@ import (
 )
 
 var (
+	ErrNotFound     = errors.New("not found")
 	ErrInvalidInput = errors.New("invalid input")
-	ErrForbidden    = errors.New("only the staff address may publish")
+	ErrForbidden    = errors.New("only a configured publisher may publish")
 )
 
 var errorResponses = httpapi.ErrorResponses{
