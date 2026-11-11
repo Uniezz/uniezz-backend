@@ -32,6 +32,20 @@ func TestAddCourseFile(t *testing.T) {
 		expectError(t, e.api.Post("/study/courses/"+course.ID.String()+"/files", author.bearer, body), http.StatusBadRequest, "invalid_media")
 	})
 
+	t.Run("an upload of another kind is invalid media", func(t *testing.T) {
+		author := e.student(t)
+		course := e.course(t, author, nil)
+		id := uuid.New()
+		_, err := e.pool.Exec(context.Background(), `
+			INSERT INTO media (id, owner_user_id, kind, object_key, content_type, size_bytes)
+			VALUES ($1, $2, 'feed', $3, 'image/png', 10)`, id, author.id, "feed/"+id.String()+".png")
+		if err != nil {
+			t.Fatalf("insert media: %v", err)
+		}
+		body := map[string]any{"mediaId": id, "title": "Not an exam", "type": "exam"}
+		expectError(t, e.api.Post("/study/courses/"+course.ID.String()+"/files", author.bearer, body), http.StatusBadRequest, "invalid_media")
+	})
+
 	t.Run("an unknown course is not found and the upload stays pending", func(t *testing.T) {
 		author := e.student(t)
 		mediaID := e.upload(t, author.id)

@@ -89,6 +89,21 @@ func TestUploadHandler(t *testing.T) {
 		expectError(t, rec.Code, rec.Body.Bytes(), http.StatusBadRequest, "invalid_input")
 	})
 
+	t.Run("an exam PDF up to 20 MiB is accepted", func(t *testing.T) {
+		rec := api.Post("/media/uploads", bearer, map[string]any{"kind": "exam", "contentType": "application/pdf", "size": 15 << 20})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("a PDF outside exam or an exam PDF over 20 MiB is a 400", func(t *testing.T) {
+		rec := api.Post("/media/uploads", bearer, map[string]any{"kind": "feed", "contentType": "application/pdf", "size": 1024})
+		expectError(t, rec.Code, rec.Body.Bytes(), http.StatusBadRequest, "invalid_upload")
+
+		rec = api.Post("/media/uploads", bearer, map[string]any{"kind": "exam", "contentType": "application/pdf", "size": 25 << 20})
+		expectError(t, rec.Code, rec.Body.Bytes(), http.StatusBadRequest, "invalid_upload")
+	})
+
 	t.Run("no session is a 401", func(t *testing.T) {
 		rec := api.Post("/media/uploads", map[string]any{"kind": "avatar", "contentType": "image/png", "size": 10})
 		expectError(t, rec.Code, rec.Body.Bytes(), http.StatusUnauthorized, "unauthorized")
