@@ -1787,7 +1787,7 @@ paths:
       tags:
         - connections
     put:
-      description: Each student stops seeing the other in discovery, the profile list, the profile and connections. Blocking twice changes nothing.
+      description: "Each student stops seeing the other in discovery, the profile list, the profile, connections, and the feed: posts, comments and the featured list. Blocking twice changes nothing."
       operationId: blockStudent
       parameters:
         - description: The blocked student's profile id

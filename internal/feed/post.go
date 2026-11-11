@@ -295,6 +295,9 @@ func (m Module) setPostSave(ctx context.Context, userID, postID uuid.UUID, saved
 			return err
 		}
 		if saved {
+			if err := m.posts.visible(ctx, userID, postID); err != nil {
+				return err
+			}
 			return m.posts.save(ctx, postID, userID)
 		}
 		return m.posts.unsave(ctx, postID, userID)
@@ -481,8 +484,8 @@ func (m Module) removePost(ctx context.Context, postID uuid.UUID, allow func(aut
 	return nil
 }
 
-func (m Module) featuredPosts(ctx context.Context) ([]FeaturedPost, error) {
-	rows, err := m.posts.featured(ctx, 5)
+func (m Module) featuredPosts(ctx context.Context, viewerID uuid.UUID) ([]FeaturedPost, error) {
+	rows, err := m.posts.featured(ctx, viewerID, 5)
 	if err != nil {
 		return nil, err
 	}

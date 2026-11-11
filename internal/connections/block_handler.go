@@ -23,7 +23,7 @@ var blockStudentOperation = auth.Protected(huma.Operation{
 	Method:        http.MethodPut,
 	Path:          "/connections/blocks/{id}",
 	Summary:       "Block a student",
-	Description:   "Each student stops seeing the other in discovery, the profile list, the profile and connections. Blocking twice changes nothing.",
+	Description:   "Each student stops seeing the other in discovery, the profile list, the profile, connections, and the feed: posts, comments and the featured list. Blocking twice changes nothing.",
 	Tags:          []string{"connections"},
 	DefaultStatus: http.StatusNoContent,
 	Errors:        []int{http.StatusBadRequest, http.StatusNotFound},

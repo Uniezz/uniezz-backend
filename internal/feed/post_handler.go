@@ -375,10 +375,11 @@ var featuredPostsOperation = auth.Protected(huma.Operation{
 })
 
 func (h *postHandler) featuredPosts(ctx context.Context, _ *struct{}) (*featuredPostsOutput, error) {
-	if _, ok := auth.UserIDFrom(ctx); !ok {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
-	cards, err := h.feed.featuredPosts(ctx)
+	cards, err := h.feed.featuredPosts(ctx, viewerID)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

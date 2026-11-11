@@ -54,6 +54,10 @@ const postFrom = `
 
 const postSelect = postColumns + postFrom
 
+func notBlocked(viewer, author string) string {
+	return "NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = " + viewer + " AND b.other_id = " + author + ")"
+}
+
 func scanPost(row pgx.Row, extra ...any) (*postRow, error) {
 	var p postRow
 	var avatarKind, avatarKey *string
@@ -119,7 +123,7 @@ func (r *postRepository) attachMedia(ctx context.Context, postID uuid.UUID, posi
 }
 
 func (r *postRepository) get(ctx context.Context, viewerID, postID uuid.UUID) (*postRow, error) {
-	p, err := scanPost(r.db.Conn(ctx).QueryRow(ctx, postSelect+` WHERE p.id = $2`, viewerID, postID))
+	p, err := scanPost(r.db.Conn(ctx).QueryRow(ctx, postSelect+` WHERE p.id = $2 AND `+notBlocked("$1", "p.author_id"), viewerID, postID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -151,6 +155,9 @@ type postFilter struct {
 func postWhere(f postFilter, args *database.Args) string {
 	arg := args.Add
 	var where []string
+	if f.ViewerID != uuid.Nil {
+		where = append(where, notBlocked(arg(f.ViewerID), "p.author_id"))
+	}
 	if f.AuthorID != "" {
 		where = append(where, "p.author_id = "+arg(f.AuthorID))
 	}
@@ -218,7 +225,7 @@ func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, err
 
 func (r *postRepository) listByActivity(ctx context.Context, table string, viewerID uuid.UUID, after *pageCursor, limit int) ([]postRow, error) {
 	args := database.Args{viewerID}
-	where := "mine.user_id = $1"
+	where := "mine.user_id = $1 AND " + notBlocked("$1", "p.author_id")
 	if after != nil {
 		where += " AND (mine.created_at, mine.post_id) < (" + args.Add(after.CreatedAt) + ", " + args.Add(after.ID) + ")"
 	}
@@ -400,9 +407,10 @@ func (r *postRepository) countComments(ctx context.Context, postID uuid.UUID, de
 	return nil
 }
 
-func (r *postRepository) exists(ctx context.Context, postID uuid.UUID) error {
+func (r *postRepository) visible(ctx context.Context, viewerID, postID uuid.UUID) error {
+	query := `SELECT EXISTS (SELECT 1 FROM feed_posts p WHERE p.id = $2 AND ` + notBlocked("$1", "p.author_id") + `)`
 	var found bool
-	if err := r.db.Conn(ctx).QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM feed_posts WHERE id = $1)`, postID).Scan(&found); err != nil {
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, viewerID, postID).Scan(&found); err != nil {
 		return fmt.Errorf("check post: %w", err)
 	}
 	if !found {
@@ -455,7 +463,7 @@ type featuredRow struct {
 	Image        media.Ref
 }
 
-func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow, error) {
+func (r *postRepository) featured(ctx context.Context, viewerID uuid.UUID, limit int) ([]featuredRow, error) {
 	rows, err := r.db.Conn(ctx).Query(ctx, `
 		SELECT p.id, p.title, p.university_id, p.event_date, image.kind, image.object_key
 		FROM feed_post_weekly_likes weekly
@@ -469,9 +477,9 @@ func (r *postRepository) featured(ctx context.Context, limit int) ([]featuredRow
 			ORDER BY pm.position
 			LIMIT 1
 		) image ON true
-		WHERE weekly.week = `+weekOf("NOW()")+` AND weekly.likes > 0
+		WHERE weekly.week = `+weekOf("NOW()")+` AND weekly.likes > 0 AND `+notBlocked("$2", "p.author_id")+`
 		ORDER BY weekly.likes DESC, weekly.post_created_at DESC, weekly.post_id DESC
-		LIMIT $1`, limit)
+		LIMIT $1`, limit, viewerID)
 	if err != nil {
 		return nil, fmt.Errorf("list featured posts: %w", err)
 	}
