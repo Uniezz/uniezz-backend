@@ -15,9 +15,9 @@ type uploadHandler struct {
 
 type createUploadInput struct {
 	Body struct {
-		Kind        Kind   `json:"kind" enum:"avatar,banner,feed,chat" doc:"What the file will be used for"`
-		ContentType string `json:"contentType" enum:"image/jpeg,image/png,image/webp" doc:"MIME type the file will be uploaded with"`
-		Size        int64  `json:"size" minimum:"1" doc:"Exact file size in bytes; 5 MiB max for avatars, 10 MiB for banners, feed and chat"`
+		Kind        Kind   `json:"kind" enum:"avatar,banner,feed,chat,exam" doc:"What the file will be used for"`
+		ContentType string `json:"contentType" enum:"image/jpeg,image/png,image/webp,application/pdf" doc:"MIME type the file will be uploaded with; application/pdf only for exam"`
+		Size        int64  `json:"size" minimum:"1" doc:"Exact file size in bytes; 5 MiB max for avatars, 10 MiB for banners, feed, chat and exam images, 20 MiB for exam PDFs"`
 	}
 }
 

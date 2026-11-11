@@ -530,11 +530,12 @@ components:
       additionalProperties: false
       properties:
         contentType:
-          description: MIME type the file will be uploaded with
+          description: MIME type the file will be uploaded with; application/pdf only for exam
           enum:
             - image/jpeg
             - image/png
             - image/webp
+            - application/pdf
           type: string
         kind:
           description: What the file will be used for
@@ -543,9 +544,10 @@ components:
             - banner
             - feed
             - chat
+            - exam
           type: string
         size:
-          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for banners, feed and chat
+          description: Exact file size in bytes; 5 MiB max for avatars, 10 MiB for banners, feed, chat and exam images, 20 MiB for exam PDFs
           format: int64
           minimum: 1
           type: integer
