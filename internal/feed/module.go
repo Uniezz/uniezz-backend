@@ -52,13 +52,13 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Mod
 	if err := jobs.Register(runner, m.pruneKeys, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
 		return Module{}, fmt.Errorf("feed: %w", err)
 	}
-	if err := jobs.Schedule(runner, PruneKeysArgs{}, 24*time.Hour); err != nil {
+	if err := jobs.Schedule(runner, "feed-prune-request-keys", PruneKeysArgs{}, 24*time.Hour); err != nil {
 		return Module{}, fmt.Errorf("feed: %w", err)
 	}
 	if err := jobs.Register(runner, m.pruneWeeklyLikes, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
 		return Module{}, fmt.Errorf("feed: %w", err)
 	}
-	if err := jobs.Schedule(runner, PruneWeeklyLikesArgs{}, 24*time.Hour); err != nil {
+	if err := jobs.Schedule(runner, "feed-prune-weekly-likes", PruneWeeklyLikesArgs{}, 24*time.Hour); err != nil {
 		return Module{}, fmt.Errorf("feed: %w", err)
 	}
 	return m, nil

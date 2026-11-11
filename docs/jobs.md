@@ -52,10 +52,14 @@ Handlers must be safe to run twice (delivery is at least once): a worker can fin
 Run a task on a fixed interval by registering it, then scheduling it in the module's `New`:
 
 ```go
-err := jobs.Schedule(runner, CleanupArgs{}, time.Hour)
+err := jobs.Schedule(runner, "media-cleanup", CleanupArgs{}, time.Hour)
 ```
 
-Every poll interval the runner computes the current slot (`now` truncated to the interval) and inserts one job with `unique_key = <kind>@<slot>`. The unique index makes the insert a no-op when the slot already has a job, so the task runs once per slot however many API instances run, and a restart does not repeat it. The job then goes through the normal queue: retries, leases and Sentry reports apply. A slot can start up to one poll interval late.
+Every poll interval the runner computes the current slot (`now` truncated to the interval) and inserts one job with `unique_key = <name>@<slot>`. The unique index makes the insert a no-op when the slot already has a job, so the task runs once per slot however many API instances run, and a restart does not repeat it. The job then goes through the normal queue: retries, leases and Sentry reports apply. A slot can start up to one poll interval late.
+
+The name is a lowercase slug of at most 50 characters, unique per schedule. One task can have several schedules with different args, as `study` has one import per university (`study-import-professors-umcs`, …).
+
+Every run of a scheduled job is a Sentry Crons check-in under the schedule's name: `in_progress` when it starts, then `ok` or `error`. The first check-in creates the monitor with the interval, a 15-minute margin and the task's timeout as its maximum runtime, so nothing is set up in Sentry by hand. A monitor opens an issue only after `MaxAttempts` failed runs in a row, or when a slot is missed. Jobs enqueued with `Enqueue` send no check-ins.
 
 ## How the runner works
 
@@ -113,6 +117,8 @@ On SIGTERM, `main` stops the HTTP server first, then cancels the runner's contex
 ## Observability
 
 Every finished attempt is logged with `job_kind`, `job_id` and `attempt`. Retries are `WARN`; final failures go through `telemetry.ReportError` and create a Sentry issue. Pending jobs of a kind with no registered handler are reported once at startup.
+
+Every finished attempt also sends two Sentry metrics tagged with `kind`: `jobs.finished` (a count, tagged `status` = `succeeded`, `retried` or `failed`) and `jobs.duration` (a distribution in milliseconds).
 
 ## Tasks
 

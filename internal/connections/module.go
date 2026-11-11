@@ -59,7 +59,7 @@ func New(pool *pgxpool.Pool, profileModule profiles, runner *jobs.Runner) (Modul
 	if err := jobs.Register(runner, m.pruneDiscovery, jobs.Options{Timeout: 5 * time.Minute, MaxAttempts: 3}); err != nil {
 		return Module{}, fmt.Errorf("connections: %w", err)
 	}
-	if err := jobs.Schedule(runner, PruneDiscoveryArgs{}, pruneDiscoveryEvery); err != nil {
+	if err := jobs.Schedule(runner, "connections-prune-discovery", PruneDiscoveryArgs{}, pruneDiscoveryEvery); err != nil {
 		return Module{}, fmt.Errorf("connections: %w", err)
 	}
 	return m, nil

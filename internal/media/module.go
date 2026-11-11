@@ -61,7 +61,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, runner *jo
 	if err := jobs.Register(runner, m.cleanup, jobs.Options{Timeout: 5 * time.Minute, MaxAttempts: 3}); err != nil {
 		return Module{}, fmt.Errorf("media: %w", err)
 	}
-	if err := jobs.Schedule(runner, CleanupArgs{}, time.Hour); err != nil {
+	if err := jobs.Schedule(runner, "media-cleanup", CleanupArgs{}, time.Hour); err != nil {
 		return Module{}, fmt.Errorf("media: %w", err)
 	}
 	return m, nil

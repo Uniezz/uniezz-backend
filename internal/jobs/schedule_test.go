@@ -9,14 +9,14 @@ import (
 func TestSchedule(t *testing.T) {
 	t.Run("rejects unregistered tasks and intervals under a minute", func(t *testing.T) {
 		r := NewRunner(nil, 1, 0)
-		if err := Schedule(r, testArgs{}, time.Hour); err == nil {
+		if err := Schedule(r, "test-job", testArgs{}, time.Hour); err == nil {
 			t.Error("expected an error for a task without a handler")
 		}
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
-		if err := Schedule(r, testArgs{}, time.Second); err == nil {
+		if err := Schedule(r, "test-job", testArgs{}, time.Second); err == nil {
 			t.Error("expected an error for an interval under a minute")
 		}
-		if err := Schedule(r, testArgs{}, time.Hour); err != nil {
+		if err := Schedule(r, "test-job", testArgs{}, time.Hour); err != nil {
 			t.Errorf("Schedule failed: %v", err)
 		}
 	})
@@ -38,7 +38,7 @@ func TestSchedule(t *testing.T) {
 		r := NewRunner(pool, 1, 0)
 		r.schedules = nil
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
-		if err := Schedule(r, testArgs{N: 3}, time.Hour); err != nil {
+		if err := Schedule(r, "test-job", testArgs{N: 3}, time.Hour); err != nil {
 			t.Fatal(err)
 		}
 
@@ -59,7 +59,7 @@ func TestSchedule(t *testing.T) {
 
 		var payload string
 		var availableAt time.Time
-		err := pool.QueryRow(ctx, "SELECT payload::text, available_at FROM jobs WHERE unique_key = $1", "test.job@2026-10-31T12:00:00Z").Scan(&payload, &availableAt)
+		err := pool.QueryRow(ctx, "SELECT payload::text, available_at FROM jobs WHERE unique_key = $1", "test-job@2026-10-31T12:00:00Z").Scan(&payload, &availableAt)
 		if err != nil {
 			t.Fatalf("expected the 12:00 job: %v", err)
 		}
@@ -73,7 +73,7 @@ func TestSchedule(t *testing.T) {
 		r := NewRunner(pool, 1, 0)
 		r.schedules = nil
 		register(t, r, quick, func(context.Context, testArgs) error { return nil })
-		if err := Schedule(r, testArgs{}, time.Hour); err != nil {
+		if err := Schedule(r, "test-job", testArgs{}, time.Hour); err != nil {
 			t.Fatal(err)
 		}
 
