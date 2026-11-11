@@ -2,7 +2,6 @@ package profile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
@@ -78,22 +77,30 @@ func (r *programmeRepository) list(ctx context.Context, userID uuid.UUID) ([]pro
 func (r *programmeRepository) create(ctx context.Context, userID uuid.UUID, f programmeFields) (*programmeRow, error) {
 	var created *programmeRow
 	err := r.db.WithTx(ctx, func(ctx context.Context) error {
+		if err := r.lockUser(ctx, userID); err != nil {
+			return err
+		}
 		if f.IsPrimary {
 			if err := r.clearPrimary(ctx, userID, uuid.Nil); err != nil {
 				return err
 			}
 		}
 
-		var err error
-		created, err = scanProgramme(r.db.Conn(ctx).QueryRow(ctx, `
+		var id uuid.UUID
+		err := r.db.Conn(ctx).QueryRow(ctx, `
 			INSERT INTO student_programmes (user_id, faculty_name, programme_name, level, mode_of_studies, year_of_study, status, is_primary)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			RETURNING `+programmeColumns,
-			userID, f.Faculty, f.Programme, f.Level, f.ModeOfStudies, f.YearOfStudy, f.Status, f.IsPrimary))
+			RETURNING id`,
+			userID, f.Faculty, f.Programme, f.Level, f.ModeOfStudies, f.YearOfStudy, f.Status, f.IsPrimary).Scan(&id)
 		if err != nil {
 			return fmt.Errorf("create programme: %w", err)
 		}
-		return nil
+		if err := r.ensurePrimary(ctx, userID); err != nil {
+			return err
+		}
+
+		created, err = r.get(ctx, id)
+		return err
 	})
 	return created, err
 }
@@ -101,40 +108,52 @@ func (r *programmeRepository) create(ctx context.Context, userID uuid.UUID, f pr
 func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID, f programmeFields) (*programmeRow, error) {
 	var updated *programmeRow
 	err := r.db.WithTx(ctx, func(ctx context.Context) error {
+		if err := r.lockUser(ctx, userID); err != nil {
+			return err
+		}
 		if f.IsPrimary {
 			if err := r.clearPrimary(ctx, userID, id); err != nil {
 				return err
 			}
 		}
 
-		var err error
-		updated, err = scanProgramme(r.db.Conn(ctx).QueryRow(ctx, `
+		result, err := r.db.Conn(ctx).Exec(ctx, `
 			UPDATE student_programmes
 			SET faculty_name = $3, programme_name = $4, level = $5, mode_of_studies = $6,
 				year_of_study = $7, status = $8, is_primary = $9
-			WHERE id = $1 AND user_id = $2
-			RETURNING `+programmeColumns,
-			id, userID, f.Faculty, f.Programme, f.Level, f.ModeOfStudies, f.YearOfStudy, f.Status, f.IsPrimary))
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+			WHERE id = $1 AND user_id = $2`,
+			id, userID, f.Faculty, f.Programme, f.Level, f.ModeOfStudies, f.YearOfStudy, f.Status, f.IsPrimary)
 		if err != nil {
 			return fmt.Errorf("replace programme: %w", err)
 		}
-		return nil
+		if result.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		if err := r.ensurePrimary(ctx, userID); err != nil {
+			return err
+		}
+
+		updated, err = r.get(ctx, id)
+		return err
 	})
 	return updated, err
 }
 
 func (r *programmeRepository) delete(ctx context.Context, userID, id uuid.UUID) error {
-	result, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM student_programmes WHERE id = $1 AND user_id = $2`, id, userID)
-	if err != nil {
-		return fmt.Errorf("delete programme: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return r.db.WithTx(ctx, func(ctx context.Context) error {
+		if err := r.lockUser(ctx, userID); err != nil {
+			return err
+		}
+
+		result, err := r.db.Conn(ctx).Exec(ctx, `DELETE FROM student_programmes WHERE id = $1 AND user_id = $2`, id, userID)
+		if err != nil {
+			return fmt.Errorf("delete programme: %w", err)
+		}
+		if result.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		return r.ensurePrimary(ctx, userID)
+	})
 }
 
 func (r *programmeRepository) insertInitial(ctx context.Context, userID uuid.UUID, programmes []auth.InitialProgramme) error {
@@ -154,6 +173,41 @@ func (r *programmeRepository) clearPrimary(ctx context.Context, userID, except u
 	_, err := r.db.Conn(ctx).Exec(ctx, `UPDATE student_programmes SET is_primary = FALSE WHERE user_id = $1 AND is_primary AND id <> $2`, userID, except)
 	if err != nil {
 		return fmt.Errorf("clear primary programme: %w", err)
+	}
+	return nil
+}
+
+func (r *programmeRepository) get(ctx context.Context, id uuid.UUID) (*programmeRow, error) {
+	p, err := scanProgramme(r.db.Conn(ctx).QueryRow(ctx, `SELECT `+programmeColumns+` FROM student_programmes WHERE id = $1`, id))
+	if err != nil {
+		return nil, fmt.Errorf("get programme: %w", err)
+	}
+	return p, nil
+}
+
+func (r *programmeRepository) lockUser(ctx context.Context, userID uuid.UUID) error {
+	if _, err := r.db.Conn(ctx).Exec(ctx, `SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, userID); err != nil {
+		return fmt.Errorf("lock user programmes: %w", err)
+	}
+	return nil
+}
+
+func (r *programmeRepository) ensurePrimary(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `
+		UPDATE student_programmes
+		SET is_primary = TRUE
+		WHERE id = (
+			SELECT id
+			FROM student_programmes
+			WHERE user_id = $1
+			ORDER BY created_at, id
+			LIMIT 1)
+		AND NOT EXISTS (
+			SELECT 1
+			FROM student_programmes
+			WHERE user_id = $1 AND is_primary)`, userID)
+	if err != nil {
+		return fmt.Errorf("ensure primary programme: %w", err)
 	}
 	return nil
 }

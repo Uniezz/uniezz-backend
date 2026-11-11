@@ -37,7 +37,7 @@ type programmeRequest struct {
 	ModeOfStudies *string `json:"modeOfStudies,omitempty" enum:"full_time,part_time"`
 	YearOfStudy   *int    `json:"yearOfStudy,omitempty" minimum:"1" maximum:"6"`
 	Status        string  `json:"status,omitempty" enum:"active,graduated,suspended,cancelled" default:"active"`
-	IsPrimary     bool    `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others"`
+	IsPrimary     bool    `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"`
 }
 
 func (r programmeRequest) fields() (programmeFields, error) {
@@ -172,6 +172,7 @@ var deleteProgrammeOperation = auth.Protected(huma.Operation{
 	Method:        http.MethodDelete,
 	Path:          "/profile/programmes/{id}",
 	Summary:       "Delete a study programme",
+	Description:   "Deleting the last programme is allowed. When deleting the primary programme, the oldest remaining programme becomes primary. The response has no body; clients should fetch the programme list again.",
 	Tags:          []string{"profile"},
 	DefaultStatus: http.StatusNoContent,
 	Errors:        []int{http.StatusNotFound},
