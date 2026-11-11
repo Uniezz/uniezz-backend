@@ -99,13 +99,13 @@ func TestProgrammes(t *testing.T) {
 		newer := create(t, u, map[string]any{"faculty": "A", "programme": "Newer"})
 
 		_, err := e.pool.Exec(context.Background(), `
-        UPDATE student_programmes
-        SET created_at = CASE id
-            WHEN $1 THEN NOW() - INTERVAL '2 days'
-            WHEN $2 THEN NOW() - INTERVAL '1 day'
-            ELSE created_at
-        END
-        WHERE id IN ($1, $2)`, oldest.ID, newer.ID)
+			UPDATE student_programmes
+			SET created_at = CASE id
+				WHEN $1 THEN NOW() - INTERVAL '2 days'
+				WHEN $2 THEN NOW() - INTERVAL '1 day'
+				ELSE created_at
+			END
+			WHERE id IN ($1, $2)`, oldest.ID, newer.ID)
 		if err != nil {
 			t.Fatalf("set programme creation times: %v", err)
 		}
@@ -147,6 +147,42 @@ func TestProgrammes(t *testing.T) {
 
 		if got := list(t, u); len(got) != 0 {
 			t.Errorf("expected no programmes, got %+v", got)
+		}
+	})
+
+	t.Run("first programme becomes primary even when not requested", func(t *testing.T) {
+		u := e.otpUser(t)
+		first := create(t, u, map[string]any{"faculty": "A", "programme": "First"})
+		if !first.IsPrimary {
+			t.Errorf("expected the only programme to be primary, got %+v", first)
+		}
+	})
+
+	t.Run("replace that demotes the primary promotes another programme", func(t *testing.T) {
+		u := e.otpUser(t)
+		primary := create(t, u, map[string]any{"faculty": "A", "programme": "Primary", "isPrimary": true})
+		other := create(t, u, map[string]any{"faculty": "A", "programme": "Other"})
+
+		rec := e.api.Put("/profile/programmes/"+primary.ID.String(), u.bearer, map[string]any{"faculty": "A", "programme": "Primary"})
+		got := decode[Programme](t, rec, http.StatusOK)
+		if got.IsPrimary {
+			t.Errorf("expected demoted programme to stay non-primary, got %+v", got)
+		}
+
+		programmes := list(t, u)
+		if len(programmes) != 2 || programmes[0].ID != other.ID || !programmes[0].IsPrimary || programmes[1].IsPrimary {
+			t.Errorf("expected the other programme to be the only primary, got %+v", programmes)
+		}
+	})
+
+	t.Run("replace that demotes the only programme keeps it primary", func(t *testing.T) {
+		u := e.otpUser(t)
+		only := create(t, u, map[string]any{"faculty": "A", "programme": "Only", "isPrimary": true})
+
+		rec := e.api.Put("/profile/programmes/"+only.ID.String(), u.bearer, map[string]any{"faculty": "A", "programme": "Only"})
+		got := decode[Programme](t, rec, http.StatusOK)
+		if !got.IsPrimary {
+			t.Errorf("expected the only programme to stay primary, got %+v", got)
 		}
 	})
 }

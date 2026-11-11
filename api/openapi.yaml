@@ -1341,7 +1341,7 @@ components:
           minLength: 1
           type: string
         isPrimary:
-          description: Making a programme primary clears the flag on the others
+          description: "Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"
           type: boolean
         level:
           enum:

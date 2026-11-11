@@ -37,7 +37,7 @@ type programmeRequest struct {
 	ModeOfStudies *string `json:"modeOfStudies,omitempty" enum:"full_time,part_time"`
 	YearOfStudy   *int    `json:"yearOfStudy,omitempty" minimum:"1" maximum:"6"`
 	Status        string  `json:"status,omitempty" enum:"active,graduated,suspended,cancelled" default:"active"`
-	IsPrimary     bool    `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others"`
+	IsPrimary     bool    `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"`
 }
 
 func (r programmeRequest) fields() (programmeFields, error) {
