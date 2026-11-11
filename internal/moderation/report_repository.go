@@ -67,3 +67,27 @@ func (r *reportRepository) insert(ctx context.Context, n newReport) (*reportRow,
 	}
 	return &row, nil
 }
+
+func (r *reportRepository) markTargetsForgotten(ctx context.Context) error {
+	const query = `
+		UPDATE reports r SET target_forgotten_at = NOW()
+		WHERE r.target_author_id IS NOT NULL
+		  AND r.target_author_id <> $1
+		  AND r.target_forgotten_at IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM public_profiles p WHERE p.id = r.target_author_id)`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, uuid.Nil); err != nil {
+		return fmt.Errorf("mark forgotten report targets: %w", err)
+	}
+	return nil
+}
+
+func (r *reportRepository) anonymiseForgotten(ctx context.Context, age time.Duration) error {
+	const query = `
+		UPDATE reports SET snapshot = '{}', target_author_id = NULL
+		WHERE target_forgotten_at < NOW() - $1::interval
+		  AND (snapshot <> '{}' OR target_author_id IS NOT NULL)`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, age); err != nil {
+		return fmt.Errorf("anonymise reports: %w", err)
+	}
+	return nil
+}

@@ -160,3 +160,24 @@ func scanMedia(row pgx.Row) (*mediaRow, error) {
 	}
 	return &item, nil
 }
+
+func (r *repository) markOwnerDeleting(ctx context.Context, ownerUserID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, `UPDATE media SET status = 'deleting' WHERE owner_user_id = $1 RETURNING id`, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("mark owner media deleting: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan owner media: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("mark owner media deleting: %w", err)
+	}
+	return ids, nil
+}

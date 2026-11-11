@@ -84,7 +84,16 @@ func (e *testEnv) student(t *testing.T) student {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id) })
+	t.Cleanup(func() {
+		for _, query := range []string{
+			"DELETE FROM course_files WHERE author_id = $1",
+			"DELETE FROM course_comments WHERE author_id = $1",
+			"DELETE FROM media WHERE owner_user_id = $1",
+			"DELETE FROM users WHERE id = $1",
+		} {
+			_, _ = e.pool.Exec(context.Background(), query, id)
+		}
+	})
 
 	token := auth.GenerateSessionToken()
 	hash := token.Hash()
