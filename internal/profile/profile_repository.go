@@ -80,6 +80,27 @@ func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profile
 	return p, nil
 }
 
+func (r *profileRepository) getMany(ctx context.Context, userIDs []uuid.UUID) ([]profileRow, error) {
+	rows, err := r.db.Conn(ctx).Query(ctx, "SELECT "+profileColumns+profileFrom+" WHERE u.id = ANY($1)", userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get profiles: %w", err)
+	}
+	defer rows.Close()
+
+	var profiles []profileRow
+	for rows.Next() {
+		p, err := scanProfile(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan profile: %w", err)
+		}
+		profiles = append(profiles, *p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get profiles: %w", err)
+	}
+	return profiles, nil
+}
+
 type profileCursor struct {
 	SearchRank int       `json:"r,omitempty"`
 	CreatedAt  time.Time `json:"c"`
@@ -126,10 +147,7 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 	}
 	if f.ViewerID != uuid.Nil {
 		viewer := arg(f.ViewerID)
-		where = append(where, `NOT EXISTS (
-			SELECT 1 FROM blocks b
-			WHERE (b.blocker_id = `+viewer+` AND b.blocked_id = u.id)
-			   OR (b.blocked_id = `+viewer+` AND b.blocker_id = u.id))`)
+		where = append(where, "NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = "+viewer+" AND b.other_id = u.id)")
 	}
 	if f.After != nil {
 		afterRank := arg(f.After.SearchRank)
@@ -198,10 +216,7 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 func (r *profileRepository) blocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
 	var found bool
 	err := r.db.Conn(ctx).QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM blocks
-			WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
-		)`, a, b).Scan(&found)
+		SELECT EXISTS (SELECT 1 FROM blocked_pairs WHERE user_id = $1 AND other_id = $2)`, a, b).Scan(&found)
 	if err != nil {
 		return false, fmt.Errorf("check block: %w", err)
 	}

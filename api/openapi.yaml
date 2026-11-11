@@ -1,6 +1,6 @@
 components:
   schemas:
-    ActInputBody:
+    ActOnCandidateInputBody:
       additionalProperties: false
       properties:
         action:
@@ -23,6 +23,7 @@ components:
       properties:
         connection:
           $ref: "#/components/schemas/Connection"
+          description: Present when this like created the match
         matched:
           type: boolean
       required:
@@ -74,6 +75,7 @@ components:
             - string
             - "null"
         candidateId:
+          description: Opaque token, valid only for this viewer
           format: uuid
           type: string
         intent:
@@ -87,6 +89,12 @@ components:
             - array
             - "null"
         level:
+          enum:
+            - first_cycle
+            - second_cycle
+            - long_cycle
+            - third_cycle
+            - phd_school
           type:
             - string
             - "null"
@@ -97,6 +105,8 @@ components:
             - array
             - "null"
         universityId:
+          examples:
+            - umcs
           type: string
       required:
         - candidateId
@@ -183,7 +193,7 @@ components:
             - dating
           type: string
         profile:
-          $ref: "#/components/schemas/PublicProfile"
+          $ref: "#/components/schemas/ProfileSummary"
       required:
         - id
         - mode
@@ -492,12 +502,12 @@ components:
         - items
         - nextCursor
       type: object
-    ListEntriesOutputBody:
+    ListConnectionsOutputBody:
       additionalProperties: false
       properties:
         items:
           items:
-            $ref: "#/components/schemas/Entry"
+            $ref: "#/components/schemas/Connection"
           type:
             - array
             - "null"
@@ -510,16 +520,17 @@ components:
         - items
         - nextCursor
       type: object
-    ListOutputBody:
+    ListEntriesOutputBody:
       additionalProperties: false
       properties:
         items:
           items:
-            $ref: "#/components/schemas/Connection"
+            $ref: "#/components/schemas/Entry"
           type:
             - array
             - "null"
         nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
           type:
             - string
             - "null"
@@ -715,24 +726,6 @@ components:
       required:
         - previousId
         - nextId
-      type: object
-    PreferencesInputBody:
-      additionalProperties: false
-      properties:
-        birthDate:
-          description: YYYY-MM-DD
-          format: date
-          type: string
-        intent:
-          maxLength: 200
-          type: string
-        openTo:
-          description: friends, studyBuddy, dating
-          items:
-            type: string
-          type:
-            - array
-            - "null"
       type: object
     Profile:
       additionalProperties: false
@@ -1193,6 +1186,29 @@ components:
         - status
         - createdAt
       type: object
+    SavePreferencesInputBody:
+      additionalProperties: false
+      properties:
+        birthDate:
+          description: YYYY-MM-DD. Age must be 16 to 100.
+          format: date
+          type: string
+        intent:
+          description: Shown on the student's discovery card. An empty string clears it.
+          maxLength: 200
+          type: string
+        openTo:
+          description: Who the student can discover and be discovered as. dating needs an age of at least 18.
+          items:
+            enum:
+              - friends
+              - studyBuddy
+              - dating
+            type: string
+          type:
+            - array
+            - "null"
+      type: object
     SaveState:
       additionalProperties: false
       properties:
@@ -1631,6 +1647,7 @@ paths:
         - auth
   /blocks/{profileId}:
     delete:
+      description: Removing a block that does not exist changes nothing.
       operationId: unblockStudent
       parameters:
         - in: path
@@ -1666,7 +1683,7 @@ paths:
       tags:
         - connections
     post:
-      description: A block hides each student from the other's discovery, profile list and connections.
+      description: A block hides each student from the other's discovery, profile list, profile and connections. Blocking twice changes nothing.
       operationId: blockStudent
       parameters:
         - in: path
@@ -1690,6 +1707,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
         "422":
           content:
             application/json:
@@ -1709,6 +1732,7 @@ paths:
         - connections
   /connections:
     get:
+      description: Newest first, paginated by cursor. Students blocked either way are left out.
       operationId: listConnections
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -1735,7 +1759,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ListOutputBody"
+                $ref: "#/components/schemas/ListConnectionsOutputBody"
           description: OK
         "400":
           content:
@@ -1768,7 +1792,7 @@ paths:
         - connections
   /connections/candidates/{candidateId}:
     put:
-      description: A like cannot be undone. A pass hides the student for 30 days. Mutual likes in the same mode create one connection. A candidateId from another viewer returns 404.
+      description: "A like cannot be undone; at most 50 likes per 24 hours. A pass hides the student for 30 days from the latest pass. Mutual likes in the same mode create one connection. Returns 404 when the candidateId belongs to another viewer, or when the two students can no longer meet in this mode: one left the mode, blocked the other, or they are already connected."
       operationId: actOnCandidate
       parameters:
         - in: path
@@ -1781,7 +1805,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ActInputBody"
+              $ref: "#/components/schemas/ActOnCandidateInputBody"
         required: true
       responses:
         "200":
@@ -1833,7 +1857,7 @@ paths:
         - connections
   /connections/discover:
     get:
-      description: A card never contains the user id, name, photos, faculty, programme or year. candidateId is an opaque token for this viewer.
+      description: Both students must be open to the mode; dating shows only adults. A card never contains the user id, name, photos, faculty, programme or year. Liked, hidden, blocked and connected students are left out, and so are students passed in the last 30 days.
       operationId: discoverConnections
       parameters:
         - explode: false
@@ -1846,25 +1870,39 @@ paths:
               - studyBuddy
               - dating
             type: string
-        - explode: false
+        - description: Only students of these universities
+          explode: false
           in: query
           name: university
           schema:
+            description: Only students of these universities
             items:
               type: string
+            maxItems: 10
             type:
               - array
               - "null"
-        - explode: false
+        - description: studyBuddy only. Students who hide their faculty never match.
+          explode: false
           in: query
           name: faculty
           schema:
+            description: studyBuddy only. Students who hide their faculty never match.
+            maxLength: 255
             type: string
-        - explode: false
+        - description: studyBuddy only
+          explode: false
           in: query
           name: level
           schema:
+            description: studyBuddy only
             items:
+              enum:
+                - first_cycle
+                - second_cycle
+                - long_cycle
+                - third_cycle
+                - phd_school
               type: string
             type:
               - array
@@ -1878,10 +1916,12 @@ paths:
               - female
               - ""
             type: string
-        - explode: false
+        - description: "shared: only students with at least one interest in common"
+          explode: false
           in: query
           name: interests
           schema:
+            description: "shared: only students with at least one interest in common"
             enum:
               - shared
               - ""
@@ -1933,13 +1973,13 @@ paths:
         - connections
   /connections/me:
     patch:
-      description: Birth date is used only to compute age. openTo is who the student can discover and be discovered as.
+      description: A missing field keeps its current value. Birth date is used only to compute age.
       operationId: saveConnectionPreferences
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PreferencesInputBody"
+              $ref: "#/components/schemas/SavePreferencesInputBody"
         required: true
       responses:
         "204":

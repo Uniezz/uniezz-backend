@@ -64,7 +64,10 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 			ReporterID: reporterID, TargetType: in.TargetType, TargetID: in.TargetID,
 			TargetAuthorID: authorID, Reason: in.Reason, Details: details, Snapshot: snapshot,
 		})
-		return err
+		if err != nil || in.TargetType != targetCandidate {
+			return err
+		}
+		return m.candidates.HideCandidate(ctx, reporterID, authorID)
 	})
 	if err != nil {
 		return nil, err
@@ -82,7 +85,7 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 
 func (m Module) target(ctx context.Context, reporterID uuid.UUID, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
 	if targetType == targetCandidate {
-		authorID, snapshot, err := m.candidates.CandidateReport(ctx, reporterID, id)
+		authorID, snapshot, err := m.candidates.ReportTarget(ctx, reporterID, id)
 		if errors.Is(err, connections.ErrNotFound) {
 			return uuid.Nil, nil, ErrNotFound
 		}

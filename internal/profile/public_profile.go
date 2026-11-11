@@ -8,10 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) ShownProfile(ctx context.Context, viewerID, userID uuid.UUID) (*PublicProfile, error) {
-	return m.publicProfile(ctx, viewerID, userID)
-}
-
 func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (*PublicProfile, error) {
 	blocked, err := m.profiles.blocked(ctx, viewerID, userID)
 	if err != nil {
@@ -93,14 +89,30 @@ func (m Module) listProfiles(ctx context.Context, q profileQuery) ([]ProfileSumm
 
 	items := make([]ProfileSummary, 0, len(rows))
 	for _, p := range rows {
-		items = append(items, ProfileSummary{
-			ID:           p.ID,
-			FirstName:    p.FirstName,
-			LastName:     p.LastName,
-			Gender:       p.Gender,
-			UniversityID: p.UniversityID,
-			AvatarURL:    m.mediaURL(ctx, p.Avatar),
-		})
+		items = append(items, m.summary(ctx, p))
 	}
 	return items, next, nil
+}
+
+func (m Module) Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]ProfileSummary, error) {
+	rows, err := m.profiles.getMany(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	summaries := make(map[uuid.UUID]ProfileSummary, len(rows))
+	for _, p := range rows {
+		summaries[p.ID] = m.summary(ctx, p)
+	}
+	return summaries, nil
+}
+
+func (m Module) summary(ctx context.Context, p profileRow) ProfileSummary {
+	return ProfileSummary{
+		ID:           p.ID,
+		FirstName:    p.FirstName,
+		LastName:     p.LastName,
+		Gender:       p.Gender,
+		UniversityID: p.UniversityID,
+		AvatarURL:    m.mediaURL(ctx, p.Avatar),
+	}
 }

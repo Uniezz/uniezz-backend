@@ -12,40 +12,55 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type profiles interface {
-	ShownProfile(ctx context.Context, viewerID, userID uuid.UUID) (*profile.PublicProfile, error)
-}
+const (
+	likeLimit  = 50
+	likeWindow = 24 * time.Hour
+)
 
-type Module struct {
-	db       database.DB
-	tx       database.Transactor
-	repo     *repository
-	profiles profiles
-	likes    limiter
+var _ profiles = profile.Module{}
+
+type profiles interface {
+	Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]profile.ProfileSummary, error)
 }
 
 type limiter interface {
 	Allow(ctx context.Context, key string) error
 }
 
+type Module struct {
+	tx          database.Transactor
+	preferences *preferencesRepository
+	discovery   *discoveryRepository
+	connections *connectionRepository
+	blocks      *blockRepository
+	profiles    profiles
+	likes       limiter
+}
+
 func New(pool *pgxpool.Pool, profileModule profiles) Module {
 	db := database.New(pool)
 	return Module{
-		db:       db,
-		tx:       db,
-		repo:     newRepository(db),
-		profiles: profileModule,
-		likes:    ratelimit.New(pool, "connection-like", 50, 24*time.Hour),
+		tx:          db,
+		preferences: newPreferencesRepository(db),
+		discovery:   newDiscoveryRepository(db),
+		connections: newConnectionRepository(db),
+		blocks:      newBlockRepository(db),
+		profiles:    profileModule,
+		likes:       ratelimit.New(pool, "connection-like", likeLimit, likeWindow),
 	}
 }
 
 func (m Module) Register(api huma.API) {
-	h := &handler{connections: m}
-	huma.Register(api, savePreferencesOperation, h.savePreferences)
-	huma.Register(api, discoverOperation, h.discover)
-	huma.Register(api, actOperation, h.act)
-	huma.Register(api, listConnectionsOperation, h.listConnections)
-	huma.Register(api, deleteConnectionOperation, h.deleteConnection)
-	huma.Register(api, blockOperation, h.block)
-	huma.Register(api, unblockOperation, h.unblock)
+	preferences := &preferencesHandler{connections: m}
+	discovery := &discoveryHandler{connections: m}
+	connections := &connectionHandler{connections: m}
+	blocks := &blockHandler{connections: m}
+
+	huma.Register(api, savePreferencesOperation, preferences.savePreferences)
+	huma.Register(api, discoverOperation, discovery.discover)
+	huma.Register(api, actOnCandidateOperation, discovery.actOnCandidate)
+	huma.Register(api, listConnectionsOperation, connections.listConnections)
+	huma.Register(api, deleteConnectionOperation, connections.deleteConnection)
+	huma.Register(api, blockStudentOperation, blocks.blockStudent)
+	huma.Register(api, unblockStudentOperation, blocks.unblockStudent)
 }

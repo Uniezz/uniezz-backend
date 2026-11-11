@@ -37,7 +37,8 @@ type profileTargets interface {
 }
 
 type candidateTargets interface {
-	CandidateReport(ctx context.Context, viewerID, candidateID uuid.UUID) (uuid.UUID, map[string]any, error)
+	ReportTarget(ctx context.Context, viewerID, candidateID uuid.UUID) (uuid.UUID, map[string]any, error)
+	HideCandidate(ctx context.Context, viewerID, userID uuid.UUID) error
 }
 
 type limiter interface {
