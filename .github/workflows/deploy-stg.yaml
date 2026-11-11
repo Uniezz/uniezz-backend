@@ -104,6 +104,7 @@ jobs:
     needs: [test, image, deploy]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    environment: staging
     permissions:
       contents: read
       actions: read
