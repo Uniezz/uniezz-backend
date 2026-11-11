@@ -2,12 +2,14 @@ package faq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type entryRow struct {
@@ -35,10 +37,14 @@ func (r *entryRepository) insert(ctx context.Context, authorID uuid.UUID, questi
 }
 
 func (r *entryRepository) userEmail(ctx context.Context, userID uuid.UUID) (string, error) {
+	const query = `SELECT email FROM user_emails WHERE id = $1`
 	var email *string
-	err := r.db.Conn(ctx).QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, userID).Scan(&email)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID).Scan(&email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
 	if err != nil {
-		return "", fmt.Errorf("faq user email: %w", err)
+		return "", fmt.Errorf("get user email: %w", err)
 	}
 	if email == nil {
 		return "", nil

@@ -53,7 +53,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	faqModule := faq.New(db)
+	faqModule := faq.New(db, cfg.FAQPublisherEmails)
 	moderationModule := moderation.New(db, feedModule, profileModule, connectionsModule)
 
 	mailModule := mail.NewResendSender(cfg)

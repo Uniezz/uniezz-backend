@@ -33,6 +33,7 @@ type Config struct {
 	OTPEmailTemplateID string
 	OTPHashKey         string
 	OTPTestEmails      []string
+	FAQPublisherEmails []string
 
 	ServiceName       string
 	SentryDSN         string
@@ -130,6 +131,7 @@ func Load() (*Config, error) {
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
 
 	cfg.OTPTestEmails = splitEmails(os.Getenv("OTP_TEST_EMAILS"))
+	cfg.FAQPublisherEmails = splitEmails(os.Getenv("FAQ_PUBLISHER_EMAILS"))
 	if cfg.Env == "production" && len(cfg.OTPTestEmails) > 0 {
 		return nil, fmt.Errorf("OTP_TEST_EMAILS must not be set in production")
 	}
