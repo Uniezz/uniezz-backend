@@ -103,11 +103,5 @@ func (m Module) list(ctx context.Context, q listQuery) ([]Entry, *string, error)
 }
 
 func toEntry(row entryRow) Entry {
-	return Entry{
-		ID:        row.ID,
-		Question:  row.Question,
-		Answer:    row.Answer,
-		Status:    row.Status,
-		CreatedAt: row.CreatedAt,
-	}
+	return Entry(row)
 }
