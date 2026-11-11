@@ -136,4 +136,17 @@ func TestProgrammes(t *testing.T) {
 			t.Errorf("expected original primary to remain, got %+v", got)
 		}
 	})
+
+	t.Run("deleting the only primary programme leaves none", func(t *testing.T) {
+		u := e.otpUser(t)
+		only := create(t, u, map[string]any{"faculty": "A", "programme": "Only", "isPrimary": true})
+
+		if rec := e.api.Delete("/profile/programmes/"+only.ID.String(), u.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		if got := list(t, u); len(got) != 0 {
+			t.Errorf("expected no programmes, got %+v", got)
+		}
+	})
 }
