@@ -9,6 +9,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -16,6 +17,8 @@ import (
 const (
 	targetUser       = "user"
 	targetCandidate  = "candidate"
+	targetFile       = "file"
+	targetCourse     = "course"
 	maxDetailsLength = 1000
 )
 
@@ -97,6 +100,13 @@ func (m Module) target(ctx context.Context, reporterID uuid.UUID, targetType str
 			return uuid.Nil, nil, ErrNotFound
 		}
 		return id, snapshot, err
+	}
+	if targetType == targetFile || targetType == targetCourse {
+		authorID, snapshot, err := m.study.ReportTarget(ctx, targetType, id)
+		if errors.Is(err, study.ErrNotFound) {
+			return uuid.Nil, nil, ErrNotFound
+		}
+		return authorID, snapshot, err
 	}
 
 	authorID, snapshot, err := m.feed.ReportTarget(ctx, targetType, id)

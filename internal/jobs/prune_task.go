@@ -26,5 +26,5 @@ func (r *Runner) registerPrune() {
 		opts: Options{Timeout: time.Minute, MaxAttempts: 3},
 		run:  func(ctx context.Context, _ []byte) error { return r.prune(ctx, pruneArgs{}) },
 	}
-	r.schedules = append(r.schedules, schedule{kind: pruneArgs{}.Kind(), payload: []byte("{}"), every: 24 * time.Hour})
+	r.schedules = append(r.schedules, schedule{name: "jobs-prune", kind: pruneArgs{}.Kind(), payload: []byte("{}"), every: 24 * time.Hour})
 }

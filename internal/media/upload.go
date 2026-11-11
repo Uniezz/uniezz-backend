@@ -52,11 +52,15 @@ func validateUpload(kind Kind, contentType string, size int64) error {
 	if !ok {
 		return fmt.Errorf("%w: unsupported kind %q", ErrInvalidUpload, kind)
 	}
-	if _, ok := extensions[contentType]; !ok {
+	if _, ok := extensions[contentType]; !ok || (contentType == "application/pdf" && kind != KindExam) {
 		return fmt.Errorf("%w: unsupported content type %q", ErrInvalidUpload, contentType)
 	}
-	if size <= 0 || size > rule.maxSize {
-		return fmt.Errorf("%w: size must be between 1 and %d bytes", ErrInvalidUpload, rule.maxSize)
+	maxSize := rule.maxSize
+	if kind == KindExam && contentType != "application/pdf" {
+		maxSize = 10 << 20
+	}
+	if size <= 0 || size > maxSize {
+		return fmt.Errorf("%w: size must be between 1 and %d bytes", ErrInvalidUpload, maxSize)
 	}
 	return nil
 }

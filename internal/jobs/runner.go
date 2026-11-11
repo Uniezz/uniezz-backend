@@ -24,6 +24,12 @@ const (
 	finishTimeout       = 5 * time.Second
 )
 
+const (
+	jobSucceeded = "succeeded"
+	jobRetried   = "retried"
+	jobFailed    = "failed"
+)
+
 type registration struct {
 	opts Options
 	run  func(ctx context.Context, payload []byte) error
@@ -102,11 +108,12 @@ func (r *Runner) drain(ctx context.Context) {
 }
 
 type claimedJob struct {
-	id       uuid.UUID
-	kind     string
-	payload  []byte
-	attempts int
-	token    uuid.UUID
+	id        uuid.UUID
+	kind      string
+	payload   []byte
+	attempts  int
+	token     uuid.UUID
+	uniqueKey *string
 }
 
 func (r *Runner) runNext(ctx context.Context) (bool, error) {
@@ -126,13 +133,39 @@ func (r *Runner) runNext(ctx context.Context) (bool, error) {
 		return true, r.fail(job, errors.New("attempts exhausted after an interrupted run"), attrs)
 	}
 
-	err = runHandler(ctx, reg, job.payload)
+	var checkIn *telemetry.CheckIn
+	if s, ok := r.scheduleOf(job.uniqueKey); ok {
+		c := telemetry.StartCheckIn(ctx, s.name, telemetry.MonitorSchedule{
+			Every:       s.every,
+			MaxRuntime:  reg.opts.Timeout,
+			MaxAttempts: reg.opts.MaxAttempts,
+		})
+		checkIn = &c
+	}
 
+	started := time.Now()
+	err = runHandler(ctx, reg, job.payload)
+	if checkIn != nil {
+		checkIn.Finish(err)
+	}
+
+	status := jobSucceeded
 	switch {
 	case err == nil:
+	case isPermanent(err) || job.attempts >= reg.opts.MaxAttempts:
+		status = jobFailed
+	default:
+		status = jobRetried
+	}
+	kindAttr := slog.String("kind", job.kind)
+	telemetry.RecordCount(ctx, "jobs.finished", 1, kindAttr, slog.String("status", status))
+	telemetry.RecordDuration(ctx, "jobs.duration", time.Since(started), kindAttr)
+
+	switch status {
+	case jobSucceeded:
 		slog.LogAttrs(ctx, slog.LevelInfo, "background job succeeded", attrs...)
 		return true, r.succeed(job)
-	case isPermanent(err) || job.attempts >= reg.opts.MaxAttempts:
+	case jobFailed:
 		return true, r.fail(job, err, attrs)
 	default:
 		delay := backoff(job.attempts)
@@ -208,10 +241,10 @@ func (r *Runner) claim(ctx context.Context) (claimedJob, error) {
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		)
-		RETURNING id, kind, payload, attempts, execution_token`
+		RETURNING id, kind, payload, attempts, execution_token, unique_key`
 
 	var job claimedJob
-	err := r.db.Conn(ctx).QueryRow(ctx, query, r.lease(), r.kinds()).Scan(&job.id, &job.kind, &job.payload, &job.attempts, &job.token)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, r.lease(), r.kinds()).Scan(&job.id, &job.kind, &job.payload, &job.attempts, &job.token, &job.uniqueKey)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return claimedJob{}, err

@@ -12,6 +12,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +27,7 @@ var (
 	_ feedTargets      = feed.Module{}
 	_ profileTargets   = profile.Module{}
 	_ candidateTargets = connections.Module{}
+	_ studyTargets     = study.Module{}
 )
 
 type feedTargets interface {
@@ -41,6 +43,10 @@ type candidateTargets interface {
 	HideCandidate(ctx context.Context, viewerID, userID uuid.UUID) error
 }
 
+type studyTargets interface {
+	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
+}
+
 type limiter interface {
 	Allow(ctx context.Context, key string) error
 }
@@ -51,10 +57,11 @@ type Module struct {
 	feed       feedTargets
 	profiles   profileTargets
 	candidates candidateTargets
+	study      studyTargets
 	limiter    limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets) Module {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets) Module {
 	db := database.New(pool)
 	return Module{
 		tx:         db,
@@ -62,6 +69,7 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		feed:       feedModule,
 		profiles:   profileModule,
 		candidates: candidates,
+		study:      studyModule,
 		limiter:    ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
 }
