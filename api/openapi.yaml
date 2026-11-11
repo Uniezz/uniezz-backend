@@ -29,6 +29,45 @@ components:
       required:
         - matched
       type: object
+    AddCourseCommentInputBody:
+      additionalProperties: false
+      properties:
+        content:
+          description: Up to 1000 characters after HTML is stripped
+          examples:
+            - Hard, but the lectures help a lot.
+          maxLength: 4000
+          minLength: 1
+          type: string
+      required:
+        - content
+      type: object
+    AddCourseFileInputBody:
+      additionalProperties: false
+      properties:
+        mediaId:
+          description: Upload created with POST /media/uploads and kind exam
+          format: uuid
+          type: string
+        title:
+          description: 3 to 150 characters after HTML is stripped
+          examples:
+            - Midterm 2024, group A
+          maxLength: 600
+          minLength: 1
+          type: string
+        type:
+          enum:
+            - exam
+            - colloquium
+            - lab
+            - notes
+          type: string
+      required:
+        - mediaId
+        - title
+        - type
+      type: object
     Author:
       additionalProperties: false
       properties:
@@ -205,6 +244,137 @@ components:
         - connectedAt
         - profile
       type: object
+    Course:
+      additionalProperties: false
+      properties:
+        description:
+          examples:
+            - Limits, derivatives and integrals of one variable.
+          type: string
+        difficulty:
+          examples:
+            - 4
+          format: int64
+          maximum: 5
+          minimum: 1
+          type: integer
+        faculty:
+          examples:
+            - Faculty of Mathematics, Physics and Computer Science
+          type: string
+        id:
+          format: uuid
+          type: string
+        isMine:
+          description: True when the signed-in student created the course and may edit it
+          type: boolean
+        name:
+          examples:
+            - Calculus I
+          type: string
+        ratingAverage:
+          description: Average student rating from 1 to 5, 0 when nobody rated yet
+          examples:
+            - 4.2
+          format: double
+          type: number
+        ratingCount:
+          examples:
+            - 17
+          format: int64
+          type: integer
+        semester:
+          examples:
+            - 1
+          format: int64
+          maximum: 10
+          minimum: 1
+          type: integer
+        subject:
+          examples:
+            - Computer Science
+          type: string
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - difficulty
+        - universityId
+        - faculty
+        - subject
+        - semester
+        - ratingAverage
+        - ratingCount
+        - isMine
+      type: object
+    CourseComment:
+      additionalProperties: false
+      properties:
+        content:
+          examples:
+            - Hard, but the lectures help a lot.
+          type: string
+        courseId:
+          format: uuid
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        isMine:
+          description: True when the signed-in student wrote the comment and may delete it
+          type: boolean
+      required:
+        - id
+        - courseId
+        - content
+        - isMine
+        - createdAt
+      type: object
+    CourseFile:
+      additionalProperties: false
+      properties:
+        authorId:
+          format: uuid
+          type: string
+        courseId:
+          format: uuid
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        title:
+          examples:
+            - Midterm 2024, group A
+          type: string
+        type:
+          enum:
+            - exam
+            - colloquium
+            - lab
+            - notes
+          type: string
+        url:
+          description: Short-lived link to the PDF or image
+          type: string
+      required:
+        - id
+        - courseId
+        - authorId
+        - title
+        - type
+        - url
+        - createdAt
+      type: object
     CreateCommentInputBody:
       additionalProperties: false
       properties:
@@ -217,6 +387,62 @@ components:
           type: string
       required:
         - content
+      type: object
+    CreateCourseInputBody:
+      additionalProperties: false
+      properties:
+        description:
+          description: Up to 5000 characters after HTML is stripped
+          maxLength: 20000
+          minLength: 1
+          type: string
+        difficulty:
+          examples:
+            - 4
+          format: int64
+          maximum: 5
+          minimum: 1
+          type: integer
+        faculty:
+          description: 3 to 150 characters after HTML is stripped
+          maxLength: 600
+          minLength: 1
+          type: string
+        name:
+          description: 3 to 150 characters after HTML is stripped
+          examples:
+            - Calculus I
+          maxLength: 600
+          minLength: 1
+          type: string
+        semester:
+          examples:
+            - 1
+          format: int64
+          maximum: 10
+          minimum: 1
+          type: integer
+        subject:
+          description: 3 to 150 characters after HTML is stripped
+          examples:
+            - Computer Science
+          maxLength: 600
+          minLength: 1
+          type: string
+        universityId:
+          examples:
+            - umcs
+          maxLength: 32
+          minLength: 1
+          type: string
+      required:
+        - name
+        - description
+        - difficulty
+        - universityId
+        - faculty
+        - subject
+        - semester
       type: object
     CreatePostInputBody:
       additionalProperties: false
@@ -292,6 +518,8 @@ components:
             - comment
             - user
             - candidate
+            - file
+            - course
           type: string
       required:
         - targetType
@@ -525,6 +753,60 @@ components:
         - items
         - nextCursor
       type: object
+    ListCourseCommentsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/CourseComment"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListCourseFilesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/CourseFile"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListCoursesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Course"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
     ListEntriesOutputBody:
       additionalProperties: false
       properties:
@@ -554,6 +836,24 @@ components:
             - "null"
         nextCursor:
           description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListProfessorsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Professor"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Null on the last page
           type:
             - string
             - "null"
@@ -765,6 +1065,46 @@ components:
         - birthDate
         - openTo
         - intent
+      type: object
+    Professor:
+      additionalProperties: false
+      properties:
+        degree:
+          description: Degree as POL-on lists it, null when POL-on has none
+          examples:
+            - dr hab.
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        name:
+          examples:
+            - Anna Maria Nowak
+          type: string
+        ratingAverage:
+          description: Average student rating from 1 to 5, 0 when nobody rated yet
+          examples:
+            - 4.5
+          format: double
+          type: number
+        ratingCount:
+          examples:
+            - 12
+          format: int64
+          type: integer
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - id
+        - name
+        - degree
+        - universityId
+        - ratingAverage
+        - ratingCount
       type: object
     Profile:
       additionalProperties: false
@@ -1179,6 +1519,32 @@ components:
         - status
         - isPrimary
       type: object
+    RateCourseInputBody:
+      additionalProperties: false
+      properties:
+        rating:
+          examples:
+            - 4
+          format: int64
+          maximum: 5
+          minimum: 1
+          type: integer
+      required:
+        - rating
+      type: object
+    RateProfessorInputBody:
+      additionalProperties: false
+      properties:
+        rating:
+          examples:
+            - 5
+          format: int64
+          maximum: 5
+          minimum: 1
+          type: integer
+      required:
+        - rating
+      type: object
     Report:
       additionalProperties: false
       properties:
@@ -1216,6 +1582,8 @@ components:
             - comment
             - user
             - candidate
+            - file
+            - course
       required:
         - id
         - targetType
@@ -1258,6 +1626,24 @@ components:
           type: boolean
       required:
         - saved
+      type: object
+    SearchFilesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/CourseFile"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
       type: object
     UniversityDTO:
       additionalProperties: false
@@ -1307,6 +1693,29 @@ components:
           type: string
       required:
         - content
+      type: object
+    UpdateCourseInputBody:
+      additionalProperties: false
+      properties:
+        description:
+          description: Up to 5000 characters after HTML is stripped
+          maxLength: 20000
+          minLength: 1
+          type: string
+        difficulty:
+          examples:
+            - 4
+          format: int64
+          maximum: 5
+          minimum: 1
+          type: integer
+        name:
+          description: 3 to 150 characters after HTML is stripped
+          examples:
+            - Calculus I
+          maxLength: 600
+          minLength: 1
+          type: string
       type: object
     UpdateMeInputBody:
       additionalProperties: false
@@ -4072,6 +4481,992 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Report a post, comment or student
+      summary: Report a post, comment, student, exam file or course
       tags:
         - moderation
+  /study/comments/{id}:
+    delete:
+      description: A comment that is already gone, or that another student wrote, is left as it is and the call still succeeds.
+      operationId: deleteComment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete the student's own comment on a course
+      tags:
+        - study
+  /study/courses:
+    get:
+      description: "Newest first. Filters combine: a course must match every filter that is set."
+      operationId: listCourses
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: universityId
+          schema:
+            examples:
+              - umcs
+            maxLength: 32
+            type: string
+        - description: Exact faculty name
+          explode: false
+          in: query
+          name: faculty
+          schema:
+            description: Exact faculty name
+            maxLength: 600
+            type: string
+        - description: Exact subject name
+          explode: false
+          in: query
+          name: subject
+          schema:
+            description: Exact subject name
+            maxLength: 600
+            type: string
+        - description: 0 or omitted for every semester
+          explode: false
+          in: query
+          name: semester
+          schema:
+            description: 0 or omitted for every semester
+            format: int64
+            maximum: 10
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCoursesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List courses
+      tags:
+        - study
+    post:
+      description: Adds a course to the catalogue of a university. A student may create, upload and comment up to 30 times an hour in total.
+      operationId: createCourse
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCourseInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Create a course
+      tags:
+        - study
+  /study/courses/{id}:
+    get:
+      description: Returns the course with its average rating.
+      operationId: getCourse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get a course
+      tags:
+        - study
+    patch:
+      description: Only the student who created the course may change it; for anyone else the course is not found. Omitted fields stay unchanged.
+      operationId: updateCourse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCourseInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Update the name, description or difficulty of the student's own course
+      tags:
+        - study
+  /study/courses/{id}/comments:
+    get:
+      description: Oldest first. Comments of blocked students are left out.
+      operationId: listCourseComments
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCourseCommentsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the comments on a course
+      tags:
+        - study
+    post:
+      description: Comments are shown without their author. Counts toward the limit of 30 creates an hour.
+      operationId: addCourseComment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCourseCommentInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseComment"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Comment on a course
+      tags:
+        - study
+  /study/courses/{id}/files:
+    get:
+      description: Newest first. Files of blocked students are left out.
+      operationId: listCourseFiles
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCourseFilesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the files of a course
+      tags:
+        - study
+    post:
+      description: The file is a PDF up to 20 MB or a JPEG, PNG or WebP up to 10 MB, uploaded with kind exam. Counts toward the limit of 30 creates an hour.
+      operationId: addCourseFile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCourseFileInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseFile"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Attach a file to a course
+      tags:
+        - study
+  /study/courses/{id}/rating:
+    put:
+      description: One rating per student; rating again replaces the previous one. Returns the course with its new average.
+      operationId: rateCourse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RateCourseInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Rate a course
+      tags:
+        - study
+  /study/files:
+    get:
+      description: Newest first. Filters combine and apply to the course of the file. Files of blocked students are left out.
+      operationId: searchFiles
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - description: Up to 5 words of at least 3 characters, matched against the file title and the course subject
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Up to 5 words of at least 3 characters, matched against the file title and the course subject
+            examples:
+              - midterm algebra
+            maxLength: 200
+            type: string
+        - explode: false
+          in: query
+          name: universityId
+          schema:
+            examples:
+              - umcs
+            maxLength: 32
+            type: string
+        - description: Exact faculty name of the course
+          explode: false
+          in: query
+          name: faculty
+          schema:
+            description: Exact faculty name of the course
+            maxLength: 600
+            type: string
+        - description: Exact subject name of the course
+          explode: false
+          in: query
+          name: subject
+          schema:
+            description: Exact subject name of the course
+            maxLength: 600
+            type: string
+        - description: 0 or omitted for every semester
+          explode: false
+          in: query
+          name: semester
+          schema:
+            description: 0 or omitted for every semester
+            format: int64
+            maximum: 10
+            minimum: 0
+            type: integer
+        - description: Only files uploaded by the signed-in student
+          explode: false
+          in: query
+          name: mine
+          schema:
+            description: Only files uploaded by the signed-in student
+            type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchFilesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Search files of all courses
+      tags:
+        - study
+  /study/files/{id}:
+    delete:
+      description: Deletes the file and its upload. A file that is already gone, or that another student uploaded, is left as it is and the call still succeeds.
+      operationId: deleteFile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete the student's own file
+      tags:
+        - study
+    get:
+      description: A file of a blocked student is not found.
+      operationId: getFile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseFile"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get a file
+      tags:
+        - study
+  /study/professors:
+    get:
+      description: Current staff of the universities Uniezz serves, as listed in POL-on, ordered by name. The list is refreshed monthly; ratings stay.
+      operationId: listProfessors
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: universityId
+          schema:
+            examples:
+              - umcs
+            maxLength: 32
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListProfessorsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List professors
+      tags:
+        - study
+  /study/professors/{id}:
+    get:
+      description: A professor who left the POL-on list is not found.
+      operationId: getProfessor
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Professor"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get a professor
+      tags:
+        - study
+  /study/professors/{id}/rating:
+    put:
+      description: One rating per student; rating again replaces the previous one. A professor who left the POL-on list cannot be rated.
+      operationId: rateProfessor
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RateProfessorInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Professor"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Rate a professor
+      tags:
+        - study

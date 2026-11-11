@@ -103,7 +103,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
 	}
-	m := New(pool, e.targets, e.users, e.candidates)
+	m := New(pool, e.targets, e.users, e.candidates, e.targets)
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {

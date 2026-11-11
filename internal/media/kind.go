@@ -7,6 +7,7 @@ const (
 	KindBanner Kind = "banner"
 	KindFeed   Kind = "feed"
 	KindChat   Kind = "chat"
+	KindExam   Kind = "exam"
 )
 
 type kindRule struct {
@@ -20,10 +21,12 @@ var kindRules = map[Kind]kindRule{
 	KindBanner: {prefix: "banners", maxSize: 10 << 20, public: true},
 	KindFeed:   {prefix: "feed", maxSize: 10 << 20, public: true},
 	KindChat:   {prefix: "chat", maxSize: 10 << 20, public: false},
+	KindExam:   {prefix: "exams", maxSize: 20 << 20, public: false},
 }
 
 var extensions = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/webp": ".webp",
+	"image/jpeg":      ".jpg",
+	"image/png":       ".png",
+	"image/webp":      ".webp",
+	"application/pdf": ".pdf",
 }
