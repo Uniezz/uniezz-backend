@@ -81,3 +81,39 @@ func (h *reportHandler) createReport(ctx context.Context, in *createReportInput)
 	}
 	return &createReportOutput{Body: *report}, nil
 }
+
+type listQueueInput struct {
+	httpapi.PageQuery
+}
+
+type listQueueOutput struct {
+	Body struct {
+		Items      []QueuedReport `json:"items"`
+		NextCursor *string        `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get the next page; null on the last page"`
+	}
+}
+
+var listQueueOperation = auth.Protected(huma.Operation{
+	OperationID: "listPendingReports",
+	Method:      http.MethodGet,
+	Path:        "/moderation/reports",
+	Summary:     "List pending reports for moderators",
+	Description: "Pending reports about posts, comments, students, exam files and courses, newest first. Moderators only; everyone else gets 403.",
+	Tags:        []string{"moderation"},
+	Errors:      []int{http.StatusBadRequest, http.StatusForbidden},
+})
+
+func (h *reportHandler) listQueue(ctx context.Context, in *listQueueInput) (*listQueueOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+	items, next, err := h.moderation.listQueue(ctx, userID, in.Cursor, in.Limit)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	out := &listQueueOutput{}
+	out.Body.Items = items
+	out.Body.NextCursor = next
+	return out, nil
+}
