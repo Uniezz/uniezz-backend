@@ -88,4 +88,5 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 func (m Module) Register(api huma.API) {
 	reports := &reportHandler{moderation: m}
 	huma.Register(api, createReportOperation, reports.createReport)
+	huma.Register(api, listQueueOperation, reports.listQueue)
 }
