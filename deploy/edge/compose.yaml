@@ -1,0 +1,71 @@
+# Edge: the one Traefik on a server, routing to every API stack on it
+# (deploy/stg, deploy/prd). Only one process can bind 80/443, so it lives in
+# its own stack and each deploy brings it up after its API.
+#
+# Reads .env next to this file: ACME_EMAIL. DOCKER_GID is set by the deploy job.
+# API stacks join the external uniezz-proxy network, which the deploy job creates.
+
+name: uniezz-edge
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  socket-proxy:
+    image: wollomatic/socket-proxy:1.13.1
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - -loglevel=info
+      - -listenip=0.0.0.0
+      - -allowfrom=traefik
+      - -allowGET=/v1\..{1,2}/(version|containers/.*|events.*)
+      - -allowHEAD=/_ping
+      - -shutdowngracetime=5
+      - -watchdoginterval=600
+      - -stoponwatchdog
+    read_only: true
+    mem_limit: 64M
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65534:${DOCKER_GID:?DOCKER_GID is required}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+
+  traefik:
+    image: traefik:v3.7
+    restart: unless-stopped
+    logging: *logging
+    depends_on: [socket-proxy]
+    command:
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=uniezz-proxy
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?ACME_EMAIL is required}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - letsencrypt:/letsencrypt
+    networks: [proxy, docker-api]
+
+networks:
+  proxy:
+    name: uniezz-proxy
+    external: true
+  docker-api:
+    internal: true
+
+volumes:
+  letsencrypt:

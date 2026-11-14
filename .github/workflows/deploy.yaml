@@ -1,0 +1,106 @@
+name: Deploy
+
+# Migrates the database and starts one API stack (deploy/<stack>) plus the edge
+# Traefik (deploy/edge) on the server of the given GitHub environment. The
+# environment holds DOPPLER_TOKEN and the SSH_* secrets, so moving a stack to
+# another server means changing that environment's secrets only.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment with DOPPLER_TOKEN and SSH_* secrets
+        type: string
+        required: true
+      stack:
+        description: Directory under deploy/ with the API compose file (stg, prd)
+        type: string
+        required: true
+      api_url:
+        description: Public URL of the API
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Migrate and deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.api_url }}/docs
+    # Stacks on one server share the edge stack; never bring it up twice at once.
+    concurrency:
+      group: deploy-server
+      cancel-in-progress: false
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      APP_DIR: uniezz-${{ inputs.stack }}
+      EDGE_DIR: uniezz-edge
+      API_URL: ${{ inputs.api_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Go and goose
+        uses: jdx/mise-action@v2
+        with:
+          install_args: "--locked go go:github.com/pressly/goose/v3/cmd/goose"
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
+      - name: Run migrations
+        env:
+          GOOSE_MIGRATION_DIR: migrations
+        run: doppler run -- goose up
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          echo "SSH_TARGET=${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" >> "$GITHUB_ENV"
+
+      - name: Upload compose files and env
+        run: |
+          ssh "$SSH_TARGET" "mkdir -p $APP_DIR $EDGE_DIR"
+          scp "deploy/${{ inputs.stack }}/compose.yaml" "$SSH_TARGET:$APP_DIR/compose.yaml"
+          scp deploy/edge/compose.yaml "$SSH_TARGET:$EDGE_DIR/compose.yaml"
+          doppler secrets download --no-file --format env \
+            | ssh "$SSH_TARGET" "umask 077 && cat > $APP_DIR/.env"
+          printf 'ACME_EMAIL=%s\n' "$(doppler secrets get ACME_EMAIL --plain)" \
+            | ssh "$SSH_TARGET" "umask 077 && cat > $EDGE_DIR/.env"
+
+      - name: Start the new version
+        run: |
+          ssh "$SSH_TARGET" bash -s -- "$APP_DIR" "$EDGE_DIR" "$GITHUB_SHA" <<'EOF'
+          set -euo pipefail
+          export IMAGE_TAG="$3"
+          export DOCKER_GID="$(getent group docker | cut -d: -f3)"
+          docker network inspect uniezz-proxy >/dev/null 2>&1 || docker network create uniezz-proxy >/dev/null
+          # The API goes first: --remove-orphans frees 80/443 on a server that still runs Traefik inside an API stack.
+          (cd "$1" && docker compose pull && docker compose up -d --wait --wait-timeout 120 --remove-orphans)
+          (cd "$2" && docker compose pull && docker compose up -d --wait --wait-timeout 60 --remove-orphans)
+          EOF
+
+      - name: Smoke test
+        run: |
+          host="${API_URL#https://}"
+          origin() {
+            ssh "$SSH_TARGET" curl -fsS --retry 20 --retry-delay 3 --retry-all-errors \
+              --resolve "$host:443:127.0.0.1" "https://$host$1"
+          }
+          origin /healthz/ready
+          version="$(origin /openapi.json | jq -r .info.version)"
+          if [ "$version" != "${GITHUB_SHA::7}" ]; then
+            echo "::error::Expected API version ${GITHUB_SHA::7}, got $version"
+            exit 1
+          fi
