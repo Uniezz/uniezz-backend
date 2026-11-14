@@ -1,0 +1,62 @@
+name: Deploy production
+
+# Manual only: run it from the Actions tab on the release/* branch that
+# staging already runs. It builds nothing and deploys the image that the
+# staging deploy of the same commit built, tested and proved.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prd
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Check staging ran this commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require a release branch and a successful staging deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/release/*) ;;
+            *) echo "::error::Run this workflow on a release/* branch, not $GITHUB_REF_NAME"; exit 1 ;;
+          esac
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-stg.yaml/runs?head_sha=$GITHUB_SHA&status=success" --jq .total_count)"
+          if [ "$runs" -eq 0 ]; then
+            echo "::error::Staging has not deployed ${GITHUB_SHA::7} successfully. Deploy it to staging first."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy
+    needs: gate
+    uses: ./.github/workflows/deploy.yaml
+    secrets: inherit
+    with:
+      environment: production
+      stack: prd
+      api_url: https://api.uniezz.pl
+
+  notify:
+    name: Notify
+    needs: [gate, deploy]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/deploy-notify.yaml
+    secrets: inherit
+    permissions:
+      contents: read
+      actions: read
+    with:
+      environment: production
+      label: Production
+      workflow: deploy-prd.yaml
+      result: ${{ needs.deploy.result }}
