@@ -1195,6 +1195,9 @@ components:
             - pl
             - uk
             - ru
+            - be
+            - de
+            - es
           type: string
         lastName:
           examples:
@@ -1784,6 +1787,9 @@ components:
             - pl
             - uk
             - ru
+            - be
+            - de
+            - es
           type: string
         lastName:
           maxLength: 100

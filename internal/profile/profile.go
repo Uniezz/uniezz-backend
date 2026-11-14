@@ -50,10 +50,13 @@ const (
 type Language string
 
 const (
-	LanguageEnglish   Language = "en"
-	LanguagePolish    Language = "pl"
-	LanguageUkrainian Language = "uk"
-	LanguageRussian   Language = "ru"
+	LanguageEnglish    Language = "en"
+	LanguagePolish     Language = "pl"
+	LanguageUkrainian  Language = "uk"
+	LanguageRussian    Language = "ru"
+	LanguageBelarusian Language = "be"
+	LanguageGerman     Language = "de"
+	LanguageSpanish    Language = "es"
 )
 
 type profileChange struct {

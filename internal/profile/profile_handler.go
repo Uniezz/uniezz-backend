@@ -21,7 +21,7 @@ type Profile struct {
 	FirstName    *string     `json:"firstName" nullable:"true" example:"Jan"`
 	LastName     *string     `json:"lastName" nullable:"true" example:"Kowalski"`
 	Gender       *Gender     `json:"gender" nullable:"true" enum:"male,female" doc:"Set once; null until set. Visible to other students, with no privacy toggle."`
-	Language     Language    `json:"language" enum:"en,pl,uk,ru" doc:"Interface language; defaults to pl"`
+	Language     Language    `json:"language" enum:"en,pl,uk,ru,be,de,es" doc:"Interface language; defaults to pl"`
 	UniversityID string      `json:"universityId" example:"umcs"`
 	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
 	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
@@ -64,7 +64,7 @@ type updateMeInput struct {
 		FirstName     *string    `json:"firstName,omitempty" minLength:"1" maxLength:"100"`
 		LastName      *string    `json:"lastName,omitempty" minLength:"1" maxLength:"100"`
 		Gender        *Gender    `json:"gender,omitempty" enum:"male,female" doc:"Can be set only once: when a gender is already saved, returns 400 gender_immutable"`
-		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru"`
+		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru,be,de,es"`
 		Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
 		SongURL       *string    `json:"songUrl,omitempty" maxLength:"2000" doc:"http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged."`
 		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
