@@ -196,6 +196,32 @@ func (h *courseHandler) updateCourse(ctx context.Context, in *updateCourseInput)
 	return &updateCourseOutput{Body: *course}, nil
 }
 
+type deleteCourseInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+var deleteCourseOperation = auth.Protected(huma.Operation{
+	OperationID:   "deleteCourse",
+	Method:        http.MethodDelete,
+	Path:          "/study/courses/{id}",
+	Summary:       "Delete the student's own course with its files, comments and ratings",
+	Description:   "Deletes the course with the files, comments and ratings every student left on it. A course that is already gone, or that another student created, is left as it is and the call still succeeds.",
+	Tags:          []string{"study"},
+	DefaultStatus: http.StatusNoContent,
+})
+
+func (h *courseHandler) deleteCourse(ctx context.Context, in *deleteCourseInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.study.deleteCourse(ctx, userID, in.ID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
 type rateCourseInput struct {
 	ID   uuid.UUID `path:"id" format:"uuid"`
 	Body struct {

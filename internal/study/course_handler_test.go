@@ -22,6 +22,7 @@ func TestCourseEndpointsNeedSession(t *testing.T) {
 		{"list courses", http.MethodGet, "/study/courses"},
 		{"get course", http.MethodGet, "/study/courses/" + id},
 		{"update course", http.MethodPatch, "/study/courses/" + id},
+		{"delete course", http.MethodDelete, "/study/courses/" + id},
 		{"rate course", http.MethodPut, "/study/courses/" + id + "/rating"},
 		{"add file", http.MethodPost, "/study/courses/" + id + "/files"},
 		{"list course files", http.MethodGet, "/study/courses/" + id + "/files"},
@@ -214,5 +215,113 @@ func TestRateCourse(t *testing.T) {
 	t.Run("an unknown course is not found", func(t *testing.T) {
 		rater := e.student(t)
 		expectError(t, e.api.Put("/study/courses/"+uuid.NewString()+"/rating", rater.bearer, map[string]any{"rating": 3}), http.StatusNotFound, "not_found")
+	})
+}
+
+func TestDeleteCourse(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+
+	count := func(t *testing.T, query string, id uuid.UUID) int {
+		t.Helper()
+		var n int
+		if err := e.pool.QueryRow(ctx, query, id).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		return n
+	}
+
+	t.Run("the author deletes the course with every student's files, comments and ratings", func(t *testing.T) {
+		author := e.student(t)
+		other := e.student(t)
+		course := e.course(t, author, nil)
+		path := "/study/courses/" + course.ID.String()
+		file := e.file(t, other, course.ID, "Exam 2025")
+		decode[CourseComment](t, e.api.Post(path+"/comments", other.bearer, map[string]any{"content": "Fair."}), http.StatusCreated)
+		decode[Course](t, e.api.Put(path+"/rating", other.bearer, map[string]any{"rating": 4}), http.StatusOK)
+		var mediaID uuid.UUID
+		if err := e.pool.QueryRow(ctx, "SELECT media_id FROM course_files WHERE id = $1", file.ID).Scan(&mediaID); err != nil {
+			t.Fatalf("read file media: %v", err)
+		}
+
+		if rec := e.api.Delete(path, author.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		expectError(t, e.api.Get(path, author.bearer), http.StatusNotFound, "not_found")
+		for _, query := range []string{
+			"SELECT count(*) FROM course_files WHERE course_id = $1",
+			"SELECT count(*) FROM course_comments WHERE course_id = $1",
+			"SELECT count(*) FROM course_ratings WHERE course_id = $1",
+		} {
+			if n := count(t, query, course.ID); n != 0 {
+				t.Errorf("%s = %d, want 0", query, n)
+			}
+		}
+		var status string
+		if err := e.pool.QueryRow(ctx, "SELECT status FROM media WHERE id = $1", mediaID).Scan(&status); err != nil {
+			t.Fatalf("read media status: %v", err)
+		}
+		if status != "deleting" {
+			t.Errorf("media status = %q, want deleting", status)
+		}
+	})
+
+	t.Run("another student's delete leaves the course as it is", func(t *testing.T) {
+		author := e.student(t)
+		other := e.student(t)
+		course := e.course(t, author, nil)
+		path := "/study/courses/" + course.ID.String()
+
+		if rec := e.api.Delete(path, other.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+		decode[Course](t, e.api.Get(path, author.bearer), http.StatusOK)
+	})
+
+	t.Run("deleting a course that is already gone succeeds", func(t *testing.T) {
+		author := e.student(t)
+		if rec := e.api.Delete("/study/courses/"+uuid.NewString(), author.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("comments sent while the course is deleted never break the delete", func(t *testing.T) {
+		author := e.student(t)
+		other := e.student(t)
+		course := e.course(t, author, nil)
+		path := "/study/courses/" + course.ID.String()
+
+		const commenters = 10
+		var wg sync.WaitGroup
+		codes := make([]int, commenters)
+		var deleteCode int
+		wg.Add(commenters + 1)
+		for i := range commenters {
+			go func() {
+				defer wg.Done()
+				codes[i] = e.api.Post(path+"/comments", other.bearer, map[string]any{"content": "Racing."}).Code
+			}()
+		}
+		go func() {
+			defer wg.Done()
+			deleteCode = e.api.Delete(path, author.bearer).Code
+		}()
+		wg.Wait()
+
+		if deleteCode != http.StatusNoContent {
+			t.Fatalf("delete = %d, want 204", deleteCode)
+		}
+		for i, code := range codes {
+			if code != http.StatusCreated && code != http.StatusNotFound {
+				t.Errorf("comment %d = %d, want 201 or 404", i, code)
+			}
+		}
+		if n := count(t, "SELECT count(*) FROM courses WHERE id = $1", course.ID); n != 0 {
+			t.Errorf("course rows = %d, want 0", n)
+		}
+		if n := count(t, "SELECT count(*) FROM course_comments WHERE course_id = $1", course.ID); n != 0 {
+			t.Errorf("comment rows = %d, want 0", n)
+		}
 	})
 }

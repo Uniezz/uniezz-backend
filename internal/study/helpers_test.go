@@ -202,6 +202,11 @@ func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
 	return nil
 }
 
+func (f *fakeMedia) MarkDeletingMany(ctx context.Context, mediaIDs []uuid.UUID) error {
+	_, err := database.New(f.pool).Conn(ctx).Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = ANY($1) AND status = 'ready'", mediaIDs)
+	return err
+}
+
 func (f *fakeMedia) Delete(ctx context.Context, mediaID uuid.UUID) error {
 	if _, err := f.pool.Exec(ctx, "DELETE FROM media WHERE id = $1 AND status = 'deleting'", mediaID); err != nil {
 		return err

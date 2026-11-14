@@ -189,6 +189,26 @@ func (m Module) updateCourse(ctx context.Context, userID, id uuid.UUID, change c
 	return &course, nil
 }
 
+func (m Module) deleteCourse(ctx context.Context, userID, id uuid.UUID) error {
+	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+		found, err := m.courses.lockOwned(ctx, id, userID)
+		if err != nil || !found {
+			return err
+		}
+		mediaIDs, err := m.files.deleteByCourse(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := m.media.MarkDeletingMany(ctx, mediaIDs); err != nil {
+			return err
+		}
+		if err := m.comments.deleteByCourse(ctx, id); err != nil {
+			return err
+		}
+		return m.courses.delete(ctx, id)
+	})
+}
+
 func (m Module) rateCourse(ctx context.Context, userID, id uuid.UUID, rating int) (*Course, error) {
 	if !validRating(rating) {
 		return nil, ErrInvalidInput

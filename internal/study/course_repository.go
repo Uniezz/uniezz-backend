@@ -180,6 +180,27 @@ func (r *courseRepository) lock(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *courseRepository) lockOwned(ctx context.Context, id, authorID uuid.UUID) (bool, error) {
+	const query = `SELECT id FROM courses WHERE id = $1 AND author_id = $2 FOR UPDATE`
+	var found uuid.UUID
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, authorID).Scan(&found)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock course: %w", err)
+	}
+	return true, nil
+}
+
+func (r *courseRepository) delete(ctx context.Context, id uuid.UUID) error {
+	const query = `DELETE FROM courses WHERE id = $1`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id); err != nil {
+		return fmt.Errorf("delete course: %w", err)
+	}
+	return nil
+}
+
 func (r *courseRepository) getRating(ctx context.Context, courseID, userID uuid.UUID) (int, bool, error) {
 	const query = `SELECT rating FROM course_ratings WHERE course_id = $1 AND user_id = $2`
 	var rating int
