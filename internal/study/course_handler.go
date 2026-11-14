@@ -26,6 +26,7 @@ type Course struct {
 	RatingAverage float64   `json:"ratingAverage" doc:"Average student rating from 1 to 5, 0 when nobody rated yet" example:"4.2"`
 	RatingCount   int       `json:"ratingCount" example:"17"`
 	IsMine        bool      `json:"isMine" doc:"True when the signed-in student created the course and may edit it"`
+	MyRating      *int      `json:"myRating" nullable:"true" minimum:"1" maximum:"5" doc:"The signed-in student's rating, null when they have not rated the course" example:"4"`
 }
 
 type createCourseInput struct {
@@ -82,6 +83,7 @@ type listCoursesInput struct {
 	Faculty      string `query:"faculty" maxLength:"600" doc:"Exact faculty name"`
 	Subject      string `query:"subject" maxLength:"600" doc:"Exact subject name"`
 	Semester     int    `query:"semester" minimum:"0" maximum:"10" doc:"0 or omitted for every semester"`
+	Search       string `query:"q" maxLength:"200" doc:"Up to 5 words of at least 3 characters, matched against the course name and subject" example:"calculus"`
 }
 
 type listCoursesOutput struct {
@@ -113,6 +115,7 @@ func (h *courseHandler) listCourses(ctx context.Context, in *listCoursesInput) (
 		Faculty:      in.Faculty,
 		Subject:      in.Subject,
 		Semester:     in.Semester,
+		Search:       in.Search,
 		Cursor:       in.Cursor,
 		Limit:        in.Limit,
 	})
@@ -194,6 +197,32 @@ func (h *courseHandler) updateCourse(ctx context.Context, in *updateCourseInput)
 		return nil, errorResponses.Error(err)
 	}
 	return &updateCourseOutput{Body: *course}, nil
+}
+
+type deleteCourseInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+var deleteCourseOperation = auth.Protected(huma.Operation{
+	OperationID:   "deleteCourse",
+	Method:        http.MethodDelete,
+	Path:          "/study/courses/{id}",
+	Summary:       "Delete the student's own course with its files, comments and ratings",
+	Description:   "Deletes the course with the files, comments and ratings every student left on it. A course that is already gone, or that another student created, is left as it is and the call still succeeds.",
+	Tags:          []string{"study"},
+	DefaultStatus: http.StatusNoContent,
+})
+
+func (h *courseHandler) deleteCourse(ctx context.Context, in *deleteCourseInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.study.deleteCourse(ctx, userID, in.ID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
 }
 
 type rateCourseInput struct {

@@ -28,6 +28,7 @@ type mediaService interface {
 	CheckUpload(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
 	MarkReady(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
 	MarkDeleting(ctx context.Context, mediaID uuid.UUID) error
+	MarkDeletingMany(ctx context.Context, mediaIDs []uuid.UUID) error
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 	URLOf(ctx context.Context, ref media.Ref) (string, error)
 }
@@ -84,6 +85,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, listCoursesOperation, courses.listCourses)
 	huma.Register(api, getCourseOperation, courses.getCourse)
 	huma.Register(api, updateCourseOperation, courses.updateCourse)
+	huma.Register(api, deleteCourseOperation, courses.deleteCourse)
 	huma.Register(api, rateCourseOperation, courses.rateCourse)
 	huma.Register(api, addCourseFileOperation, files.addCourseFile)
 	huma.Register(api, listCourseFilesOperation, files.listCourseFiles)

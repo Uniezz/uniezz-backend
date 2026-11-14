@@ -25,6 +25,7 @@ type courseRow struct {
 	RatingCount  int
 	RatingSum    int
 	CreatedAt    time.Time
+	MyRating     *int
 }
 
 type courseFields struct {
@@ -44,10 +45,12 @@ type courseEditFields struct {
 }
 
 type courseFilter struct {
+	ViewerID     uuid.UUID
 	UniversityID string
 	Faculty      string
 	Subject      string
 	Semester     int
+	Words        []string
 	After        *pageCursor
 	Limit        int
 }
@@ -67,10 +70,14 @@ func newCourseRepository(db database.DB) *courseRepository {
 
 const courseColumns = `id, author_id, name, description, difficulty, university_id, faculty, subject, semester, rating_count, rating_sum, created_at`
 
+func courseRatingOf(viewer string) string {
+	return `(SELECT rating FROM course_ratings WHERE course_id = courses.id AND user_id = ` + viewer + `)`
+}
+
 func scanCourse(row pgx.Row) (*courseRow, error) {
 	var c courseRow
 	err := row.Scan(&c.ID, &c.AuthorID, &c.Name, &c.Description, &c.Difficulty, &c.UniversityID,
-		&c.Faculty, &c.Subject, &c.Semester, &c.RatingCount, &c.RatingSum, &c.CreatedAt)
+		&c.Faculty, &c.Subject, &c.Semester, &c.RatingCount, &c.RatingSum, &c.CreatedAt, &c.MyRating)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +88,7 @@ func (r *courseRepository) create(ctx context.Context, authorID uuid.UUID, f cou
 	const query = `
 		INSERT INTO courses (author_id, name, description, difficulty, university_id, faculty, subject, semester)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING ` + courseColumns
+		RETURNING ` + courseColumns + `, NULL::smallint`
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query,
 		authorID, f.Name, f.Description, f.Difficulty, f.UniversityID, f.Faculty, f.Subject, f.Semester))
 	if err != nil {
@@ -90,9 +97,11 @@ func (r *courseRepository) create(ctx context.Context, authorID uuid.UUID, f cou
 	return row, nil
 }
 
-func (r *courseRepository) get(ctx context.Context, id uuid.UUID) (*courseRow, error) {
-	const query = `SELECT ` + courseColumns + ` FROM courses WHERE id = $1`
-	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query, id))
+func (r *courseRepository) get(ctx context.Context, viewerID, id uuid.UUID) (*courseRow, error) {
+	var args database.Args
+	arg := args.Add
+	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(viewerID)) + ` FROM courses WHERE id = ` + arg(id)
+	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -105,6 +114,8 @@ func (r *courseRepository) get(ctx context.Context, id uuid.UUID) (*courseRow, e
 func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRow, error) {
 	var args database.Args
 	arg := args.Add
+
+	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(f.ViewerID)) + ` FROM courses`
 
 	var where []string
 	if f.UniversityID != "" {
@@ -119,11 +130,14 @@ func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRo
 	if f.Semester != 0 {
 		where = append(where, "semester = "+arg(f.Semester))
 	}
+	for _, word := range f.Words {
+		pattern := database.SearchPattern(arg(word))
+		where = append(where, "(public.search_text(name) LIKE "+pattern+" OR public.search_text(subject) LIKE "+pattern+")")
+	}
 	if f.After != nil {
 		where = append(where, "(created_at, id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
 
-	query := `SELECT ` + courseColumns + ` FROM courses`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -150,13 +164,13 @@ func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRo
 }
 
 func (r *courseRepository) update(ctx context.Context, id, authorID uuid.UUID, f courseEditFields) (*courseRow, error) {
-	const query = `
+	query := `
 		UPDATE courses SET
 			name = COALESCE($3, name),
 			description = COALESCE($4, description),
 			difficulty = COALESCE($5, difficulty)
 		WHERE id = $1 AND author_id = $2
-		RETURNING ` + courseColumns
+		RETURNING ` + courseColumns + `, ` + courseRatingOf("$2")
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query, id, authorID, f.Name, f.Description, f.Difficulty))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -176,6 +190,27 @@ func (r *courseRepository) lock(ctx context.Context, id uuid.UUID) error {
 	}
 	if err != nil {
 		return fmt.Errorf("lock course: %w", err)
+	}
+	return nil
+}
+
+func (r *courseRepository) lockOwned(ctx context.Context, id, authorID uuid.UUID) (bool, error) {
+	const query = `SELECT id FROM courses WHERE id = $1 AND author_id = $2 FOR UPDATE`
+	var found uuid.UUID
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, authorID).Scan(&found)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock course: %w", err)
+	}
+	return true, nil
+}
+
+func (r *courseRepository) delete(ctx context.Context, id uuid.UUID) error {
+	const query = `DELETE FROM courses WHERE id = $1`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id); err != nil {
+		return fmt.Errorf("delete course: %w", err)
 	}
 	return nil
 }

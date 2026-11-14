@@ -106,6 +106,15 @@ func (r *repository) markDeleting(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *repository) markManyDeleting(ctx context.Context, ids []uuid.UUID) error {
+	const query = `UPDATE media SET status = 'deleting' WHERE id = ANY($1) AND status = 'ready'`
+
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, ids); err != nil {
+		return fmt.Errorf("mark media deleting: %w", err)
+	}
+	return nil
+}
+
 func (r *repository) getDeleting(ctx context.Context, id uuid.UUID) (*mediaRow, error) {
 	const query = `
         SELECT ` + mediaColumns + `
