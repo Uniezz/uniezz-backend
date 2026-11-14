@@ -135,3 +135,38 @@ func TestDelete(t *testing.T) {
 		}
 	})
 }
+
+func TestMarkDeletingMany(t *testing.T) {
+	pool := setupTestDB(t)
+	repo := newRepository(database.New(pool))
+	ownerID := createTestUser(t, pool)
+	ctx := context.Background()
+	m := Module{repo: repo}
+
+	t.Run("marks every listed ready media and leaves the rest", func(t *testing.T) {
+		first := readyMedia(t, repo, ownerID)
+		second := readyMedia(t, repo, ownerID)
+		other := readyMedia(t, repo, ownerID)
+
+		if err := m.MarkDeletingMany(ctx, []uuid.UUID{first.ID, second.ID}); err != nil {
+			t.Fatalf("mark many deleting: %v", err)
+		}
+		for _, id := range []uuid.UUID{first.ID, second.ID} {
+			if got := status(t, repo, id); got != "deleting" {
+				t.Errorf("status of %s = %q, want deleting", id, got)
+			}
+		}
+		if got := status(t, repo, other.ID); got != "ready" {
+			t.Errorf("status of unlisted media = %q, want ready", got)
+		}
+	})
+
+	t.Run("an empty or already deleted list changes nothing", func(t *testing.T) {
+		if err := m.MarkDeletingMany(ctx, nil); err != nil {
+			t.Errorf("empty list: %v", err)
+		}
+		if err := m.MarkDeletingMany(ctx, []uuid.UUID{uuid.New()}); err != nil {
+			t.Errorf("missing media: %v", err)
+		}
+	})
+}

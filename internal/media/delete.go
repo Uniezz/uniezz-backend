@@ -11,6 +11,10 @@ func (m Module) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
 	return m.repo.markDeleting(ctx, mediaID)
 }
 
+func (m Module) MarkDeletingMany(ctx context.Context, mediaIDs []uuid.UUID) error {
+	return m.repo.markManyDeleting(ctx, mediaIDs)
+}
+
 func (m Module) Delete(ctx context.Context, mediaID uuid.UUID) error {
 	item, err := m.repo.getDeleting(ctx, mediaID)
 	if errors.Is(err, ErrNotFound) {
