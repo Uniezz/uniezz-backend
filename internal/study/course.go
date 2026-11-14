@@ -115,6 +115,7 @@ func (q courseQuery) filter() (courseFilter, error) {
 		return courseFilter{}, err
 	}
 	return courseFilter{
+		ViewerID:     q.ViewerID,
 		UniversityID: q.UniversityID,
 		Faculty:      faculty,
 		Subject:      subject,
@@ -146,7 +147,7 @@ func (m Module) createCourse(ctx context.Context, authorID uuid.UUID, change cou
 }
 
 func (m Module) getCourse(ctx context.Context, viewerID, id uuid.UUID) (*Course, error) {
-	row, err := m.courses.get(ctx, id)
+	row, err := m.courses.get(ctx, viewerID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -267,5 +268,6 @@ func toCourse(row courseRow, viewerID uuid.UUID) Course {
 		RatingAverage: ratingAverage(row.RatingSum, row.RatingCount),
 		RatingCount:   row.RatingCount,
 		IsMine:        row.AuthorID != nil && *row.AuthorID == viewerID,
+		MyRating:      row.MyRating,
 	}
 }

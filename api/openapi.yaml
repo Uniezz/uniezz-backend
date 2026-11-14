@@ -268,6 +268,16 @@ components:
         isMine:
           description: True when the signed-in student created the course and may edit it
           type: boolean
+        myRating:
+          description: The signed-in student's rating, null when they have not rated the course
+          examples:
+            - 4
+          format: int64
+          maximum: 5
+          minimum: 1
+          type:
+            - integer
+            - "null"
         name:
           examples:
             - Calculus I
@@ -310,6 +320,7 @@ components:
         - ratingAverage
         - ratingCount
         - isMine
+        - myRating
       type: object
     CourseComment:
       additionalProperties: false
@@ -1081,6 +1092,16 @@ components:
         id:
           format: uuid
           type: string
+        myRating:
+          description: The signed-in student's rating, null when they have not rated the professor
+          examples:
+            - 5
+          format: int64
+          maximum: 5
+          minimum: 1
+          type:
+            - integer
+            - "null"
         name:
           examples:
             - Anna Maria Nowak
@@ -1107,6 +1128,7 @@ components:
         - universityId
         - ratingAverage
         - ratingCount
+        - myRating
       type: object
     Profile:
       additionalProperties: false

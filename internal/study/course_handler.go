@@ -26,6 +26,7 @@ type Course struct {
 	RatingAverage float64   `json:"ratingAverage" doc:"Average student rating from 1 to 5, 0 when nobody rated yet" example:"4.2"`
 	RatingCount   int       `json:"ratingCount" example:"17"`
 	IsMine        bool      `json:"isMine" doc:"True when the signed-in student created the course and may edit it"`
+	MyRating      *int      `json:"myRating" nullable:"true" minimum:"1" maximum:"5" doc:"The signed-in student's rating, null when they have not rated the course" example:"4"`
 }
 
 type createCourseInput struct {

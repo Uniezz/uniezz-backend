@@ -21,6 +21,7 @@ type Professor struct {
 	UniversityID  string    `json:"universityId" example:"umcs"`
 	RatingAverage float64   `json:"ratingAverage" doc:"Average student rating from 1 to 5, 0 when nobody rated yet" example:"4.5"`
 	RatingCount   int       `json:"ratingCount" example:"12"`
+	MyRating      *int      `json:"myRating" nullable:"true" minimum:"1" maximum:"5" doc:"The signed-in student's rating, null when they have not rated the professor" example:"5"`
 }
 
 type listProfessorsInput struct {
@@ -46,11 +47,13 @@ var listProfessorsOperation = auth.Protected(huma.Operation{
 })
 
 func (h *professorHandler) listProfessors(ctx context.Context, in *listProfessorsInput) (*listProfessorsOutput, error) {
-	if _, ok := auth.UserIDFrom(ctx); !ok {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
 
 	items, next, err := h.study.listProfessors(ctx, professorQuery{
+		ViewerID:     viewerID,
 		UniversityID: in.UniversityID,
 		Cursor:       in.Cursor,
 		Limit:        in.Limit,
@@ -83,11 +86,12 @@ var getProfessorOperation = auth.Protected(huma.Operation{
 })
 
 func (h *professorHandler) getProfessor(ctx context.Context, in *getProfessorInput) (*getProfessorOutput, error) {
-	if _, ok := auth.UserIDFrom(ctx); !ok {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
 
-	professor, err := h.study.getProfessor(ctx, in.ID)
+	professor, err := h.study.getProfessor(ctx, viewerID, in.ID)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

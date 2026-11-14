@@ -18,6 +18,7 @@ type professorRow struct {
 	UniversityID string
 	RatingCount  int
 	RatingSum    int
+	MyRating     *int
 }
 
 type professorFields struct {
@@ -29,6 +30,7 @@ type professorFields struct {
 }
 
 type professorFilter struct {
+	ViewerID     uuid.UUID
 	UniversityID string
 	After        *nameCursor
 	Limit        int
@@ -49,9 +51,13 @@ func newProfessorRepository(db database.DB) *professorRepository {
 
 const professorColumns = `id, name, degree, university_id, rating_count, rating_sum`
 
+func professorRatingOf(viewer string) string {
+	return `(SELECT rating FROM professor_ratings WHERE professor_id = professors.id AND user_id = ` + viewer + `)`
+}
+
 func scanProfessor(row pgx.Row) (*professorRow, error) {
 	var p professorRow
-	if err := row.Scan(&p.ID, &p.Name, &p.Degree, &p.UniversityID, &p.RatingCount, &p.RatingSum); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Degree, &p.UniversityID, &p.RatingCount, &p.RatingSum, &p.MyRating); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -61,6 +67,7 @@ func (r *professorRepository) list(ctx context.Context, f professorFilter) ([]pr
 	var args database.Args
 	arg := args.Add
 
+	columns := professorColumns + `, ` + professorRatingOf(arg(f.ViewerID))
 	where := []string{"active"}
 	if f.UniversityID != "" {
 		where = append(where, "university_id = "+arg(f.UniversityID))
@@ -68,7 +75,7 @@ func (r *professorRepository) list(ctx context.Context, f professorFilter) ([]pr
 	if f.After != nil {
 		where = append(where, "(name, id) > ("+arg(f.After.Name)+", "+arg(f.After.ID)+")")
 	}
-	query := `SELECT ` + professorColumns + ` FROM professors WHERE ` + strings.Join(where, " AND ") +
+	query := `SELECT ` + columns + ` FROM professors WHERE ` + strings.Join(where, " AND ") +
 		` ORDER BY name, id LIMIT ` + arg(f.Limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
@@ -91,9 +98,11 @@ func (r *professorRepository) list(ctx context.Context, f professorFilter) ([]pr
 	return professors, nil
 }
 
-func (r *professorRepository) get(ctx context.Context, id uuid.UUID) (*professorRow, error) {
-	const query = `SELECT ` + professorColumns + ` FROM professors WHERE id = $1 AND active`
-	row, err := scanProfessor(r.db.Conn(ctx).QueryRow(ctx, query, id))
+func (r *professorRepository) get(ctx context.Context, viewerID, id uuid.UUID) (*professorRow, error) {
+	var args database.Args
+	arg := args.Add
+	query := `SELECT ` + professorColumns + `, ` + professorRatingOf(arg(viewerID)) + ` FROM professors WHERE id = ` + arg(id) + ` AND active`
+	row, err := scanProfessor(r.db.Conn(ctx).QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
