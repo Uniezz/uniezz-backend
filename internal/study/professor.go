@@ -5,11 +5,14 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
 type professorQuery struct {
+	ViewerID     uuid.UUID
 	UniversityID string
+	Search       string
 	Cursor       string
 	Limit        int
 }
@@ -20,11 +23,15 @@ func (q professorQuery) filter() (professorFilter, error) {
 			return professorFilter{}, ErrInvalidInput
 		}
 	}
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
+		return professorFilter{}, ErrInvalidInput
+	}
 	after, err := decodeNameCursor(q.Cursor)
 	if err != nil {
 		return professorFilter{}, err
 	}
-	return professorFilter{UniversityID: q.UniversityID, After: after, Limit: q.Limit + 1}, nil
+	return professorFilter{ViewerID: q.ViewerID, UniversityID: q.UniversityID, Words: words, After: after, Limit: q.Limit + 1}, nil
 }
 
 func (m Module) listProfessors(ctx context.Context, q professorQuery) ([]Professor, *string, error) {
@@ -49,8 +56,8 @@ func (m Module) listProfessors(ctx context.Context, q professorQuery) ([]Profess
 	return professors, next, nil
 }
 
-func (m Module) getProfessor(ctx context.Context, id uuid.UUID) (*Professor, error) {
-	row, err := m.professors.get(ctx, id)
+func (m Module) getProfessor(ctx context.Context, viewerID, id uuid.UUID) (*Professor, error) {
+	row, err := m.professors.get(ctx, viewerID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +90,7 @@ func (m Module) rateProfessor(ctx context.Context, userID, id uuid.UUID, rating 
 	if err != nil {
 		return nil, err
 	}
-	return m.getProfessor(ctx, id)
+	return m.getProfessor(ctx, userID, id)
 }
 
 func (m Module) removeProfessorRating(ctx context.Context, userID, id uuid.UUID) error {
@@ -107,5 +114,6 @@ func toProfessor(row professorRow) Professor {
 		UniversityID:  row.UniversityID,
 		RatingAverage: ratingAverage(row.RatingSum, row.RatingCount),
 		RatingCount:   row.RatingCount,
+		MyRating:      row.MyRating,
 	}
 }

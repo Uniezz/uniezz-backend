@@ -183,6 +183,19 @@ func (r *fileRepository) delete(ctx context.Context, id, authorID uuid.UUID) (uu
 	return mediaID, true, nil
 }
 
+func (r *fileRepository) deleteByCourse(ctx context.Context, courseID uuid.UUID) ([]uuid.UUID, error) {
+	const query = `DELETE FROM course_files WHERE course_id = $1 RETURNING media_id`
+	rows, err := r.db.Conn(ctx).Query(ctx, query, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("delete course files by course: %w", err)
+	}
+	mediaIDs, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("delete course files by course: %w", err)
+	}
+	return mediaIDs, nil
+}
+
 func (r *fileRepository) idsByAuthor(ctx context.Context, authorID uuid.UUID) ([]uuid.UUID, error) {
 	const query = `SELECT id FROM course_files WHERE author_id = $1`
 	rows, err := r.db.Conn(ctx).Query(ctx, query, authorID)

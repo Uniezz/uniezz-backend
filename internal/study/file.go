@@ -142,7 +142,7 @@ func (m Module) getFile(ctx context.Context, viewerID, id uuid.UUID) (*CourseFil
 }
 
 func (m Module) listCourseFiles(ctx context.Context, q fileQuery) ([]CourseFile, *string, error) {
-	if _, err := m.courses.get(ctx, q.CourseID); err != nil {
+	if _, err := m.courses.get(ctx, q.ViewerID, q.CourseID); err != nil {
 		return nil, nil, err
 	}
 	return m.searchFiles(ctx, q)

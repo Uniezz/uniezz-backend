@@ -268,6 +268,16 @@ components:
         isMine:
           description: True when the signed-in student created the course and may edit it
           type: boolean
+        myRating:
+          description: The signed-in student's rating, null when they have not rated the course
+          examples:
+            - 4
+          format: int64
+          maximum: 5
+          minimum: 1
+          type:
+            - integer
+            - "null"
         name:
           examples:
             - Calculus I
@@ -310,6 +320,7 @@ components:
         - ratingAverage
         - ratingCount
         - isMine
+        - myRating
       type: object
     CourseComment:
       additionalProperties: false
@@ -1081,6 +1092,16 @@ components:
         id:
           format: uuid
           type: string
+        myRating:
+          description: The signed-in student's rating, null when they have not rated the professor
+          examples:
+            - 5
+          format: int64
+          maximum: 5
+          minimum: 1
+          type:
+            - integer
+            - "null"
         name:
           examples:
             - Anna Maria Nowak
@@ -1107,6 +1128,7 @@ components:
         - universityId
         - ratingAverage
         - ratingCount
+        - myRating
       type: object
     Profile:
       additionalProperties: false
@@ -1173,6 +1195,9 @@ components:
             - pl
             - uk
             - ru
+            - be
+            - de
+            - es
           type: string
         lastName:
           examples:
@@ -1762,6 +1787,9 @@ components:
             - pl
             - uk
             - ru
+            - be
+            - de
+            - es
           type: string
         lastName:
           maxLength: 100
@@ -4617,6 +4645,16 @@ paths:
             maximum: 10
             minimum: 0
             type: integer
+        - description: Up to 5 words of at least 3 characters, matched against the course name and subject
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Up to 5 words of at least 3 characters, matched against the course name and subject
+            examples:
+              - calculus
+            maxLength: 200
+            type: string
       responses:
         "200":
           content:
@@ -4705,6 +4743,42 @@ paths:
       tags:
         - study
   /study/courses/{id}:
+    delete:
+      description: Deletes the course with the files, comments and ratings every student left on it. A course that is already gone, or that another student created, is left as it is and the call still succeeds.
+      operationId: deleteCourse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete the student's own course with its files, comments and ratings
+      tags:
+        - study
     get:
       description: Returns the course with its average rating.
       operationId: getCourse
@@ -5365,6 +5439,16 @@ paths:
             examples:
               - umcs
             maxLength: 32
+            type: string
+        - description: Up to 5 words of at least 3 characters, matched against the professor's name
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Up to 5 words of at least 3 characters, matched against the professor's name
+            examples:
+              - nowak
+            maxLength: 200
             type: string
       responses:
         "200":
