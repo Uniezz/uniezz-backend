@@ -193,6 +193,24 @@ func TestLoad_Telemetry(t *testing.T) {
 	})
 }
 
+func TestLoad_TelegramAlerts(t *testing.T) {
+	t.Run("off by default", func(t *testing.T) {
+		cfg := loadWith(t, map[string]string{"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_ALERT_CHAT_ID": ""})
+
+		if cfg.TelegramBotToken != "" || cfg.TelegramAlertChatID != "" {
+			t.Errorf("expected no Telegram settings, got %q %q", cfg.TelegramBotToken, cfg.TelegramAlertChatID)
+		}
+	})
+
+	t.Run("reads the variables", func(t *testing.T) {
+		cfg := loadWith(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123:abc", "TELEGRAM_ALERT_CHAT_ID": "-100123"})
+
+		if cfg.TelegramBotToken != "123:abc" || cfg.TelegramAlertChatID != "-100123" {
+			t.Errorf("unexpected Telegram config: %q %q", cfg.TelegramBotToken, cfg.TelegramAlertChatID)
+		}
+	})
+}
+
 func TestLoad_RequiresS3Credentials(t *testing.T) {
 	for _, tc := range []struct{ key, secret string }{{"", "secret"}, {"key", ""}} {
 		t.Setenv("DATABASE_URL", "postgres://test")

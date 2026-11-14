@@ -72,22 +72,24 @@ At about 5 spans per request, 5M spans cover about 1M traced requests per month,
 - Expected: HTTP 200 (`/healthz/ready` answers 503 while shutting down or without a database)
 - Environment `production`; notify on downtime and on recovery
 
-### Alerts
+### Email alerts
 
-On the free Developer plan, alerts are delivered by email. Slack needs a plan that supports the Slack integration (Team or above), which is a separate decision; do not upgrade silently.
+On the free Developer plan, Sentry delivers alerts by email only. Slack needs the Team plan or above; do not upgrade silently.
 
-- **Issue alert**: a new issue is created, environment `production` → email (or `#alerts` on Slack once available). This covers unexpected 5xx and panics.
-- **Uptime**: down and recovered → email (or `#alerts`).
-- **Error log spikes**, if the plan offers log alerts: count of logs with `severity:error` over 5 minutes above a threshold → email (or `#alerts`).
+- **Issue alert**: a new issue is created, environment `production` → email.
+- **Uptime**: down and recovered → email.
 
-### Slack (when the plan supports it)
+## Telegram alerts
 
-1. **Settings → Integrations → Slack**, connect the workspace, then point the alerts above at `#alerts`.
-2. Independently of Sentry, the GitHub app for Slack reports failed CI on `main` and failed staging deploys. In `#alerts`:
+Production posts unexpected errors to the team Telegram chat, without Sentry and without a paid plan. Deploy results go to the same chat from the deploy workflows.
 
-   ```
-   /github subscribe Uniezz/uniezz-backend workflows:{event:"push" branch:"main","release/*"}
-   ```
+- **What alerts:** every `ReportError` and every recovered panic: 5xx responses, USOS login failures and failed background jobs. 4xx responses never alert.
+- **What a message holds:** environment, operation, route, version and request ID. The error text is scrubbed like Sentry events and cut to 300 characters; search the request ID in Sentry or `docker logs` for the rest.
+- **Noise limits:**
+  - one message per operation and route every 10 minutes; the next message says how many were held back;
+  - at most 20 messages an hour;
+  - alerts that do not fit in the queue are counted and dropped, so a request never waits for Telegram.
+- **Configuration:** set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALERT_CHAT_ID` in Doppler `prd` only. Without the chat ID, alerts are off, so staging and local runs post nothing.
 
 ## Verifying on staging
 
