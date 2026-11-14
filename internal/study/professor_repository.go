@@ -32,6 +32,7 @@ type professorFields struct {
 type professorFilter struct {
 	ViewerID     uuid.UUID
 	UniversityID string
+	Words        []string
 	After        *nameCursor
 	Limit        int
 }
@@ -71,6 +72,9 @@ func (r *professorRepository) list(ctx context.Context, f professorFilter) ([]pr
 	where := []string{"active"}
 	if f.UniversityID != "" {
 		where = append(where, "university_id = "+arg(f.UniversityID))
+	}
+	for _, word := range f.Words {
+		where = append(where, "public.search_text(name) LIKE "+database.SearchPattern(arg(word)))
 	}
 	if f.After != nil {
 		where = append(where, "(name, id) > ("+arg(f.After.Name)+", "+arg(f.After.ID)+")")

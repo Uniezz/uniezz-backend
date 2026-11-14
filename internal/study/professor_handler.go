@@ -27,6 +27,7 @@ type Professor struct {
 type listProfessorsInput struct {
 	httpapi.PageQuery
 	UniversityID string `query:"universityId" maxLength:"32" example:"umcs"`
+	Search       string `query:"q" maxLength:"200" doc:"Up to 5 words of at least 3 characters, matched against the professor's name" example:"nowak"`
 }
 
 type listProfessorsOutput struct {
@@ -55,6 +56,7 @@ func (h *professorHandler) listProfessors(ctx context.Context, in *listProfessor
 	items, next, err := h.study.listProfessors(ctx, professorQuery{
 		ViewerID:     viewerID,
 		UniversityID: in.UniversityID,
+		Search:       in.Search,
 		Cursor:       in.Cursor,
 		Limit:        in.Limit,
 	})

@@ -5,12 +5,14 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
 type professorQuery struct {
 	ViewerID     uuid.UUID
 	UniversityID string
+	Search       string
 	Cursor       string
 	Limit        int
 }
@@ -21,11 +23,15 @@ func (q professorQuery) filter() (professorFilter, error) {
 			return professorFilter{}, ErrInvalidInput
 		}
 	}
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
+		return professorFilter{}, ErrInvalidInput
+	}
 	after, err := decodeNameCursor(q.Cursor)
 	if err != nil {
 		return professorFilter{}, err
 	}
-	return professorFilter{ViewerID: q.ViewerID, UniversityID: q.UniversityID, After: after, Limit: q.Limit + 1}, nil
+	return professorFilter{ViewerID: q.ViewerID, UniversityID: q.UniversityID, Words: words, After: after, Limit: q.Limit + 1}, nil
 }
 
 func (m Module) listProfessors(ctx context.Context, q professorQuery) ([]Professor, *string, error) {

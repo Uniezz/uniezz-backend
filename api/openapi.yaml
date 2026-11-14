@@ -4645,6 +4645,16 @@ paths:
             maximum: 10
             minimum: 0
             type: integer
+        - description: Up to 5 words of at least 3 characters, matched against the course name and subject
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Up to 5 words of at least 3 characters, matched against the course name and subject
+            examples:
+              - calculus
+            maxLength: 200
+            type: string
       responses:
         "200":
           content:
@@ -5429,6 +5439,16 @@ paths:
             examples:
               - umcs
             maxLength: 32
+            type: string
+        - description: Up to 5 words of at least 3 characters, matched against the professor's name
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Up to 5 words of at least 3 characters, matched against the professor's name
+            examples:
+              - nowak
+            maxLength: 200
             type: string
       responses:
         "200":

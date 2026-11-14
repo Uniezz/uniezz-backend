@@ -5,6 +5,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -89,6 +90,7 @@ type courseQuery struct {
 	Faculty      string
 	Subject      string
 	Semester     int
+	Search       string
 	Cursor       string
 	Limit        int
 }
@@ -110,6 +112,10 @@ func (q courseQuery) filter() (courseFilter, error) {
 	if err != nil {
 		return courseFilter{}, err
 	}
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
+		return courseFilter{}, ErrInvalidInput
+	}
 	after, err := decodePageCursor(q.Cursor)
 	if err != nil {
 		return courseFilter{}, err
@@ -120,6 +126,7 @@ func (q courseQuery) filter() (courseFilter, error) {
 		Faculty:      faculty,
 		Subject:      subject,
 		Semester:     q.Semester,
+		Words:        words,
 		After:        after,
 		Limit:        q.Limit + 1,
 	}, nil

@@ -83,6 +83,7 @@ type listCoursesInput struct {
 	Faculty      string `query:"faculty" maxLength:"600" doc:"Exact faculty name"`
 	Subject      string `query:"subject" maxLength:"600" doc:"Exact subject name"`
 	Semester     int    `query:"semester" minimum:"0" maximum:"10" doc:"0 or omitted for every semester"`
+	Search       string `query:"q" maxLength:"200" doc:"Up to 5 words of at least 3 characters, matched against the course name and subject" example:"calculus"`
 }
 
 type listCoursesOutput struct {
@@ -114,6 +115,7 @@ func (h *courseHandler) listCourses(ctx context.Context, in *listCoursesInput) (
 		Faculty:      in.Faculty,
 		Subject:      in.Subject,
 		Semester:     in.Semester,
+		Search:       in.Search,
 		Cursor:       in.Cursor,
 		Limit:        in.Limit,
 	})

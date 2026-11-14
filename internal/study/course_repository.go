@@ -50,6 +50,7 @@ type courseFilter struct {
 	Faculty      string
 	Subject      string
 	Semester     int
+	Words        []string
 	After        *pageCursor
 	Limit        int
 }
@@ -128,6 +129,10 @@ func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRo
 	}
 	if f.Semester != 0 {
 		where = append(where, "semester = "+arg(f.Semester))
+	}
+	for _, word := range f.Words {
+		pattern := database.SearchPattern(arg(word))
+		where = append(where, "(public.search_text(name) LIKE "+pattern+" OR public.search_text(subject) LIKE "+pattern+")")
 	}
 	if f.After != nil {
 		where = append(where, "(created_at, id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
