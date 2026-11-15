@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -141,7 +142,11 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 				return err
 			}
 		}
-		return nil
+		complete, err := m.profiles.isComplete(ctx, userID)
+		if err != nil || !complete {
+			return err
+		}
+		return m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
 	})
 	if err != nil {
 		return err
