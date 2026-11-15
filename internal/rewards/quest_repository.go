@@ -76,6 +76,15 @@ func (r *questRepository) today(ctx context.Context, userID uuid.UUID, zone stri
 	return &q, resetsAt, nil
 }
 
+func (r *questRepository) deleteOlderThan(ctx context.Context, zone string, days int) error {
+	const query = `DELETE FROM daily_quests WHERE day < (NOW() AT TIME ZONE $1)::date - $2::int`
+
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, zone, days); err != nil {
+		return fmt.Errorf("delete old quests: %w", err)
+	}
+	return nil
+}
+
 func scanQuest(row pgx.Row) (*questRow, error) {
 	var q questRow
 	if err := row.Scan(&q.ID, &q.Day, &q.Likes, &q.Replied, &q.Posted, &q.CompletedAt); err != nil {

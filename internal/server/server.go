@@ -43,7 +43,10 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, fmt.Errorf("initialize media: %w", err)
 	}
 
-	rewardsModule := rewards.New(db)
+	rewardsModule, err := rewards.New(db, runner)
+	if err != nil {
+		return Modules{}, err
+	}
 	feedModule, err := feed.New(db, mediaModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err

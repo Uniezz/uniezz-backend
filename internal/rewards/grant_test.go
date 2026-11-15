@@ -22,7 +22,7 @@ func grantRows(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) int {
 
 func TestGrant(t *testing.T) {
 	pool := setupTestDB(t)
-	m := New(pool)
+	m := newModule(t, pool)
 	ctx := context.Background()
 
 	t.Run("a student with no grants has a balance of zero", func(t *testing.T) {

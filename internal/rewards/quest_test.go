@@ -23,7 +23,7 @@ func dailyRows(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) (rows, grants
 
 func TestProgress(t *testing.T) {
 	pool := setupTestDB(t)
-	m := New(pool)
+	m := newModule(t, pool)
 	ctx := context.Background()
 	progress := func(t *testing.T, user uuid.UUID, quests ...Quest) {
 		t.Helper()

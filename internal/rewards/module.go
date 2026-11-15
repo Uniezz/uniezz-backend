@@ -2,10 +2,16 @@
 package rewards
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const pruneQuestsEvery = 24 * time.Hour
 
 type Module struct {
 	tx     database.Transactor
@@ -13,9 +19,16 @@ type Module struct {
 	quests *questRepository
 }
 
-func New(pool *pgxpool.Pool) Module {
+func New(pool *pgxpool.Pool, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
-	return Module{tx: db, coins: newCoinRepository(db), quests: newQuestRepository(db)}
+	m := Module{tx: db, coins: newCoinRepository(db), quests: newQuestRepository(db)}
+	if err := jobs.Register(runner, m.pruneQuests, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("rewards: %w", err)
+	}
+	if err := jobs.Schedule(runner, "rewards-prune-quests", PruneQuestsArgs{}, pruneQuestsEvery); err != nil {
+		return Module{}, fmt.Errorf("rewards: %w", err)
+	}
+	return m, nil
 }
 
 func (m Module) Register(api huma.API) {

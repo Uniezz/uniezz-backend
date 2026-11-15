@@ -56,11 +56,15 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	runner := newRunner(pool)
-	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, rewards.New(pool), runner)
+	rewardsModule, err := rewards.New(pool, runner)
+	if err != nil {
+		t.Fatalf("rewards.New failed: %v", err)
+	}
+	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
 	}
-	module, err := New(pool, profiles, rewards.New(pool), runner)
+	module, err := New(pool, profiles, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}

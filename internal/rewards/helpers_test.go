@@ -12,6 +12,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -64,7 +65,10 @@ type testUser struct {
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 	pool := setupTestDB(t)
-	module := New(pool)
+	module, err := New(pool, jobs.NewRunner(pool, 1, 0))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
@@ -111,4 +115,13 @@ func expectError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, w
 	if body["error"] != wantCode {
 		t.Errorf(`expected {"error":%q}, got %v`, wantCode, body)
 	}
+}
+
+func newModule(t *testing.T, pool *pgxpool.Pool) Module {
+	t.Helper()
+	m, err := New(pool, jobs.NewRunner(pool, 1, 0))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	return m
 }

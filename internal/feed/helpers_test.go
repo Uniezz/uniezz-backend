@@ -146,7 +146,12 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	fm := &fakeMedia{pool: pool}
-	m, err := New(pool, fm, rewards.New(pool), jobs.NewRunner(pool, 1, 0))
+	runner := jobs.NewRunner(pool, 1, 0)
+	rewardsModule, err := rewards.New(pool, runner)
+	if err != nil {
+		t.Fatalf("rewards.New failed: %v", err)
+	}
+	m, err := New(pool, fm, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}

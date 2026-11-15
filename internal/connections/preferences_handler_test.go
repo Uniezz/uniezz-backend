@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"net/http/httptest"
 	"sync"
@@ -150,7 +151,11 @@ func TestBirthDateCoins(t *testing.T) {
 	e := newTestEnv(t)
 	coins := func(t *testing.T, u testUser) int {
 		t.Helper()
-		n, err := rewards.New(e.pool).Balance(context.Background(), u.id)
+		m, err := rewards.New(e.pool, jobs.NewRunner(e.pool, 1, 0))
+		if err != nil {
+			t.Fatalf("rewards.New: %v", err)
+		}
+		n, err := m.Balance(context.Background(), u.id)
 		if err != nil {
 			t.Fatalf("balance: %v", err)
 		}

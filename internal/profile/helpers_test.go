@@ -189,7 +189,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	feed := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	study := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	runner := jobs.NewRunner(pool, 1, 0)
-	m, err := New(pool, fm, feed, study, rewards.New(pool), runner)
+	rewardsModule, err := rewards.New(pool, runner)
+	if err != nil {
+		t.Fatalf("rewards.New failed: %v", err)
+	}
+	m, err := New(pool, fm, feed, study, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
