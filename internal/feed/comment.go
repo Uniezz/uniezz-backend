@@ -38,7 +38,7 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 	if err := m.posts.visible(ctx, userID, in.PostID); err != nil {
 		return nil, false, err
 	}
-	var parentID *uuid.UUID
+	var parentID, replyToAuthorID *uuid.UUID
 	if in.ReplyToCommentID != nil {
 		if err := m.comments.visible(ctx, userID, *in.ReplyToCommentID); err != nil {
 			return nil, false, err
@@ -51,6 +51,7 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 			return nil, false, ErrNotFound
 		}
 		parentID = &target.ThreadID
+		replyToAuthorID = target.AuthorID
 	}
 
 	commentID := uuid.New()
@@ -74,11 +75,18 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 			ID: commentID, PostID: in.PostID, AuthorID: userID,
 			ParentID: parentID, ReplyToCommentID: in.ReplyToCommentID, Content: in.Content,
 		})
-		if err != nil || postAuthorID == userID {
+		if err != nil {
 			return err
 		}
-		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil)
-		return err
+		if postAuthorID != userID {
+			if _, err := m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil); err != nil {
+				return err
+			}
+		}
+		if replyToAuthorID == nil || *replyToAuthorID == userID {
+			return nil
+		}
+		return m.rewards.Progress(ctx, userID, rewards.QuestReply)
 	})
 	if errors.Is(err, errKeyTaken) {
 		comment, err := m.replayComment(ctx, userID, key, fp)

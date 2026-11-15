@@ -11,6 +11,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
@@ -127,7 +128,7 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 				return err
 			}
 		}
-		return nil
+		return m.rewards.Progress(ctx, userID, rewards.QuestPost)
 	})
 	if errors.Is(err, errKeyTaken) {
 		post, err := m.replayPost(ctx, userID, key, fp)
