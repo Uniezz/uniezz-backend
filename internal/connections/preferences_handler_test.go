@@ -1,7 +1,9 @@
 package connections
 
 import (
+	"context"
 	"net/http/httptest"
+	"sync"
 
 	"github.com/google/uuid"
 	"net/http"
@@ -54,6 +56,49 @@ func TestSavePreferences(t *testing.T) {
 		}
 		if again := decode[Preferences](t, e.api.Get("/connections/me", u.bearer), http.StatusOK); again.Intent != nil || len(again.OpenTo) != 2 {
 			t.Errorf("read back = %+v", again)
+		}
+	})
+
+	t.Run("a birth date can be set only once and sending it again changes nothing", func(t *testing.T) {
+		u := e.user(t)
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+
+		again := decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01", "intent": "Chess"}), http.StatusOK)
+		if again.BirthDate == nil || *again.BirthDate != "2000-01-01" || again.Intent == nil || *again.Intent != "Chess" {
+			t.Errorf("same date again = %+v", again)
+		}
+
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2001-02-03", "intent": "Go"}), http.StatusBadRequest, "birth_date_immutable")
+		got := decode[Preferences](t, e.api.Get("/connections/me", u.bearer), http.StatusOK)
+		if got.BirthDate == nil || *got.BirthDate != "2000-01-01" || got.Intent == nil || *got.Intent != "Chess" {
+			t.Errorf("after a rejected change = %+v", got)
+		}
+	})
+
+	t.Run("two different first birth dates at once save exactly one", func(t *testing.T) {
+		u := e.user(t)
+		dates := []string{"2000-01-01", "2001-02-03"}
+		codes := make([]int, len(dates))
+		var wg sync.WaitGroup
+		for i, date := range dates {
+			wg.Go(func() { codes[i] = e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": date}).Code })
+		}
+		wg.Wait()
+
+		var saved time.Time
+		if err := e.pool.QueryRow(context.Background(), "SELECT birth_date FROM connection_profiles WHERE user_id = $1", u.id).Scan(&saved); err != nil {
+			t.Fatalf("read birth date: %v", err)
+		}
+		winner := -1
+		for i, code := range codes {
+			if code == http.StatusOK {
+				winner = i
+			} else if code != http.StatusBadRequest {
+				t.Errorf("%s: status %d", dates[i], code)
+			}
+		}
+		if winner < 0 || codes[0] == codes[1] || saved.Format(time.DateOnly) != dates[winner] {
+			t.Errorf("codes = %v, saved = %s", codes, saved.Format(time.DateOnly))
 		}
 	})
 }

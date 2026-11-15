@@ -67,6 +67,9 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 		if err != nil {
 			return err
 		}
+		if f.BirthDate != nil && current.BirthDate != nil && !f.BirthDate.Equal(*current.BirthDate) {
+			return ErrBirthDateImmutable
+		}
 		birthDate, openTo := current.BirthDate, current.OpenTo
 		if f.BirthDate != nil {
 			birthDate = f.BirthDate

@@ -46,7 +46,7 @@ func (h *preferencesHandler) getPreferences(ctx context.Context, _ *struct{}) (*
 
 type savePreferencesInput struct {
 	Body struct {
-		BirthDate *string `json:"birthDate,omitempty" format:"date" doc:"Age must be 16 to 100" example:"2003-05-17"`
+		BirthDate *string `json:"birthDate,omitempty" format:"date" doc:"Age must be 16 to 100. Can be set only once: sending a different date after one is saved returns 400 birth_date_immutable; sending the same date again succeeds." example:"2003-05-17"`
 		OpenTo    []Mode  `json:"openTo,omitempty" enum:"friends,studyBuddy,dating" maxItems:"3" doc:"dating needs an age of at least 18, else returns 400 dating_requires_adult"`
 		Intent    *string `json:"intent,omitempty" maxLength:"1000" doc:"Up to 200 characters after HTML is stripped. An empty string clears it."`
 	}

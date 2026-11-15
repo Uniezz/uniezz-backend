@@ -1630,7 +1630,7 @@ components:
       additionalProperties: false
       properties:
         birthDate:
-          description: Age must be 16 to 100
+          description: "Age must be 16 to 100. Can be set only once: sending a different date after one is saved returns 400 birth_date_immutable; sending the same date again succeeds."
           examples:
             - "2003-05-17"
           format: date
