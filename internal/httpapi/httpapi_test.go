@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -234,6 +235,36 @@ func TestUnexpectedHandlerError(t *testing.T) {
 	}
 	if got := len(events.Events()); got != 1 {
 		t.Errorf("expected one Sentry event, got %d", got)
+	}
+}
+
+func TestCanceledRequestIsNotReported(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		hangUp     bool
+		wantReport bool
+	}{
+		{"a query canceled because the client hung up is not reported", true, false},
+		{"a canceled query on a live request is still reported", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			captureLog(t)
+			events := captureSentry(t)
+			api := newTestAPI(t, fmt.Errorf("query active session: %w", context.Canceled))
+			ctx, cancel := context.WithCancel(context.Background())
+			if tc.hangUp {
+				cancel()
+			} else {
+				defer cancel()
+			}
+
+			rec := api.DoCtx(ctx, http.MethodPost, "/echo?kind=a", map[string]any{"name": "jan"})
+
+			expectErrorBody(t, rec, http.StatusInternalServerError, "internal_error")
+			if got := len(events.Events()) == 1; got != tc.wantReport {
+				t.Errorf("reported = %v, want %v (%d events)", got, tc.wantReport, len(events.Events()))
+			}
+		})
 	}
 }
 
