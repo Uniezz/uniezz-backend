@@ -175,9 +175,8 @@ components:
           format: date-time
           type: string
         reason:
-          description: What earned the coins
-          type: string
-          x-extensible-enum:
+          description: "What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: a student you invited signed up. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. More values may be added; show a generic label for unknown ones."
+          enum:
             - welcome
             - like_given
             - like_received
@@ -187,6 +186,7 @@ components:
             - referral
             - daily_quests
             - faq_approved
+          type: string
       required:
         - reason
         - amount
@@ -429,6 +429,73 @@ components:
       required:
         - content
       type: object
+    CreateCommentOutputBody:
+      additionalProperties: false
+      properties:
+        author:
+          $ref: "#/components/schemas/Author"
+          description: Missing when deleted
+        coinsEarned:
+          description: Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing
+          examples:
+            - 1
+          format: int64
+          minimum: 0
+          type: integer
+        content:
+          description: Null when deleted
+          type:
+            - string
+            - "null"
+        createdAt:
+          format: date-time
+          type: string
+        deleted:
+          description: A deleted comment is listed only while it still has replies
+          type: boolean
+        editedAt:
+          format: date-time
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        likedByMe:
+          type: boolean
+        likesCount:
+          format: int64
+          type: integer
+        parentId:
+          description: Root comment of the thread; null for a root comment
+          type:
+            - string
+            - "null"
+        postId:
+          format: uuid
+          type: string
+        repliesCount:
+          format: int64
+          type: integer
+        replyToCommentId:
+          description: Comment this reply answers; null for a root comment or when that comment was deleted
+          type:
+            - string
+            - "null"
+      required:
+        - coinsEarned
+        - id
+        - postId
+        - parentId
+        - replyToCommentId
+        - content
+        - deleted
+        - likesCount
+        - repliesCount
+        - likedByMe
+        - createdAt
+        - editedAt
+      type: object
     CreateCourseInputBody:
       additionalProperties: false
       properties:
@@ -534,6 +601,89 @@ components:
         - university
         - title
         - content
+      type: object
+    CreatePostOutputBody:
+      additionalProperties: false
+      properties:
+        author:
+          $ref: "#/components/schemas/Author"
+        coinsEarned:
+          description: Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing
+          examples:
+            - 1
+          format: int64
+          minimum: 0
+          type: integer
+        commentsCount:
+          format: int64
+          type: integer
+        content:
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        editedAt:
+          format: date-time
+          type:
+            - string
+            - "null"
+        eventDate:
+          format: date-time
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        likedByMe:
+          type: boolean
+        likesCount:
+          format: int64
+          type: integer
+        mediaUrls:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        savedByMe:
+          type: boolean
+        tags:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        title:
+          type: string
+        type:
+          enum:
+            - announcement
+            - event
+            - question
+          type: string
+        university:
+          description: Target university, or all
+          examples:
+            - umcs
+          type: string
+      required:
+        - coinsEarned
+        - id
+        - type
+        - university
+        - title
+        - content
+        - tags
+        - eventDate
+        - mediaUrls
+        - author
+        - likesCount
+        - commentsCount
+        - likedByMe
+        - savedByMe
+        - createdAt
+        - editedAt
       type: object
     CreateReportInputBody:
       additionalProperties: false
@@ -782,6 +932,26 @@ components:
       required:
         - token
         - expiresAt
+      type: object
+    LikePostOutputBody:
+      additionalProperties: false
+      properties:
+        coinsEarned:
+          description: Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing
+          examples:
+            - 1
+          format: int64
+          minimum: 0
+          type: integer
+        liked:
+          type: boolean
+        likesCount:
+          format: int64
+          type: integer
+      required:
+        - coinsEarned
+        - liked
+        - likesCount
       type: object
     LikeState:
       additionalProperties: false
@@ -1791,6 +1961,48 @@ components:
             - array
             - "null"
       type: object
+    SavePreferencesOutputBody:
+      additionalProperties: false
+      properties:
+        birthDate:
+          description: Null until set
+          examples:
+            - "2003-05-17"
+          format: date
+          type:
+            - string
+            - "null"
+        coinsEarned:
+          description: Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing
+          examples:
+            - 1
+          format: int64
+          minimum: 0
+          type: integer
+        intent:
+          description: Shown on the student's discovery card. Null when unset.
+          examples:
+            - Looking for a climbing partner
+          type:
+            - string
+            - "null"
+        openTo:
+          description: Who the student can discover and be discovered as
+          items:
+            enum:
+              - friends
+              - studyBuddy
+              - dating
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - coinsEarned
+        - birthDate
+        - openTo
+        - intent
+      type: object
     SaveState:
       additionalProperties: false
       properties:
@@ -1955,6 +2167,149 @@ components:
           description: http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged.
           maxLength: 2000
           type: string
+      type: object
+    UpdateMeOutputBody:
+      additionalProperties: false
+      properties:
+        avatarUrl:
+          description: URL of the avatar image, null when the student has none
+          type:
+            - string
+            - "null"
+        bannerUrl:
+          description: URL of the banner image, null when the student has none
+          type:
+            - string
+            - "null"
+        bio:
+          description: Plain text, up to 500 characters
+          examples:
+            - Second-year CS student, into climbing.
+          type:
+            - string
+            - "null"
+        coins:
+          description: Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet.
+          examples:
+            - 100
+          format: int64
+          minimum: 0
+          type: integer
+        coinsEarned:
+          description: Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing
+          examples:
+            - 1
+          format: int64
+          minimum: 0
+          type: integer
+        createdAt:
+          format: date-time
+          type: string
+        email:
+          description: University email, null when USOS did not share it
+          examples:
+            - jan.kowalski@umcs.pl
+          type:
+            - string
+            - "null"
+        firstName:
+          examples:
+            - Jan
+          type:
+            - string
+            - "null"
+        gender:
+          description: Set once; null until set. Visible to other students, with no privacy toggle.
+          enum:
+            - male
+            - female
+          type:
+            - string
+            - "null"
+        id:
+          description: User ID
+          format: uuid
+          type: string
+        interests:
+          description: Up to 10 tags
+          examples:
+            - - climbing
+              - go
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        language:
+          description: Interface language; defaults to pl
+          enum:
+            - en
+            - pl
+            - uk
+            - ru
+            - be
+            - de
+            - es
+          type: string
+        lastName:
+          examples:
+            - Kowalski
+          type:
+            - string
+            - "null"
+        privacy:
+          additionalProperties: false
+          description: Which profile fields other students see. A missing setting keeps its current value.
+          properties:
+            showEmail:
+              default: false
+              description: Show the university email to other students
+              type: boolean
+            showFaculty:
+              default: true
+              description: Show the faculty of each study programme
+              type: boolean
+            showYear:
+              default: true
+              description: Show the year of study of each study programme
+              type: boolean
+          type: object
+        programmes:
+          description: Study programmes, primary first; empty when the student has none
+          items:
+            $ref: "#/components/schemas/Programme"
+          type:
+            - array
+            - "null"
+        songUrl:
+          description: Link to the song the student associates with themselves. Null when unset.
+          examples:
+            - https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
+          type:
+            - string
+            - "null"
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - coinsEarned
+        - id
+        - email
+        - firstName
+        - lastName
+        - gender
+        - language
+        - universityId
+        - programmes
+        - avatarUrl
+        - bannerUrl
+        - bio
+        - songUrl
+        - interests
+        - privacy
+        - coins
+        - createdAt
       type: object
     UpdatePostInputBody:
       additionalProperties: false
@@ -2641,7 +2996,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Preferences"
+                $ref: "#/components/schemas/SavePreferencesOutputBody"
           description: OK
         "400":
           content:
@@ -3461,7 +3816,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Post"
+                $ref: "#/components/schemas/CreatePostOutputBody"
           description: Created
           headers:
             Idempotent-Replayed:
@@ -3910,7 +4265,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Comment"
+                $ref: "#/components/schemas/CreateCommentOutputBody"
           description: Created
           headers:
             Idempotent-Replayed:
@@ -4020,7 +4375,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LikeState"
+                $ref: "#/components/schemas/LikePostOutputBody"
           description: OK
         "401":
           content:
@@ -4415,7 +4770,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Profile"
+                $ref: "#/components/schemas/UpdateMeOutputBody"
           description: OK
         "400":
           content:

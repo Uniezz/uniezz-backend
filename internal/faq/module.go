@@ -16,7 +16,7 @@ import (
 var _ rewardService = rewards.Module{}
 
 type rewardService interface {
-	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (bool, error)
+	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
 }
 
 type Module struct {

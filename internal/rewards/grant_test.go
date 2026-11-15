@@ -3,6 +3,9 @@ package rewards
 import (
 	"context"
 	"errors"
+	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -33,7 +36,7 @@ func TestGrant(t *testing.T) {
 
 	t.Run("the same action pays once and reports it", func(t *testing.T) {
 		user := newUser(t, pool)
-		for i, want := range []bool{true, false} {
+		for i, want := range []int{100, 0} {
 			paid, err := m.Grant(ctx, user, ReasonWelcome, nil, nil)
 			if err != nil || paid != want {
 				t.Fatalf("grant %d: paid %v, %v; want %v", i, paid, err, want)
@@ -100,4 +103,20 @@ func TestGrant(t *testing.T) {
 			t.Errorf("rows = %d, want 0", n)
 		}
 	})
+}
+
+func TestReasonEnumListsEveryReason(t *testing.T) {
+	field, _ := reflect.TypeFor[CoinGrant]().FieldByName("Reason")
+	listed := strings.Split(field.Tag.Get("enum"), ",")
+	slices.Sort(listed)
+
+	var reasons []string
+	for r := range amounts {
+		reasons = append(reasons, string(r))
+	}
+	slices.Sort(reasons)
+
+	if !slices.Equal(listed, reasons) {
+		t.Errorf("CoinGrant.reason enum = %v, want every reason that pays %v", listed, reasons)
+	}
 }

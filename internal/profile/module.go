@@ -43,7 +43,7 @@ type mediaService interface {
 }
 
 type rewardService interface {
-	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (bool, error)
+	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
 	Balance(ctx context.Context, userID uuid.UUID) (int, error)
 }
 

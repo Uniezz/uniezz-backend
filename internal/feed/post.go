@@ -82,31 +82,32 @@ func hasDuplicates(ids []uuid.UUID) bool {
 
 // createPost returns the post and whether it was created by an earlier request
 // with the same idempotency key.
-func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, bool, error) {
+func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, int, bool, error) {
 	in, err := in.clean()
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	fp, err := fingerprint(in)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	if key != "" {
 		post, err := m.replayPost(ctx, userID, key, fp)
 		if !errors.Is(err, ErrNotFound) {
-			return post, err == nil, err
+			return post, 0, err == nil, err
 		}
 	}
 
 	if err := m.checkUniversity(ctx, userID, in.University); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	if err := m.checkUploads(ctx, userID, in.MediaIDs); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	postID := uuid.New()
+	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := m.claimKey(ctx, userID, opCreatePost, key, fp, postID); err != nil {
 			return err
@@ -128,18 +129,19 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 				return err
 			}
 		}
-		return m.rewards.Progress(ctx, userID, rewards.QuestPost)
+		earned, err = m.rewards.Progress(ctx, userID, rewards.QuestPost)
+		return err
 	})
 	if errors.Is(err, errKeyTaken) {
 		post, err := m.replayPost(ctx, userID, key, fp)
-		return post, err == nil, err
+		return post, 0, err == nil, err
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	post, err := m.post(ctx, userID, postID)
-	return post, false, err
+	return post, earned, false, err
 }
 
 func (m Module) replayPost(ctx context.Context, userID uuid.UUID, key string, fp []byte) (*Post, error) {

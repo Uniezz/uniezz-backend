@@ -21,9 +21,9 @@ const (
 	QuestPost  Quest = "post"
 )
 
-// Progress records one quest action for today in Warsaw time and pays the daily reward once all
-// quests are done. Call it inside the transaction of the action.
-func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) error {
+// Progress records one quest action for today in Warsaw time, pays the daily reward once all quests
+// are done, and returns the coins it paid. Call it inside the transaction of the action.
+func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) (int, error) {
 	var step questStep
 	switch quest {
 	case QuestLike:
@@ -33,10 +33,11 @@ func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) err
 	case QuestPost:
 		step.Posted = true
 	default:
-		return fmt.Errorf("record quest: unknown quest %q", quest)
+		return 0, fmt.Errorf("record quest: unknown quest %q", quest)
 	}
 
-	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+	paid := 0
+	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		day, err := m.quests.record(ctx, userID, questZone, step)
 		if err != nil {
 			return err
@@ -48,9 +49,10 @@ func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) err
 		if err != nil || !completed {
 			return err
 		}
-		_, err = m.Grant(ctx, userID, ReasonDailyQuests, &day.ID, nil)
+		paid, err = m.Grant(ctx, userID, ReasonDailyQuests, &day.ID, nil)
 		return err
 	})
+	return paid, err
 }
 
 func (m Module) dailyQuests(ctx context.Context, userID uuid.UUID) (*DailyQuests, error) {

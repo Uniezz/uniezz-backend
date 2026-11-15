@@ -76,7 +76,10 @@ type updateMeInput struct {
 }
 
 type updateMeOutput struct {
-	Body Profile
+	Body struct {
+		Profile
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var updateMeOperation = auth.Protected(huma.Operation{
@@ -95,7 +98,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		return nil, httpapi.Unauthorized()
 	}
 
-	err := h.profile.updateProfile(ctx, userID, profileChange{
+	earned, err := h.profile.updateProfile(ctx, userID, profileChange{
 		FirstName:     in.Body.FirstName,
 		LastName:      in.Body.LastName,
 		Gender:        in.Body.Gender,
@@ -115,7 +118,10 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
-	return &updateMeOutput{Body: *p}, nil
+	out := &updateMeOutput{}
+	out.Body.Profile = *p
+	out.Body.CoinsEarned = earned
+	return out, nil
 }
 
 var deleteMeOperation = auth.Protected(huma.Operation{

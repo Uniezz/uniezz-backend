@@ -41,7 +41,10 @@ type createCommentInput struct {
 
 type createCommentOutput struct {
 	Replayed string `header:"Idempotent-Replayed" doc:"true when the comment was created by an earlier request with the same key"`
-	Body     Comment
+	Body     struct {
+		Comment
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var createCommentOperation = auth.Protected(huma.Operation{
@@ -61,7 +64,7 @@ func (h *commentHandler) createComment(ctx context.Context, in *createCommentInp
 		return nil, httpapi.Unauthorized()
 	}
 
-	comment, replayed, err := h.feed.createComment(ctx, userID, commentInput{
+	comment, earned, replayed, err := h.feed.createComment(ctx, userID, commentInput{
 		PostID:           in.ID,
 		ReplyToCommentID: in.Body.ReplyToCommentID,
 		Content:          in.Body.Content,
@@ -70,7 +73,9 @@ func (h *commentHandler) createComment(ctx context.Context, in *createCommentInp
 		return nil, errorResponses.Error(err)
 	}
 
-	out := &createCommentOutput{Body: *comment}
+	out := &createCommentOutput{}
+	out.Body.Comment = *comment
+	out.Body.CoinsEarned = earned
 	if replayed {
 		out.Replayed = "true"
 	}

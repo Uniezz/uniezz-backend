@@ -106,22 +106,23 @@ func (c profileChange) fields() (profileFields, error) {
 	return f, nil
 }
 
-func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change profileChange) error {
+func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change profileChange) (int, error) {
 	fields, err := change.fields()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	avatarID, err := m.claimMedia(ctx, userID, avatarSlot, change.AvatarMediaID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	bannerID, err := m.claimMedia(ctx, userID, bannerSlot, change.BannerMediaID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	var previousAvatar, previousBanner *uuid.UUID
+	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if change.Gender != nil {
 			if err := m.profiles.setGender(ctx, userID, *change.Gender); err != nil {
@@ -146,16 +147,16 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		if err != nil || !complete {
 			return err
 		}
-		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
+		earned, err = m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
 		return err
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	m.deleteMedia(ctx, previousAvatar)
 	m.deleteMedia(ctx, previousBanner)
-	return nil
+	return earned, nil
 }
 
 func trimmedName(name *string) (*string, error) {
