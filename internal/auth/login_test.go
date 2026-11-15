@@ -275,6 +275,9 @@ func TestSignInAppliesReferralToNewAccount(t *testing.T) {
 	if len(profiles.initialProfiles) != 1 || profiles.initialProfiles[0].InviterID == nil || *profiles.initialProfiles[0].InviterID != inviter.ID {
 		t.Errorf("profile initialization did not receive inviter %s: %+v", inviter.ID, profiles.initialProfiles)
 	}
+	if got := invitedBy(t, pool, newUser.ID); got == nil || *got != inviter.ID {
+		t.Errorf("invited_by = %v, want %s", got, inviter.ID)
+	}
 }
 
 func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {

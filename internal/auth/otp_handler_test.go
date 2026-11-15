@@ -150,6 +150,13 @@ func TestOTPLogin_Errors(t *testing.T) {
 		}
 	})
 
+	t.Run("redeeming an invite requires a session", func(t *testing.T) {
+		s := newOTPTestServer(t)
+		if rec := s.post("/auth/invites/redeem", map[string]string{"code": "A1B2C3D"}); rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
 	t.Run("wrong code", func(t *testing.T) {
 		s := newOTPTestServer(t)
 		s.requestCode(t)

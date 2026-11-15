@@ -18,10 +18,16 @@ type logins struct {
 	loginCodes *loginCodeRepository
 	sessionTTL time.Duration
 	profiles   ProfileInitializer
+	referrals  ReferralRewarder
 }
 
 type ProfileInitializer interface {
 	InitProfile(ctx context.Context, userID uuid.UUID, initial InitialProfile) (afterCommit func(), err error)
+}
+
+// ReferralRewarder pays the inviter and the student they invited, and returns the coins paid to the student.
+type ReferralRewarder interface {
+	RewardReferral(ctx context.Context, userID, inviterID uuid.UUID) (int, error)
 }
 
 func newLogins(tx database.Transactor, users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
@@ -85,12 +91,12 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 			return nil
 		}
 		if id.ReferralCode != "" {
-			inviterID, err := l.users.inviter(ctx, id.ReferralCode)
+			inviterID, err := l.users.inviter(ctx, id.ReferralCode, u.ID)
 			if err != nil {
 				return err
 			}
-			if inviterID == u.ID {
-				return ErrInvalidReferralCode
+			if _, err := l.users.setInviter(ctx, u.ID, inviterID, inviteRedeemWindow); err != nil {
+				return err
 			}
 			id.Profile.InviterID = &inviterID
 		}

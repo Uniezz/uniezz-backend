@@ -1910,6 +1910,32 @@ components:
       required:
         - rating
       type: object
+    RedeemInviteInputBody:
+      additionalProperties: false
+      properties:
+        code:
+          description: Seven-character invitation code from an /invite/{code} link
+          examples:
+            - A1B2C3D
+          maxLength: 32
+          minLength: 1
+          type: string
+      required:
+        - code
+      type: object
+    RedeemInviteOutputBody:
+      additionalProperties: false
+      properties:
+        coinsEarned:
+          description: Uniezz coins this request paid you; 0 when this code was already applied
+          examples:
+            - 50
+          format: int64
+          minimum: 0
+          type: integer
+      required:
+        - coinsEarned
+      type: object
     Report:
       additionalProperties: false
       properties:
@@ -2456,6 +2482,64 @@ paths:
       security:
         - bearer: []
       summary: Get the logged-in student's invitation code
+      tags:
+        - auth
+  /auth/invites/redeem:
+    post:
+      description: Works for accounts created in the last 7 days that have no inviter, and awards 100 coins to the inviter and 50 to you. Sending the applied code again changes nothing; a different code returns 409 referral_already_set.
+      operationId: redeemInvite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemInviteInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedeemInviteOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Apply an invitation code to the logged-in student's account
       tags:
         - auth
   /auth/otp/request:

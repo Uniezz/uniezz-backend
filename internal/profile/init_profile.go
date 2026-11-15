@@ -15,10 +15,7 @@ func (m Module) InitProfile(ctx context.Context, userID uuid.UUID, initial auth.
 		return nil, err
 	}
 	if initial.InviterID != nil {
-		if _, err := m.rewards.Grant(ctx, *initial.InviterID, rewards.ReasonReferral, &userID, &userID); err != nil {
-			return nil, err
-		}
-		if _, err := m.rewards.Grant(ctx, userID, rewards.ReasonReferralJoined, &userID, initial.InviterID); err != nil {
+		if _, err := m.RewardReferral(ctx, userID, *initial.InviterID); err != nil {
 			return nil, err
 		}
 	}

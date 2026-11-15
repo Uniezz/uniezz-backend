@@ -162,7 +162,7 @@ func newTestEnv(t *testing.T) *testEnv {
 			usos[string(u.ID)] = config.UsosCredentials{BaseURL: "https://usos.test", ConsumerKey: "key", ConsumerSecret: "secret"}
 		}
 	}
-	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil)
+	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
 	}

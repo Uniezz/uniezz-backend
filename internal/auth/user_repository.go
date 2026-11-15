@@ -143,17 +143,48 @@ func validInviteCode(code string) bool {
 	return true
 }
 
-func (r *UserRepository) inviter(ctx context.Context, code string) (uuid.UUID, error) {
-	var userID uuid.UUID
-	err := r.db.Conn(ctx).QueryRow(ctx,
-		`SELECT id FROM users WHERE invite_code = $1 AND deleted_at IS NULL`, code).Scan(&userID)
+func (r *UserRepository) inviter(ctx context.Context, code string, userID uuid.UUID) (uuid.UUID, error) {
+	const query = `
+		SELECT id FROM users
+		WHERE invite_code = $1 AND deleted_at IS NULL
+			AND id <> $2 AND invited_by IS DISTINCT FROM $2`
+	var inviterID uuid.UUID
+	err := r.db.Conn(ctx).QueryRow(ctx, query, code, userID).Scan(&inviterID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, ErrInvalidReferralCode
 	}
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("get invite owner: %w", err)
 	}
-	return userID, nil
+	return inviterID, nil
+}
+
+func (r *UserRepository) setInviter(ctx context.Context, userID, inviterID uuid.UUID, window time.Duration) (bool, error) {
+	const query = `
+		UPDATE users SET invited_by = $2
+		WHERE id = $1 AND deleted_at IS NULL AND invited_by IS NULL
+			AND created_at > NOW() - $3::interval`
+	tag, err := r.db.Conn(ctx).Exec(ctx, query, userID, inviterID, window)
+	if err != nil {
+		return false, fmt.Errorf("set inviter: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *UserRepository) inviterState(ctx context.Context, userID uuid.UUID, window time.Duration) (*uuid.UUID, bool, error) {
+	const query = `
+		SELECT invited_by, created_at > NOW() - $2::interval
+		FROM users WHERE id = $1 AND deleted_at IS NULL`
+	var inviterID *uuid.UUID
+	var isOpen bool
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, window).Scan(&inviterID, &isOpen)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, ErrSessionNotFound
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("get inviter: %w", err)
+	}
+	return inviterID, isOpen, nil
 }
 
 func (r *UserRepository) inviteCode(ctx context.Context, userID uuid.UUID) (string, error) {
