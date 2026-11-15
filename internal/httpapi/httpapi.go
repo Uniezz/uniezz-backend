@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -55,6 +56,10 @@ func reportServerErrors(ctx huma.Context, _ string, v any) (any, error) {
 	cause := e.cause
 	if cause == nil {
 		cause = errors.New(e.Code)
+	}
+	// A client that hung up cancels the request's queries; nobody receives this answer, so it is no server fault.
+	if errors.Is(cause, context.Canceled) && ctx.Context().Err() != nil {
+		return v, nil
 	}
 	telemetry.ReportError(ctx.Context(), "server error", cause, slog.String("error_code", e.Code))
 	return v, nil
