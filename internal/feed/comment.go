@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
@@ -57,7 +58,8 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 		if err := m.claimKey(ctx, userID, opCreateComment, key, fp, commentID); err != nil {
 			return err
 		}
-		if err := m.posts.countComments(ctx, in.PostID, 1); err != nil {
+		postAuthorID, err := m.posts.countComments(ctx, in.PostID, 1)
+		if err != nil {
 			return err
 		}
 		if parentID != nil {
@@ -68,10 +70,14 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 				return err
 			}
 		}
-		return m.comments.insert(ctx, newComment{
+		err = m.comments.insert(ctx, newComment{
 			ID: commentID, PostID: in.PostID, AuthorID: userID,
 			ParentID: parentID, ReplyToCommentID: in.ReplyToCommentID, Content: in.Content,
 		})
+		if err != nil || postAuthorID == userID {
+			return err
+		}
+		return m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil)
 	})
 	if errors.Is(err, errKeyTaken) {
 		comment, err := m.replayComment(ctx, userID, key, fp)
@@ -227,7 +233,7 @@ func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, allow fu
 		if err := allow(locked.AuthorID); err != nil {
 			return err
 		}
-		if err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {
+		if _, err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {
 			return err
 		}
 

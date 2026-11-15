@@ -15,6 +15,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -145,7 +146,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	fm := &fakeMedia{pool: pool}
-	m, err := New(pool, fm, jobs.NewRunner(pool, 1, 0))
+	m, err := New(pool, fm, rewards.New(pool), jobs.NewRunner(pool, 1, 0))
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
