@@ -27,6 +27,13 @@ type likeOutput struct {
 	Body LikeState
 }
 
+type likePostOutput struct {
+	Body struct {
+		LikeState
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
+}
+
 func likeOperation(id, method, path, summary, description string) huma.Operation {
 	return auth.Protected(huma.Operation{
 		OperationID: id,
@@ -46,12 +53,33 @@ var (
 	unlikeCommentOperation = likeOperation("unlikeFeedComment", http.MethodDelete, "/feed/comments/{id}/like", "Remove your like from a comment", "Idempotent: repeating it changes nothing.")
 )
 
-func (h *likeHandler) likePost(ctx context.Context, in *likeInput) (*likeOutput, error) {
-	return h.set(ctx, in.ID, true, h.feed.setPostLike)
+func (h *likeHandler) likePost(ctx context.Context, in *likeInput) (*likePostOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	state, earned, err := h.feed.setPostLike(ctx, userID, in.ID, true)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	out := &likePostOutput{}
+	out.Body.LikeState = *state
+	out.Body.CoinsEarned = earned
+	return out, nil
 }
 
 func (h *likeHandler) unlikePost(ctx context.Context, in *likeInput) (*likeOutput, error) {
-	return h.set(ctx, in.ID, false, h.feed.setPostLike)
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	state, _, err := h.feed.setPostLike(ctx, userID, in.ID, false)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &likeOutput{Body: *state}, nil
 }
 
 func (h *likeHandler) likeComment(ctx context.Context, in *likeInput) (*likeOutput, error) {

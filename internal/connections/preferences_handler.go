@@ -53,7 +53,10 @@ type savePreferencesInput struct {
 }
 
 type savePreferencesOutput struct {
-	Body Preferences
+	Body struct {
+		Preferences
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var savePreferencesOperation = auth.Protected(huma.Operation{
@@ -72,7 +75,7 @@ func (h *preferencesHandler) savePreferences(ctx context.Context, in *savePrefer
 		return nil, httpapi.Unauthorized()
 	}
 
-	p, err := h.connections.savePreferences(ctx, userID, preferencesChange{
+	p, earned, err := h.connections.savePreferences(ctx, userID, preferencesChange{
 		BirthDate: in.Body.BirthDate,
 		OpenTo:    in.Body.OpenTo,
 		Intent:    in.Body.Intent,
@@ -80,5 +83,8 @@ func (h *preferencesHandler) savePreferences(ctx context.Context, in *savePrefer
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
-	return &savePreferencesOutput{Body: *p}, nil
+	out := &savePreferencesOutput{}
+	out.Body.Preferences = *p
+	out.Body.CoinsEarned = earned
+	return out, nil
 }

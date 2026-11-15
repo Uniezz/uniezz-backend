@@ -8,8 +8,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked bool) (*LikeState, error) {
+func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked bool) (*LikeState, int, error) {
 	var state *LikeState
+	earned := 0
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		post, err := m.posts.lock(ctx, postID, false)
 		if err != nil {
@@ -32,15 +33,20 @@ func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked
 			return nil
 		}
 		paid, err := m.rewards.Grant(ctx, userID, rewards.ReasonLikeGiven, &postID, nil)
-		if err != nil || !paid {
+		if err != nil || paid == 0 {
 			return err
 		}
 		if _, err := m.rewards.Grant(ctx, post.AuthorID, rewards.ReasonLikeReceived, &postID, &userID); err != nil {
 			return err
 		}
-		return m.rewards.Progress(ctx, userID, rewards.QuestLike)
+		bonus, err := m.rewards.Progress(ctx, userID, rewards.QuestLike)
+		earned = paid + bonus
+		return err
 	})
-	return state, err
+	if err != nil {
+		return nil, 0, err
+	}
+	return state, earned, nil
 }
 
 func (m Module) setCommentLike(ctx context.Context, userID, commentID uuid.UUID, liked bool) (*LikeState, error) {

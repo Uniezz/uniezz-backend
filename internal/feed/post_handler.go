@@ -56,7 +56,10 @@ type createPostInput struct {
 
 type createPostOutput struct {
 	Replayed string `header:"Idempotent-Replayed" doc:"true when the post was created by an earlier request with the same key"`
-	Body     Post
+	Body     struct {
+		Post
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var createPostOperation = auth.Protected(huma.Operation{
@@ -75,7 +78,7 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 		return nil, httpapi.Unauthorized()
 	}
 
-	post, replayed, err := h.feed.createPost(ctx, userID, postInput{
+	post, earned, replayed, err := h.feed.createPost(ctx, userID, postInput{
 		Type:       in.Body.Type,
 		University: in.Body.University,
 		Title:      in.Body.Title,
@@ -88,7 +91,9 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 		return nil, errorResponses.Error(err)
 	}
 
-	out := &createPostOutput{Body: *post}
+	out := &createPostOutput{}
+	out.Body.Post = *post
+	out.Body.CoinsEarned = earned
 	if replayed {
 		out.Replayed = "true"
 	}

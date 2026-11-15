@@ -36,9 +36,17 @@ func TestProfileCompleteCoins(t *testing.T) {
 			t.Fatalf("coins before the last field = %d, want 0", got)
 		}
 
-		got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"songUrl": song}), http.StatusOK)
-		if got.Coins != 50 {
-			t.Errorf("coins after the last field = %d, want 50", got.Coins)
+		type updated struct {
+			Coins       int `json:"coins"`
+			CoinsEarned int `json:"coinsEarned"`
+		}
+		got := decode[updated](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"songUrl": song}), http.StatusOK)
+		if got.Coins != 50 || got.CoinsEarned != 50 {
+			t.Errorf("after the last field coins %d, coinsEarned %d; want 50, 50", got.Coins, got.CoinsEarned)
+		}
+		again := decode[updated](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"bio": "Changed"}), http.StatusOK)
+		if again.CoinsEarned != 0 {
+			t.Errorf("a later update coinsEarned = %d, want 0", again.CoinsEarned)
 		}
 	})
 

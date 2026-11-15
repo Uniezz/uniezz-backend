@@ -32,8 +32,8 @@ type mediaService interface {
 }
 
 type rewardService interface {
-	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (bool, error)
-	Progress(ctx context.Context, userID uuid.UUID, quest rewards.Quest) error
+	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
+	Progress(ctx context.Context, userID uuid.UUID, quest rewards.Quest) (int, error)
 }
 
 type Module struct {

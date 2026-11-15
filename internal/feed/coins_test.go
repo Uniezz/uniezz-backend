@@ -189,3 +189,54 @@ func TestDailyQuests(t *testing.T) {
 		}
 	})
 }
+
+func TestCoinsEarned(t *testing.T) {
+	e := newTestEnv(t)
+	type earned struct {
+		CoinsEarned int `json:"coinsEarned"`
+	}
+	likePost := func(t *testing.T, u testUser, post Post) int {
+		t.Helper()
+		return decode[earned](t, e.api.Put("/feed/posts/"+post.ID.String()+"/like", u.bearer), http.StatusOK).CoinsEarned
+	}
+
+	t.Run("the first like returns 1 and liking again returns 0", func(t *testing.T) {
+		u, other := e.user(t), e.user(t)
+		post := e.createPost(t, other, nil)
+		if got := likePost(t, u, post); got != 1 {
+			t.Errorf("first like = %d, want 1", got)
+		}
+		if got := likePost(t, u, post); got != 0 {
+			t.Errorf("like again = %d, want 0", got)
+		}
+	})
+
+	t.Run("the action that finishes the daily quests returns the quest reward too", func(t *testing.T) {
+		u, other := e.user(t), e.user(t)
+		post := e.createPost(t, other, nil)
+		root := e.comment(t, other, post.ID, nil, "Question")
+		reply := decode[earned](t, e.api.Post("/feed/posts/"+post.ID.String()+"/comments", u.bearer,
+			map[string]any{"content": "Answer", "replyToCommentId": root.ID}), http.StatusCreated)
+		if reply.CoinsEarned != 1 {
+			t.Errorf("reply = %d, want 1", reply.CoinsEarned)
+		}
+		own := decode[earned](t, e.api.Post("/feed/posts", u.bearer, postBody(nil)), http.StatusCreated)
+		if own.CoinsEarned != 0 {
+			t.Errorf("post = %d, want 0", own.CoinsEarned)
+		}
+		likePost(t, u, e.createPost(t, other, nil))
+		likePost(t, u, e.createPost(t, other, nil))
+		if got := likePost(t, u, e.createPost(t, other, nil)); got != 11 {
+			t.Errorf("third like = %d, want 11 (1 for the like, 10 for the quests)", got)
+		}
+	})
+
+	t.Run("a comment on your own post returns 0", func(t *testing.T) {
+		u := e.user(t)
+		post := e.createPost(t, u, nil)
+		got := decode[earned](t, e.api.Post("/feed/posts/"+post.ID.String()+"/comments", u.bearer, map[string]any{"content": "Mine"}), http.StatusCreated)
+		if got.CoinsEarned != 0 {
+			t.Errorf("coinsEarned = %d, want 0", got.CoinsEarned)
+		}
+	})
+}

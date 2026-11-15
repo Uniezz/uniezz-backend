@@ -28,16 +28,20 @@ func TestProgress(t *testing.T) {
 	progress := func(t *testing.T, user uuid.UUID, quests ...Quest) {
 		t.Helper()
 		for _, q := range quests {
-			if err := m.Progress(ctx, user, q); err != nil {
+			if _, err := m.Progress(ctx, user, q); err != nil {
 				t.Fatalf("progress %s: %v", q, err)
 			}
 		}
 	}
 	allQuests := []Quest{QuestLike, QuestLike, QuestLike, QuestReply, QuestPost}
 
-	t.Run("finishing every quest pays 10 coins", func(t *testing.T) {
+	t.Run("finishing every quest pays 10 coins and the last action reports them", func(t *testing.T) {
 		user := newUser(t, pool)
-		progress(t, user, allQuests...)
+		progress(t, user, allQuests[:len(allQuests)-1]...)
+		paid, err := m.Progress(ctx, user, allQuests[len(allQuests)-1])
+		if err != nil || paid != 10 {
+			t.Errorf("last action paid %d, %v; want 10", paid, err)
+		}
 		if got, _ := m.Balance(ctx, user); got != 10 {
 			t.Errorf("balance = %d, want 10", got)
 		}
@@ -82,7 +86,7 @@ func TestProgress(t *testing.T) {
 		var wg sync.WaitGroup
 		errs := make([]error, 10)
 		for i := range errs {
-			wg.Go(func() { errs[i] = m.Progress(ctx, user, QuestLike) })
+			wg.Go(func() { _, errs[i] = m.Progress(ctx, user, QuestLike) })
 		}
 		wg.Wait()
 		if err := errors.Join(errs...); err != nil {
@@ -100,7 +104,7 @@ func TestProgress(t *testing.T) {
 
 	t.Run("an unknown quest is an error and records nothing", func(t *testing.T) {
 		user := newUser(t, pool)
-		if err := m.Progress(ctx, user, Quest("bogus")); err == nil {
+		if _, err := m.Progress(ctx, user, Quest("bogus")); err == nil {
 			t.Error("want an error")
 		}
 		if rows, _ := dailyRows(t, pool, user); rows != 0 {

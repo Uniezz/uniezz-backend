@@ -164,8 +164,14 @@ func TestBirthDateCoins(t *testing.T) {
 
 	t.Run("the first birth date pays 10 coins once", func(t *testing.T) {
 		u := e.user(t)
-		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
-		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		type saved struct {
+			CoinsEarned int `json:"coinsEarned"`
+		}
+		first := decode[saved](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		again := decode[saved](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		if first.CoinsEarned != 10 || again.CoinsEarned != 0 {
+			t.Errorf("coinsEarned first %d, again %d; want 10, 0", first.CoinsEarned, again.CoinsEarned)
+		}
 		if got := coins(t, u); got != 10 {
 			t.Errorf("coins = %d, want 10", got)
 		}

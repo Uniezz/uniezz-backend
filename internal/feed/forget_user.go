@@ -64,7 +64,7 @@ func (m Module) forgetPass(ctx context.Context, userID uuid.UUID) (bool, error) 
 		return false, err
 	}
 	for _, id := range likedPosts {
-		if _, err := m.setPostLike(ctx, userID, id, false); ignoreGone(err) != nil {
+		if _, _, err := m.setPostLike(ctx, userID, id, false); ignoreGone(err) != nil {
 			return false, err
 		}
 	}

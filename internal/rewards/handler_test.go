@@ -36,7 +36,7 @@ func TestGetMyDailyQuests(t *testing.T) {
 	t.Run("progress shows per quest and completed flips once the reward is paid", func(t *testing.T) {
 		u := e.user(t)
 		for _, q := range []Quest{QuestLike, QuestLike, QuestPost} {
-			if err := e.module.Progress(ctx, u.id, q); err != nil {
+			if _, err := e.module.Progress(ctx, u.id, q); err != nil {
 				t.Fatalf("progress: %v", err)
 			}
 		}
@@ -56,7 +56,7 @@ func TestGetMyDailyQuests(t *testing.T) {
 		}
 
 		for _, q := range []Quest{QuestLike, QuestLike, QuestReply} {
-			if err := e.module.Progress(ctx, u.id, q); err != nil {
+			if _, err := e.module.Progress(ctx, u.id, q); err != nil {
 				t.Fatalf("progress: %v", err)
 			}
 		}

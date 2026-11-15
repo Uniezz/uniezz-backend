@@ -74,7 +74,8 @@ func TestGenderConcurrentSet(t *testing.T) {
 	for _, gender := range []Gender{GenderMale, GenderFemale} {
 		go func() {
 			<-start
-			results <- e.module.updateProfile(context.Background(), u.id, profileChange{Gender: &gender})
+			_, err := e.module.updateProfile(context.Background(), u.id, profileChange{Gender: &gender})
+			results <- err
 		}()
 	}
 	close(start)

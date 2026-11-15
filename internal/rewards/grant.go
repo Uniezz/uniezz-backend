@@ -33,22 +33,22 @@ var amounts = map[Reason]int{
 	ReasonFAQApproved:     5,
 }
 
-// Grant pays userID for one action, at most once per (reason, refID, actorID), and reports whether
-// it paid. Call it inside the transaction of the write that earns the coins, so a rolled-back write
-// pays nothing.
-func (m Module) Grant(ctx context.Context, userID uuid.UUID, reason Reason, refID, actorID *uuid.UUID) (bool, error) {
+// Grant pays userID for one action, at most once per (reason, refID, actorID), and returns the coins
+// it paid: 0 when the action was already paid. Call it inside the transaction of the write that earns
+// the coins, so a rolled-back write pays nothing.
+func (m Module) Grant(ctx context.Context, userID uuid.UUID, reason Reason, refID, actorID *uuid.UUID) (int, error) {
 	amount, ok := amounts[reason]
 	if !ok {
-		return false, fmt.Errorf("grant coins: unknown reason %q", reason)
+		return 0, fmt.Errorf("grant coins: unknown reason %q", reason)
 	}
 
-	var paid bool
+	paid := 0
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		var err error
-		paid, err = m.coins.addGrant(ctx, userID, reason, refID, actorID, amount)
-		if err != nil || !paid {
+		added, err := m.coins.addGrant(ctx, userID, reason, refID, actorID, amount)
+		if err != nil || !added {
 			return err
 		}
+		paid = amount
 		return m.coins.addToBalance(ctx, userID, amount)
 	})
 	return paid, err
