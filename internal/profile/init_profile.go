@@ -4,12 +4,16 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
 var _ auth.ProfileInitializer = Module{}
 
 func (m Module) InitProfile(ctx context.Context, userID uuid.UUID, initial auth.InitialProfile) (func(), error) {
+	if err := m.rewards.Grant(ctx, userID, rewards.ReasonWelcome, nil, nil); err != nil {
+		return nil, err
+	}
 	if err := m.programmes.insertInitial(ctx, userID, initial.Programmes); err != nil {
 		return nil, err
 	}

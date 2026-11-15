@@ -17,6 +17,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
@@ -55,7 +56,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	runner := newRunner(pool)
-	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, runner)
+	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, rewards.New(pool), runner)
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
 	}

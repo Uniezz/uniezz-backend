@@ -17,6 +17,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/moderation"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,7 +51,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, runner)
+	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, rewards.New(db), runner)
 	if err != nil {
 		return Modules{}, err
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -188,7 +189,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	feed := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	study := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	runner := jobs.NewRunner(pool, 1, 0)
-	m, err := New(pool, fm, feed, study, runner)
+	m, err := New(pool, fm, feed, study, rewards.New(pool), runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}

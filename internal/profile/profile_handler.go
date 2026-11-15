@@ -30,6 +30,7 @@ type Profile struct {
 	SongURL      *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
 	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
 	Privacy      Privacy     `json:"privacy"`
+	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
 	CreatedAt    time.Time   `json:"createdAt"`
 }
 

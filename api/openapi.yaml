@@ -1150,6 +1150,13 @@ components:
           type:
             - string
             - "null"
+        coins:
+          description: Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet.
+          examples:
+            - 100
+          format: int64
+          minimum: 0
+          type: integer
         createdAt:
           format: date-time
           type: string
@@ -1255,6 +1262,7 @@ components:
         - songUrl
         - interests
         - privacy
+        - coins
         - createdAt
       type: object
     ProfileSummary:

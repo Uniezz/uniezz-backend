@@ -16,6 +16,10 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 	if err != nil {
 		return nil, err
 	}
+	coins, err := m.rewards.Balance(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &Profile{
 		ID:           p.ID,
@@ -32,6 +36,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
+		Coins:        coins,
 		CreatedAt:    p.CreatedAt,
 	}
 	for _, row := range programmes {
