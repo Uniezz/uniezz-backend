@@ -1137,9 +1137,15 @@ components:
           type:
             - string
             - "null"
+        previousCursor:
+          description: Pass as beforeCursor to get the previous page; null on the first page
+          type:
+            - string
+            - "null"
       required:
         - items
         - nextCursor
+        - previousCursor
       type: object
     ListProfessorsOutputBody:
       additionalProperties: false
@@ -3735,7 +3741,7 @@ paths:
         - feed
   /feed/posts:
     get:
-      description: Newest first by createdAt, then ID descending. All signed-in students can browse posts across universities. Keep the same search and filters when following a cursor; results reflect current data.
+      description: Newest first by createdAt, then ID descending. All signed-in students can browse posts across universities. Keep the same search and filters when following a cursor; results reflect current data. Pass nextCursor as cursor to load older posts or previousCursor as beforeCursor to load newer posts.
       operationId: listFeedPosts
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -3809,6 +3815,14 @@ paths:
           schema:
             description: Created before this time
             format: date-time
+            type: string
+        - description: Pass a previousCursor to load the page before it
+          explode: false
+          in: query
+          name: beforeCursor
+          schema:
+            description: Pass a previousCursor to load the page before it
+            maxLength: 512
             type: string
       responses:
         "200":

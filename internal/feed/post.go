@@ -199,15 +199,16 @@ func (m Module) post(ctx context.Context, viewerID, postID uuid.UUID) (*Post, er
 }
 
 type postQuery struct {
-	Search     string
-	ViewerID   uuid.UUID
-	AuthorID   string
-	University string
-	Type       string
-	From       *time.Time
-	To         *time.Time
-	Cursor     string
-	Limit      int
+	Search       string
+	ViewerID     uuid.UUID
+	AuthorID     string
+	University   string
+	Type         string
+	From         *time.Time
+	To           *time.Time
+	Cursor       string
+	BeforeCursor string
+	Limit        int
 }
 
 func (q postQuery) filter() (postFilter, error) {
@@ -226,37 +227,77 @@ func (q postQuery) filter() (postFilter, error) {
 	return postFilter{ViewerID: q.ViewerID, Words: words, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
 }
 
-func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
+func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, *string, error) {
 	filter, err := q.filter()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if q.Cursor != "" && q.BeforeCursor != "" {
+		return nil, nil, nil, ErrInvalidInput
 	}
 	filter.Limit = q.Limit + 1
 	if q.Cursor != "" {
 		var after pageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		filter.After = &after
+	}
+	if q.BeforeCursor != "" {
+		var before pageCursor
+		if err := httpapi.DecodeCursor(q.BeforeCursor, &before); err != nil {
+			return nil, nil, nil, err
+		}
+		filter.Before = &before
 	}
 
 	rows, err := m.posts.list(ctx, filter)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	rows, next, err := httpapi.Page(rows, q.Limit, func(last postRow) any {
-		return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
-	})
-	if err != nil {
-		return nil, nil, err
+	var next, previous *string
+	if filter.Before != nil {
+		hasMore := len(rows) > q.Limit
+		if hasMore {
+			rows = rows[:q.Limit]
+			cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: rows[len(rows)-1].CreatedAt, ID: rows[len(rows)-1].ID})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			previous = &cursor
+		}
+		for left, right := 0, len(rows)-1; left < right; left, right = left+1, right-1 {
+			rows[left], rows[right] = rows[right], rows[left]
+		}
+		if len(rows) > 0 {
+			cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: rows[len(rows)-1].CreatedAt, ID: rows[len(rows)-1].ID})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			next = &cursor
+		}
+	} else {
+		rows, next, err = httpapi.Page(rows, q.Limit, func(last postRow) any {
+			return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if q.Cursor != "" && len(rows) > 0 {
+			cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: rows[0].CreatedAt, ID: rows[0].ID})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			previous = &cursor
+		}
 	}
 
 	posts, err := m.toPosts(ctx, rows)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return posts, next, nil
+	return posts, next, previous, nil
 }
 
 func (m Module) listSavedPosts(ctx context.Context, viewerID uuid.UUID, cursor string, limit int) ([]Post, *string, error) {
