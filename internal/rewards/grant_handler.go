@@ -21,7 +21,7 @@ func (Reason) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema
 	if schema.Extensions == nil {
 		schema.Extensions = map[string]any{}
 	}
-	schema.Extensions["x-extensible-enum"] = []any{"welcome", "like_given", "like_received", "comment", "profile_complete", "birth_date", "referral", "daily_quests"}
+	schema.Extensions["x-extensible-enum"] = []any{"welcome", "like_given", "like_received", "comment", "profile_complete", "birth_date", "referral", "daily_quests", "faq_approved"}
 	return schema
 }
 

@@ -65,7 +65,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	faqModule := faq.New(db, cfg.FAQPublisherEmails)
+	faqModule := faq.New(db, cfg.FAQPublisherEmails, rewardsModule)
 	moderationModule, err := moderation.New(db, feedModule, profileModule, connectionsModule, studyModule, runner)
 	if err != nil {
 		return Modules{}, err

@@ -186,6 +186,7 @@ components:
             - birth_date
             - referral
             - daily_quests
+            - faq_approved
       required:
         - reason
         - amount
@@ -908,6 +909,24 @@ components:
         items:
           items:
             $ref: "#/components/schemas/CoinGrant"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListPendingProposalsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Entry"
           type:
             - array
             - "null"
@@ -2909,6 +2928,125 @@ paths:
       security:
         - bearer: []
       summary: Propose an FAQ entry
+      tags:
+        - faq
+  /faq/proposals/pending:
+    get:
+      description: Every student's proposals that are not published yet, newest first. Only an FAQ publisher may call this; everyone else gets 403.
+      operationId: listPendingFaqProposals
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPendingProposalsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List FAQ proposals waiting for a moderator
+      tags:
+        - faq
+  /faq/proposals/{id}/approval:
+    put:
+      description: Only an FAQ publisher may call this. Approving pays the author 5 Uniezz coins once, unless the publisher approves their own proposal; approving an entry that is already published changes nothing. A rejected or unknown entry is 404.
+      operationId: approveFaqProposal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Approve an FAQ proposal and publish it
       tags:
         - faq
   /feed/comments/{id}:

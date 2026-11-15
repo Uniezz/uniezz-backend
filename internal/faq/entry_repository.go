@@ -87,6 +87,25 @@ func (r *entryRepository) list(ctx context.Context, authorID *uuid.UUID, status 
 	return entries, nil
 }
 
+func (r *entryRepository) publishProposal(ctx context.Context, id uuid.UUID) (*entryRow, uuid.UUID, error) {
+	const query = `
+		UPDATE faq_entries SET status = $2
+		WHERE id = $1 AND status IN ($2, $3)
+		RETURNING id, question, answer, status, created_at, author_id`
+
+	var entry entryRow
+	var authorID uuid.UUID
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, statusPublished, statusProposed).
+		Scan(&entry.ID, &entry.Question, &entry.Answer, &entry.Status, &entry.CreatedAt, &authorID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, uuid.Nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("publish faq proposal: %w", err)
+	}
+	return &entry, authorID, nil
+}
+
 func scanEntry(row interface{ Scan(dest ...any) error }) (*entryRow, error) {
 	var entry entryRow
 	if err := row.Scan(&entry.ID, &entry.Question, &entry.Answer, &entry.Status, &entry.CreatedAt); err != nil {

@@ -18,6 +18,7 @@ const (
 	ReasonBirthDate       Reason = "birth_date"
 	ReasonReferral        Reason = "referral"
 	ReasonDailyQuests     Reason = "daily_quests"
+	ReasonFAQApproved     Reason = "faq_approved"
 )
 
 var amounts = map[Reason]int{
@@ -29,6 +30,7 @@ var amounts = map[Reason]int{
 	ReasonBirthDate:       10,
 	ReasonReferral:        100,
 	ReasonDailyQuests:     10,
+	ReasonFAQApproved:     5,
 }
 
 // Grant pays userID for one action, at most once per (reason, refID, actorID), and reports whether
