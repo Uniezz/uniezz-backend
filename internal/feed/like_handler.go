@@ -27,23 +27,23 @@ type likeOutput struct {
 	Body LikeState
 }
 
-func likeOperation(id, method, path, summary string) huma.Operation {
+func likeOperation(id, method, path, summary, description string) huma.Operation {
 	return auth.Protected(huma.Operation{
 		OperationID: id,
 		Method:      method,
 		Path:        path,
 		Summary:     summary,
-		Description: "Idempotent: repeating it changes nothing.",
+		Description: description,
 		Tags:        []string{"feed"},
 		Errors:      []int{http.StatusNotFound},
 	})
 }
 
 var (
-	likePostOperation      = likeOperation("likeFeedPost", http.MethodPut, "/feed/posts/{id}/like", "Like a post")
-	unlikePostOperation    = likeOperation("unlikeFeedPost", http.MethodDelete, "/feed/posts/{id}/like", "Remove your like from a post")
-	likeCommentOperation   = likeOperation("likeFeedComment", http.MethodPut, "/feed/comments/{id}/like", "Like a comment")
-	unlikeCommentOperation = likeOperation("unlikeFeedComment", http.MethodDelete, "/feed/comments/{id}/like", "Remove your like from a comment")
+	likePostOperation      = likeOperation("likeFeedPost", http.MethodPut, "/feed/posts/{id}/like", "Like a post", "Idempotent: repeating it changes nothing. The first like on another student's post pays you and the author 1 Uniezz coin each; unliking does not take them back.")
+	unlikePostOperation    = likeOperation("unlikeFeedPost", http.MethodDelete, "/feed/posts/{id}/like", "Remove your like from a post", "Idempotent: repeating it changes nothing.")
+	likeCommentOperation   = likeOperation("likeFeedComment", http.MethodPut, "/feed/comments/{id}/like", "Like a comment", "Idempotent: repeating it changes nothing.")
+	unlikeCommentOperation = likeOperation("unlikeFeedComment", http.MethodDelete, "/feed/comments/{id}/like", "Remove your like from a comment", "Idempotent: repeating it changes nothing.")
 )
 
 func (h *likeHandler) likePost(ctx context.Context, in *likeInput) (*likeOutput, error) {

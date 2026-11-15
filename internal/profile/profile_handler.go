@@ -84,7 +84,7 @@ var updateMeOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/profile/me",
 	Summary:     "Update the logged-in student's profile",
-	Description: "Changes only the fields that are present. Returns the updated profile.",
+	Description: "Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest},
 })

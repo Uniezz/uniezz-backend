@@ -61,7 +61,7 @@ var savePreferencesOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/connections/me",
 	Summary:     "Set what Connections may show about the logged-in student",
-	Description: "A missing field keeps its current value. Birth date is used only to compute age.",
+	Description: "A missing field keeps its current value. Birth date is used only to compute age; saving it for the first time pays 10 Uniezz coins.",
 	Tags:        []string{"connections"},
 	Errors:      []int{http.StatusBadRequest},
 })

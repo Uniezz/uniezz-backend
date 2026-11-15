@@ -49,6 +49,7 @@ var createCommentOperation = auth.Protected(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/feed/posts/{id}/comments",
 	Summary:       "Comment on a post or reply to a comment",
+	Description:   "The first comment or reply on another student's post pays 1 Uniezz coin.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusCreated,
 	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusGone, http.StatusUnprocessableEntity},

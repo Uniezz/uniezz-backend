@@ -2497,7 +2497,7 @@ paths:
       tags:
         - connections
     patch:
-      description: A missing field keeps its current value. Birth date is used only to compute age.
+      description: A missing field keeps its current value. Birth date is used only to compute age; saving it for the first time pays 10 Uniezz coins.
       operationId: updateMyConnectionPreferences
       requestBody:
         content:
@@ -3632,6 +3632,7 @@ paths:
       tags:
         - feed
     post:
+      description: The first comment or reply on another student's post pays 1 Uniezz coin.
       operationId: createFeedComment
       parameters:
         - in: path
@@ -3755,7 +3756,7 @@ paths:
       tags:
         - feed
     put:
-      description: "Idempotent: repeating it changes nothing."
+      description: "Idempotent: repeating it changes nothing. The first like on another student's post pays you and the author 1 Uniezz coin each; unliking does not take them back."
       operationId: likeFeedPost
       parameters:
         - in: path
@@ -4151,7 +4152,7 @@ paths:
       tags:
         - profile
     patch:
-      description: Changes only the fields that are present. Returns the updated profile.
+      description: Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.
       operationId: updateMyProfile
       requestBody:
         content:
