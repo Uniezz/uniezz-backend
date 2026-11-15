@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -13,6 +14,10 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		return nil, err
 	}
 	programmes, err := m.programmes.list(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	coins, err := m.rewards.Balance(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +37,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
+		Coins:        coins,
 		CreatedAt:    p.CreatedAt,
 	}
 	for _, row := range programmes {
@@ -136,7 +142,12 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 				return err
 			}
 		}
-		return nil
+		complete, err := m.profiles.isComplete(ctx, userID)
+		if err != nil || !complete {
+			return err
+		}
+		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
+		return err
 	})
 	if err != nil {
 		return err

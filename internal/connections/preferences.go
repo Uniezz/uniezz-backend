@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
@@ -67,6 +68,9 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 		if err != nil {
 			return err
 		}
+		if f.BirthDate != nil && current.BirthDate != nil && !f.BirthDate.Equal(*current.BirthDate) {
+			return ErrBirthDateImmutable
+		}
 		birthDate, openTo := current.BirthDate, current.OpenTo
 		if f.BirthDate != nil {
 			birthDate = f.BirthDate
@@ -78,6 +82,10 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 			return ErrDatingRequiresAdult
 		}
 		saved, err = m.preferences.update(ctx, userID, f)
+		if err != nil || current.BirthDate != nil || f.BirthDate == nil {
+			return err
+		}
+		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonBirthDate, nil, nil)
 		return err
 	})
 	if err != nil {

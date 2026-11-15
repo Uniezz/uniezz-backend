@@ -12,12 +12,16 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ mediaService = media.Module{}
+var (
+	_ mediaService  = media.Module{}
+	_ rewardService = rewards.Module{}
+)
 
 type mediaService interface {
 	CheckUpload(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
@@ -27,6 +31,11 @@ type mediaService interface {
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 }
 
+type rewardService interface {
+	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (bool, error)
+	Progress(ctx context.Context, userID uuid.UUID, quest rewards.Quest) error
+}
+
 type Module struct {
 	tx       database.Transactor
 	posts    *postRepository
@@ -34,10 +43,11 @@ type Module struct {
 	likes    *likeRepository
 	keys     *requestKeyRepository
 	media    mediaService
+	rewards  rewardService
 	jobs     *jobs.Runner
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:       db,
@@ -46,6 +56,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Mod
 		likes:    newLikeRepository(db),
 		keys:     newRequestKeyRepository(db),
 		media:    mediaModule,
+		rewards:  rewardsModule,
 		jobs:     runner,
 	}
 

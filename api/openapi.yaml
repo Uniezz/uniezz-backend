@@ -162,6 +162,36 @@ components:
         - level
         - age
       type: object
+    CoinGrant:
+      additionalProperties: false
+      properties:
+        amount:
+          examples:
+            - 10
+          format: int64
+          minimum: 1
+          type: integer
+        createdAt:
+          format: date-time
+          type: string
+        reason:
+          description: What earned the coins
+          type: string
+          x-extensible-enum:
+            - welcome
+            - like_given
+            - like_received
+            - comment
+            - profile_complete
+            - birth_date
+            - referral
+            - daily_quests
+            - faq_approved
+      required:
+        - reason
+        - amount
+        - createdAt
+      type: object
     Comment:
       additionalProperties: false
       properties:
@@ -567,6 +597,41 @@ components:
         - contentType
         - size
       type: object
+    DailyQuests:
+      additionalProperties: false
+      properties:
+        completed:
+          description: True once every quest is done today and the reward was paid
+          type: boolean
+        day:
+          description: Today in Europe/Warsaw
+          examples:
+            - "2026-11-15"
+          format: date
+          type: string
+        quests:
+          items:
+            $ref: "#/components/schemas/QuestProgress"
+          type:
+            - array
+            - "null"
+        resetsAt:
+          description: Next midnight in Europe/Warsaw, when progress starts over
+          format: date-time
+          type: string
+        reward:
+          description: Coins paid once every quest of the day is done
+          examples:
+            - 10
+          format: int64
+          type: integer
+      required:
+        - day
+        - quests
+        - reward
+        - completed
+        - resetsAt
+      type: object
     DiscoverOutputBody:
       additionalProperties: false
       properties:
@@ -821,6 +886,42 @@ components:
         - nextCursor
       type: object
     ListEntriesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Entry"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListMyCoinGrantsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/CoinGrant"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListPendingProposalsOutputBody:
       additionalProperties: false
       properties:
         items:
@@ -1150,6 +1251,13 @@ components:
           type:
             - string
             - "null"
+        coins:
+          description: Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet.
+          examples:
+            - 100
+          format: int64
+          minimum: 0
+          type: integer
         createdAt:
           format: date-time
           type: string
@@ -1255,6 +1363,7 @@ components:
         - songUrl
         - interests
         - privacy
+        - coins
         - createdAt
       type: object
     ProfileSummary:
@@ -1552,6 +1661,36 @@ components:
         - status
         - isPrimary
       type: object
+    QuestProgress:
+      additionalProperties: false
+      properties:
+        done:
+          type: boolean
+        progress:
+          examples:
+            - 1
+          format: int64
+          minimum: 0
+          type: integer
+        quest:
+          description: "like: like other students' posts; reply: reply to another student's comment; post: create a post"
+          type: string
+          x-extensible-enum:
+            - like
+            - reply
+            - post
+        target:
+          examples:
+            - 3
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - quest
+        - progress
+        - target
+        - done
+      type: object
     RateCourseInputBody:
       additionalProperties: false
       properties:
@@ -1630,7 +1769,7 @@ components:
       additionalProperties: false
       properties:
         birthDate:
-          description: Age must be 16 to 100
+          description: "Age must be 16 to 100. Can be set only once: sending a different date after one is saved returns 400 birth_date_immutable; sending the same date again succeeds."
           examples:
             - "2003-05-17"
           format: date
@@ -2489,7 +2628,7 @@ paths:
       tags:
         - connections
     patch:
-      description: A missing field keeps its current value. Birth date is used only to compute age.
+      description: A missing field keeps its current value. Birth date is used only to compute age; saving it for the first time pays 10 Uniezz coins.
       operationId: updateMyConnectionPreferences
       requestBody:
         content:
@@ -2789,6 +2928,125 @@ paths:
       security:
         - bearer: []
       summary: Propose an FAQ entry
+      tags:
+        - faq
+  /faq/proposals/pending:
+    get:
+      description: Every student's proposals that are not published yet, newest first. Only an FAQ publisher may call this; everyone else gets 403.
+      operationId: listPendingFaqProposals
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPendingProposalsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List FAQ proposals waiting for a moderator
+      tags:
+        - faq
+  /faq/proposals/{id}/approval:
+    put:
+      description: Only an FAQ publisher may call this. Approving pays the author 5 Uniezz coins once, unless the publisher approves their own proposal; approving an entry that is already published changes nothing. A rejected or unknown entry is 404.
+      operationId: approveFaqProposal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Approve an FAQ proposal and publish it
       tags:
         - faq
   /feed/comments/{id}:
@@ -3624,6 +3882,7 @@ paths:
       tags:
         - feed
     post:
+      description: The first comment or reply on another student's post pays 1 Uniezz coin.
       operationId: createFeedComment
       parameters:
         - in: path
@@ -3747,7 +4006,7 @@ paths:
       tags:
         - feed
     put:
-      description: "Idempotent: repeating it changes nothing."
+      description: "Idempotent: repeating it changes nothing. The first like on another student's post pays you and the author 1 Uniezz coin each; unliking does not take them back."
       operationId: likeFeedPost
       parameters:
         - in: path
@@ -4143,7 +4402,7 @@ paths:
       tags:
         - profile
     patch:
-      description: Changes only the fields that are present. Returns the updated profile.
+      description: Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.
       operationId: updateMyProfile
       requestBody:
         content:
@@ -4550,6 +4809,94 @@ paths:
       summary: Report a post, comment, student, exam file or course
       tags:
         - moderation
+  /rewards/me/grants:
+    get:
+      description: Newest first, paginated by cursor. Coins are only earned; nothing spends them yet.
+      operationId: listMyCoinGrants
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMyCoinGrantsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the coins the logged-in student has earned
+      tags:
+        - rewards
+  /rewards/me/quests:
+    get:
+      description: Progress resets at midnight Europe/Warsaw. Finishing every quest pays the reward once a day; undoing an action later does not take progress back.
+      operationId: getMyDailyQuests
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyQuests"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get the logged-in student's quests for today
+      tags:
+        - rewards
   /study/comments/{id}:
     delete:
       description: A comment that is already gone, or that another student wrote, is left as it is and the call still succeeds.

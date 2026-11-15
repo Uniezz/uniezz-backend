@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
@@ -37,7 +38,7 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 	if err := m.posts.visible(ctx, userID, in.PostID); err != nil {
 		return nil, false, err
 	}
-	var parentID *uuid.UUID
+	var parentID, replyToAuthorID *uuid.UUID
 	if in.ReplyToCommentID != nil {
 		if err := m.comments.visible(ctx, userID, *in.ReplyToCommentID); err != nil {
 			return nil, false, err
@@ -50,6 +51,7 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 			return nil, false, ErrNotFound
 		}
 		parentID = &target.ThreadID
+		replyToAuthorID = target.AuthorID
 	}
 
 	commentID := uuid.New()
@@ -57,7 +59,8 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 		if err := m.claimKey(ctx, userID, opCreateComment, key, fp, commentID); err != nil {
 			return err
 		}
-		if err := m.posts.countComments(ctx, in.PostID, 1); err != nil {
+		postAuthorID, err := m.posts.countComments(ctx, in.PostID, 1)
+		if err != nil {
 			return err
 		}
 		if parentID != nil {
@@ -68,10 +71,22 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 				return err
 			}
 		}
-		return m.comments.insert(ctx, newComment{
+		err = m.comments.insert(ctx, newComment{
 			ID: commentID, PostID: in.PostID, AuthorID: userID,
 			ParentID: parentID, ReplyToCommentID: in.ReplyToCommentID, Content: in.Content,
 		})
+		if err != nil {
+			return err
+		}
+		if postAuthorID != userID {
+			if _, err := m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil); err != nil {
+				return err
+			}
+		}
+		if replyToAuthorID == nil || *replyToAuthorID == userID {
+			return nil
+		}
+		return m.rewards.Progress(ctx, userID, rewards.QuestReply)
 	})
 	if errors.Is(err, errKeyTaken) {
 		comment, err := m.replayComment(ctx, userID, key, fp)
@@ -227,7 +242,7 @@ func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, allow fu
 		if err := allow(locked.AuthorID); err != nil {
 			return err
 		}
-		if err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {
+		if _, err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {
 			return err
 		}
 

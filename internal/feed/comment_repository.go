@@ -118,6 +118,7 @@ type commentRef struct {
 	PostID   uuid.UUID
 	ParentID *uuid.UUID
 	ThreadID uuid.UUID
+	AuthorID *uuid.UUID
 }
 
 // ref reads the comment's immutable place in the tree without locking, so the
@@ -125,8 +126,8 @@ type commentRef struct {
 func (r *commentRepository) ref(ctx context.Context, commentID uuid.UUID) (*commentRef, error) {
 	c := commentRef{ID: commentID}
 	err := r.db.Conn(ctx).QueryRow(ctx,
-		`SELECT post_id, parent_id, thread_id FROM feed_comments WHERE id = $1 AND deleted_at IS NULL`, commentID).
-		Scan(&c.PostID, &c.ParentID, &c.ThreadID)
+		`SELECT post_id, parent_id, thread_id, author_id FROM feed_comments WHERE id = $1 AND deleted_at IS NULL`, commentID).
+		Scan(&c.PostID, &c.ParentID, &c.ThreadID, &c.AuthorID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound

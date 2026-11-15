@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
@@ -35,5 +36,20 @@ func TestInitProfile(t *testing.T) {
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.SourceURL != "https://usos.test/photo.jpg" {
 		t.Errorf("unexpected payload %s", raw)
+	}
+
+	if got := decode[Profile](t, e.api.Get("/profile/me", u.bearer), http.StatusOK).Coins; got != 100 {
+		t.Errorf("coins after the first init = %d, want 100", got)
+	}
+
+	err = database.New(e.pool).WithTx(ctx, func(ctx context.Context) error {
+		_, err := e.module.InitProfile(ctx, u.id, auth.InitialProfile{})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("second InitProfile failed: %v", err)
+	}
+	if got := decode[Profile](t, e.api.Get("/profile/me", u.bearer), http.StatusOK).Coins; got != 100 {
+		t.Errorf("coins after a second init = %d, want 100", got)
 	}
 }

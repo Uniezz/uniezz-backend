@@ -396,15 +396,17 @@ func (r *postRepository) idsByAuthor(ctx context.Context, authorID uuid.UUID) ([
 	return ids, nil
 }
 
-func (r *postRepository) countComments(ctx context.Context, postID uuid.UUID, delta int) error {
-	result, err := r.db.Conn(ctx).Exec(ctx, `UPDATE feed_posts SET comments_count = comments_count + $2 WHERE id = $1`, postID, delta)
-	if err != nil {
-		return fmt.Errorf("count comments: %w", err)
+func (r *postRepository) countComments(ctx context.Context, postID uuid.UUID, delta int) (uuid.UUID, error) {
+	const query = `UPDATE feed_posts SET comments_count = comments_count + $2 WHERE id = $1 RETURNING author_id`
+
+	var authorID uuid.UUID
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, postID, delta).Scan(&authorID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, fmt.Errorf("count comments: %w", err)
 	}
-	if result.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return authorID, nil
 }
 
 func (r *postRepository) visible(ctx context.Context, viewerID, postID uuid.UUID) error {

@@ -12,6 +12,8 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -64,7 +66,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
 	api.UseMiddleware(authModule.Guard(api))
 	publisher := "Staff-" + uuid.NewString() + "@example.test"
-	New(pool, []string{publisher}).Register(api)
+	rewardsModule, err := rewards.New(pool, jobs.NewRunner(pool, 1, 0))
+	if err != nil {
+		t.Fatalf("rewards.New failed: %v", err)
+	}
+	New(pool, []string{publisher}, rewardsModule).Register(api)
 
 	e := &testEnv{pool: pool, api: api, publisher: publisher}
 	t.Cleanup(e.cleanup)

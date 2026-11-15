@@ -223,6 +223,24 @@ func (r *profileRepository) blocked(ctx context.Context, a, b uuid.UUID) (bool, 
 	return found, nil
 }
 
+func (r *profileRepository) isComplete(ctx context.Context, userID uuid.UUID) (bool, error) {
+	const query = `
+		SELECT first_name IS NOT NULL AND last_name IS NOT NULL AND gender IS NOT NULL
+			AND avatar_media_id IS NOT NULL AND banner_media_id IS NOT NULL
+			AND bio IS NOT NULL AND song_url IS NOT NULL AND cardinality(interests) > 0
+		FROM users
+		WHERE id = $1`
+
+	var complete bool
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, userID).Scan(&complete); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("check profile complete: %w", err)
+	}
+	return complete, nil
+}
+
 func (r *profileRepository) setGender(ctx context.Context, userID uuid.UUID, gender Gender) error {
 	result, err := r.db.Conn(ctx).Exec(ctx, `UPDATE users SET gender = $2 WHERE id = $1 AND gender IS NULL`, userID, gender)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,6 +29,12 @@ type profiles interface {
 	Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]profile.ProfileSummary, error)
 }
 
+var _ rewardService = rewards.Module{}
+
+type rewardService interface {
+	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (bool, error)
+}
+
 var _ limiter = (*ratelimit.Limiter)(nil)
 
 type limiter interface {
@@ -41,10 +48,11 @@ type Module struct {
 	connections *connectionRepository
 	blocks      *blockRepository
 	profiles    profiles
+	rewards     rewardService
 	likes       limiter
 }
 
-func New(pool *pgxpool.Pool, profileModule profiles, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, profileModule profiles, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:          db,
@@ -53,6 +61,7 @@ func New(pool *pgxpool.Pool, profileModule profiles, runner *jobs.Runner) (Modul
 		connections: newConnectionRepository(db),
 		blocks:      newBlockRepository(db),
 		profiles:    profileModule,
+		rewards:     rewardsModule,
 		likes:       ratelimit.New(pool, "connection-like", likeLimit, likeWindow),
 	}
 
