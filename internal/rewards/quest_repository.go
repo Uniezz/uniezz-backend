@@ -60,6 +60,22 @@ func (r *questRepository) complete(ctx context.Context, id uuid.UUID) (bool, err
 	return result.RowsAffected() == 1, nil
 }
 
+func (r *questRepository) today(ctx context.Context, userID uuid.UUID, zone string) (*questRow, time.Time, error) {
+	const query = `
+		SELECT d.day, (d.day + 1)::timestamp AT TIME ZONE $2,
+			COALESCE(q.likes, 0), COALESCE(q.replied, FALSE), COALESCE(q.posted, FALSE), q.completed_at
+		FROM (SELECT (NOW() AT TIME ZONE $2)::date AS day) d
+		LEFT JOIN daily_quests q ON q.user_id = $1 AND q.day = d.day`
+
+	var q questRow
+	var resetsAt time.Time
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, zone).Scan(&q.Day, &resetsAt, &q.Likes, &q.Replied, &q.Posted, &q.CompletedAt)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("get today's quests: %w", err)
+	}
+	return &q, resetsAt, nil
+}
+
 func scanQuest(row pgx.Row) (*questRow, error) {
 	var q questRow
 	if err := row.Scan(&q.ID, &q.Day, &q.Likes, &q.Replied, &q.Posted, &q.CompletedAt); err != nil {

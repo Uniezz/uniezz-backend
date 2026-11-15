@@ -32,6 +32,7 @@ type Modules struct {
 	Connections connections.Module
 	Study       study.Module
 	Moderation  moderation.Module
+	Rewards     rewards.Module
 	Jobs        *jobs.Runner
 }
 
@@ -42,7 +43,8 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, fmt.Errorf("initialize media: %w", err)
 	}
 
-	feedModule, err := feed.New(db, mediaModule, rewards.New(db), runner)
+	rewardsModule := rewards.New(db)
+	feedModule, err := feed.New(db, mediaModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
@@ -51,11 +53,11 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, rewards.New(db), runner)
+	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
-	connectionsModule, err := connections.New(db, profileModule, rewards.New(db), runner)
+	connectionsModule, err := connections.New(db, profileModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
@@ -72,7 +74,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Jobs: runner}, nil
+	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Rewards: rewardsModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -85,4 +87,5 @@ func (m Modules) Register(api huma.API) {
 	m.Connections.Register(api)
 	m.Study.Register(api)
 	m.Moderation.Register(api)
+	m.Rewards.Register(api)
 }

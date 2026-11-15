@@ -3,6 +3,7 @@ package rewards
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -50,4 +51,29 @@ func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) err
 		_, err = m.Grant(ctx, userID, ReasonDailyQuests, &day.ID, nil)
 		return err
 	})
+}
+
+func (m Module) dailyQuests(ctx context.Context, userID uuid.UUID) (*DailyQuests, error) {
+	day, resetsAt, err := m.quests.today(ctx, userID, questZone)
+	if err != nil {
+		return nil, err
+	}
+	return &DailyQuests{
+		Day: day.Day.Format(time.DateOnly),
+		Quests: []QuestProgress{
+			{Quest: QuestLike, Progress: min(day.Likes, likesTarget), Target: likesTarget, Done: day.Likes >= likesTarget},
+			{Quest: QuestReply, Progress: count(day.Replied), Target: 1, Done: day.Replied},
+			{Quest: QuestPost, Progress: count(day.Posted), Target: 1, Done: day.Posted},
+		},
+		Reward:    amounts[ReasonDailyQuests],
+		Completed: day.CompletedAt != nil,
+		ResetsAt:  resetsAt,
+	}, nil
+}
+
+func count(done bool) int {
+	if done {
+		return 1
+	}
+	return 0
 }

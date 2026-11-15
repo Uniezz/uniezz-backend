@@ -3,6 +3,7 @@ package rewards
 
 import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,4 +16,11 @@ type Module struct {
 func New(pool *pgxpool.Pool) Module {
 	db := database.New(pool)
 	return Module{tx: db, coins: newCoinRepository(db), quests: newQuestRepository(db)}
+}
+
+func (m Module) Register(api huma.API) {
+	quests := &questHandler{rewards: m}
+	grants := &grantHandler{rewards: m}
+	huma.Register(api, getMyDailyQuestsOperation, quests.getMyDailyQuests)
+	huma.Register(api, listMyCoinGrantsOperation, grants.listMyCoinGrants)
 }

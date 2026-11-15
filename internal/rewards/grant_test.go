@@ -3,48 +3,13 @@ package rewards
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func setupTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	if testing.Short() {
-		t.Skip("Skipping database integration test in short mode")
-	}
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("Skipping database integration test because DATABASE_URL is not set")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	pool, err := database.NewPool(ctx, dbURL)
-	if err != nil {
-		t.Fatalf("Failed to create database pool: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
-}
-
-func newUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
-	t.Helper()
-	var id uuid.UUID
-	err := pool.QueryRow(context.Background(), `INSERT INTO users (university_id, email) VALUES ('umcs', $1) RETURNING id`,
-		"rewards-"+uuid.NewString()+"@example.test").Scan(&id)
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id) })
-	return id
-}
 
 func grantRows(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) int {
 	t.Helper()
