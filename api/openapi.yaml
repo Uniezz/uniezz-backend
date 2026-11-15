@@ -68,6 +68,15 @@ components:
         - title
         - type
       type: object
+    AddProfilePhotoInputBody:
+      additionalProperties: false
+      properties:
+        mediaId:
+          format: uuid
+          type: string
+      required:
+        - mediaId
+      type: object
     Author:
       additionalProperties: false
       properties:
@@ -1150,6 +1159,12 @@ components:
           type:
             - string
             - "null"
+        birthDate:
+          description: Set once; age must be 16 to 100
+          format: date
+          type:
+            - string
+            - "null"
         createdAt:
           format: date-time
           type: string
@@ -1178,6 +1193,12 @@ components:
           description: User ID
           format: uuid
           type: string
+        intent:
+          description: Short discovery-card line
+          maxLength: 150
+          type:
+            - string
+            - "null"
         interests:
           description: Up to 10 tags
           examples:
@@ -1204,6 +1225,17 @@ components:
             - Kowalski
           type:
             - string
+            - "null"
+        openTo:
+          description: Defaults to friends and study buddy
+          items:
+            enum:
+              - friends
+              - study_buddy
+              - dating
+            type: string
+          type:
+            - array
             - "null"
         privacy:
           additionalProperties: false
@@ -1246,6 +1278,9 @@ components:
         - firstName
         - lastName
         - gender
+        - birthDate
+        - openTo
+        - intent
         - language
         - universityId
         - programmes
@@ -1422,6 +1457,12 @@ components:
     PublicProfile:
       additionalProperties: false
       properties:
+        age:
+          description: Age in years; null until birth date is set
+          format: int64
+          type:
+            - integer
+            - "null"
         avatarUrl:
           type:
             - string
@@ -1469,6 +1510,13 @@ components:
           type:
             - string
             - "null"
+        photos:
+          description: Avatar first, followed by additional photos; hidden from unconnected students
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         programmes:
           description: Primary first
           items:
@@ -1491,8 +1539,10 @@ components:
         - firstName
         - lastName
         - gender
+        - age
         - universityId
         - avatarUrl
+        - photos
         - bannerUrl
         - bio
         - songUrl
@@ -1577,6 +1627,20 @@ components:
           type: integer
       required:
         - rating
+      type: object
+    ReorderProfilePhotosInputBody:
+      additionalProperties: false
+      properties:
+        mediaIds:
+          description: All profile photo IDs in the desired order
+          items:
+            type: string
+          maxItems: 6
+          type:
+            - array
+            - "null"
+      required:
+        - mediaIds
       type: object
     Report:
       additionalProperties: false
@@ -1750,7 +1814,7 @@ components:
           minLength: 1
           type: string
       type: object
-    UpdateMeInputBody:
+    UpdateMeBody:
       additionalProperties: false
       properties:
         avatarMediaId:
@@ -1765,6 +1829,10 @@ components:
           description: Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it.
           maxLength: 2000
           type: string
+        birthDate:
+          description: Set once; age must be 16 to 100
+          format: date
+          type: string
         firstName:
           maxLength: 100
           minLength: 1
@@ -1774,6 +1842,9 @@ components:
           enum:
             - male
             - female
+          type: string
+        intent:
+          maxLength: 150
           type: string
         interests:
           description: "Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"
@@ -1795,6 +1866,15 @@ components:
           maxLength: 100
           minLength: 1
           type: string
+        openTo:
+          items:
+            enum:
+              - friends
+              - study_buddy
+              - dating
+            type: string
+          maxItems: 3
+          type: array
         privacy:
           additionalProperties: false
           description: Which profile fields other students see. A missing setting keeps its current value.
@@ -4149,7 +4229,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateMeInputBody"
+              $ref: "#/components/schemas/UpdateMeBody"
         required: true
       responses:
         "200":
@@ -4185,6 +4265,135 @@ paths:
       security:
         - bearer: []
       summary: Update the logged-in student's profile
+      tags:
+        - profile
+  /profile/photos:
+    post:
+      operationId: addMyProfilePhoto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddProfilePhotoInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Add a photo to the logged-in student's profile
+      tags:
+        - profile
+    put:
+      operationId: reorderMyProfilePhotos
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderProfilePhotosInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Reorder the logged-in student's profile photos
+      tags:
+        - profile
+  /profile/photos/{mediaId}:
+    delete:
+      operationId: deleteMyProfilePhoto
+      parameters:
+        - in: path
+          name: mediaId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove a photo from the logged-in student's profile
       tags:
         - profile
   /profile/programmes:

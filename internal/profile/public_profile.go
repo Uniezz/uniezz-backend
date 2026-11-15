@@ -25,20 +25,57 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 		return nil, err
 	}
 
+	var age *int
+	if p.BirthDate != nil {
+		today := m.now().UTC()
+		value := today.Year() - p.BirthDate.Year()
+		if today.Month() < p.BirthDate.Month() ||
+			(today.Month() == p.BirthDate.Month() && today.Day() < p.BirthDate.Day()) {
+			value--
+		}
+		age = &value
+	}
+
+	photos := make([]string, 0)
+	avatarURL := m.mediaURL(ctx, p.Avatar)
+
+	connected, err := m.profiles.connected(ctx, viewerID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if connected {
+		if avatarURL != nil {
+			photos = append(photos, *avatarURL)
+		}
+
+		refs, err := m.profiles.listProfilePhotoRefs(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range refs {
+			if photoURL := m.mediaURL(ctx, &refs[i]); photoURL != nil {
+				photos = append(photos, *photoURL)
+			}
+		}
+	}
+
 	out := &PublicProfile{
 		ID:           p.ID,
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
 		Gender:       p.Gender,
+		Age:          age,
 		UniversityID: p.UniversityID,
-		AvatarURL:    m.mediaURL(ctx, p.Avatar),
+		AvatarURL:    avatarURL,
+		Photos:       photos,
 		BannerURL:    m.mediaURL(ctx, p.Banner),
 		Bio:          p.Bio,
 		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
 		Programmes:   make([]PublicProgramme, 0, len(programmes)),
 	}
+
 	for _, row := range programmes {
 		out.Programmes = append(out.Programmes, PublicProgramme{
 			Faculty:       &row.Faculty,

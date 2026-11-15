@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +27,7 @@ func TestGetMe(t *testing.T) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		want := []string{"avatarUrl", "bannerUrl", "bio", "createdAt", "email", "firstName", "gender", "id", "interests", "language", "lastName", "privacy", "programmes", "songUrl", "universityId"}
+		want := []string{"avatarUrl", "bannerUrl", "bio", "birthDate", "createdAt", "email", "firstName", "gender", "id", "intent", "interests", "language", "lastName", "openTo", "privacy", "programmes", "songUrl", "universityId"}
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
 		}
@@ -41,6 +42,28 @@ func TestGetMe(t *testing.T) {
 		}
 		if body["avatarUrl"] != nil {
 			t.Errorf("expected avatarUrl null, got %v", body["avatarUrl"])
+		}
+		if body["birthDate"] != nil {
+			t.Errorf("expected birthDate null, got %v", body["birthDate"])
+		}
+		if body["intent"] != nil {
+			t.Errorf("expected intent null, got %v", body["intent"])
+		}
+
+		openTo, ok := body["openTo"].([]any)
+		if !ok || len(openTo) != 2 {
+			t.Fatalf("expected openTo with two modes, got %v", body["openTo"])
+		}
+		modes := make(map[string]bool, len(openTo))
+		for _, value := range openTo {
+			mode, ok := value.(string)
+			if !ok {
+				t.Fatalf("expected openTo values to be strings, got %v", value)
+			}
+			modes[mode] = true
+		}
+		if !modes["friends"] || !modes["study_buddy"] {
+			t.Errorf("expected friends and study_buddy, got %v", openTo)
 		}
 	})
 
@@ -179,6 +202,207 @@ func TestUpdateMe(t *testing.T) {
 	})
 }
 
+func TestUpdateConnectionProfileFields(t *testing.T) {
+	e := newTestEnv(t)
+	u := e.otpUser(t)
+
+	got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"birthDate": "2000-01-15",
+		"openTo":    []string{"friends", "study_buddy"},
+		"intent":    "Looking for a climbing partner",
+	}), http.StatusOK)
+
+	if got.BirthDate == nil || *got.BirthDate != "2000-01-15" {
+		t.Errorf("birthDate = %v, want 2000-01-15", got.BirthDate)
+	}
+	if !slices.Equal(got.OpenTo, []string{"friends", "study_buddy"}) {
+		t.Errorf("openTo = %v, want friends and study_buddy", got.OpenTo)
+	}
+	if got.Intent == nil || *got.Intent != "Looking for a climbing partner" {
+		t.Errorf("intent = %v, want the submitted text", got.Intent)
+	}
+
+	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"birthDate": "2001-01-15",
+	}), http.StatusBadRequest, "birth_date_immutable")
+	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"birthDate": nil,
+	}), http.StatusBadRequest, "birth_date_immutable")
+	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"openTo": []string{"dating"},
+	}), http.StatusBadRequest, "dating_requires_profile")
+
+	uWithoutDate := e.otpUser(t)
+	decode[Profile](t, e.api.Patch("/profile/me", uWithoutDate.bearer, map[string]any{
+		"gender": "female",
+	}), http.StatusOK)
+	expectError(t, e.api.Patch("/profile/me", uWithoutDate.bearer, map[string]any{
+		"openTo": []string{"dating"},
+	}), http.StatusBadRequest, "dating_requires_profile")
+
+	uReady := e.otpUser(t)
+	datingProfile := decode[Profile](t, e.api.Patch("/profile/me", uReady.bearer, map[string]any{
+		"birthDate": "2000-01-15",
+		"gender":    "female",
+		"openTo":    []string{"dating"},
+	}), http.StatusOK)
+
+	if datingProfile.BirthDate == nil || *datingProfile.BirthDate != "2000-01-15" {
+		t.Errorf("birthDate = %v, want 2000-01-15", datingProfile.BirthDate)
+	}
+	if datingProfile.Gender == nil || *datingProfile.Gender != GenderFemale {
+		t.Errorf("gender = %v, want female", datingProfile.Gender)
+	}
+	if !slices.Equal(datingProfile.OpenTo, []string{"dating"}) {
+		t.Errorf("openTo = %v, want dating", datingProfile.OpenTo)
+	}
+}
+
+func TestUpdateIntentPlainTextAndLength(t *testing.T) {
+	e := newTestEnv(t)
+	u := e.otpUser(t)
+
+	got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"intent": " <b>Climbing</b> ",
+	}), http.StatusOK)
+	if got.Intent == nil || *got.Intent != "Climbing" {
+		t.Errorf("intent = %v, want Climbing", got.Intent)
+	}
+
+	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"intent": strings.Repeat("x", 151),
+	}), http.StatusBadRequest, "invalid_input")
+}
+
+func TestAddProfilePhoto(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	u := e.otpUser(t)
+	photo := insertMedia(ctx, e.pool, u.id, "pending")
+
+	rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
+		"mediaId": photo.String(),
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if mediaStatus(t, e.pool, photo) != "ready" {
+		t.Fatalf("expected uploaded photo to be claimed, got %s", mediaStatus(t, e.pool, photo))
+	}
+
+	var position int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT position FROM profile_photos WHERE user_id = $1 AND media_id = $2`,
+		u.id, photo,
+	).Scan(&position); err != nil {
+		t.Fatalf("photo was not saved: %v", err)
+	}
+	if position != 1 {
+		t.Errorf("position = %d, want 1", position)
+	}
+}
+
+func TestProfilePhotoLimitIncludesAvatar(t *testing.T) {
+	e := newTestEnv(t)
+
+	u := e.otpUser(t)
+	avatar := insertMedia(context.Background(), e.pool, u.id, "pending")
+	decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"avatarMediaId": avatar.String(),
+	}), http.StatusOK)
+
+	for i := 0; i < 5; i++ {
+		photo := insertMedia(context.Background(), e.pool, u.id, "pending")
+		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
+			"mediaId": photo.String(),
+		})
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("photo %d: expected 204, got %d: %s", i+1, rec.Code, rec.Body.String())
+		}
+	}
+
+	extra := insertMedia(context.Background(), e.pool, u.id, "pending")
+	expectError(t, e.api.Post("/profile/photos", u.bearer, map[string]any{
+		"mediaId": extra.String(),
+	}), http.StatusBadRequest, "profile_photo_limit")
+}
+
+func TestDeleteProfilePhotoCompactsPositions(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	u := e.otpUser(t)
+
+	first := insertMedia(ctx, e.pool, u.id, "pending")
+	second := insertMedia(ctx, e.pool, u.id, "pending")
+
+	for _, photo := range []uuid.UUID{first, second} {
+		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
+			"mediaId": photo.String(),
+		})
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("adding photo: expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := e.api.Delete("/profile/photos/"+first.String(), u.bearer)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("deleting photo: expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if mediaStatus(t, e.pool, first) != "gone" {
+		t.Errorf("expected deleted photo media to be gone")
+	}
+
+	var position int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT position FROM profile_photos WHERE user_id = $1 AND media_id = $2`,
+		u.id, second,
+	).Scan(&position); err != nil {
+		t.Fatalf("remaining photo was not found: %v", err)
+	}
+	if position != 1 {
+		t.Errorf("remaining photo position = %d, want 1", position)
+	}
+}
+
+func TestReorderProfilePhotos(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	u := e.otpUser(t)
+
+	first := insertMedia(ctx, e.pool, u.id, "pending")
+	second := insertMedia(ctx, e.pool, u.id, "pending")
+	third := insertMedia(ctx, e.pool, u.id, "pending")
+
+	for _, photo := range []uuid.UUID{first, second, third} {
+		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
+			"mediaId": photo.String(),
+		})
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("adding photo: expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := e.api.Put("/profile/photos", u.bearer, map[string]any{
+		"mediaIds": []string{third.String(), first.String(), second.String()},
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("reordering photos: expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	for wantPosition, photo := range []uuid.UUID{third, first, second} {
+		var gotPosition int
+		if err := e.pool.QueryRow(ctx,
+			`SELECT position FROM profile_photos WHERE user_id = $1 AND media_id = $2`,
+			u.id, photo,
+		).Scan(&gotPosition); err != nil {
+			t.Fatalf("reading photo position: %v", err)
+		}
+		if gotPosition != wantPosition+1 {
+			t.Errorf("photo %s position = %d, want %d", photo, gotPosition, wantPosition+1)
+		}
+	}
+}
+
 func TestDeleteAvatar(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
@@ -259,4 +483,25 @@ func TestProfileLanguage(t *testing.T) {
 	if p.Language != LanguageSpanish {
 		t.Error("unrelated patch reset language")
 	}
+}
+
+func TestAvatarCountsTowardProfilePhotoLimit(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	u := e.otpUser(t)
+
+	for i := 0; i < 6; i++ {
+		photo := insertMedia(ctx, e.pool, u.id, "pending")
+		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
+			"mediaId": photo.String(),
+		})
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("photo %d: expected 204, got %d: %s", i+1, rec.Code, rec.Body.String())
+		}
+	}
+
+	avatar := insertMedia(ctx, e.pool, u.id, "pending")
+	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"avatarMediaId": avatar.String(),
+	}), http.StatusBadRequest, "profile_photo_limit")
 }
