@@ -11,7 +11,7 @@ import (
 var _ auth.ProfileInitializer = Module{}
 
 func (m Module) InitProfile(ctx context.Context, userID uuid.UUID, initial auth.InitialProfile) (func(), error) {
-	if err := m.rewards.Grant(ctx, userID, rewards.ReasonWelcome, nil, nil); err != nil {
+	if _, err := m.rewards.Grant(ctx, userID, rewards.ReasonWelcome, nil, nil); err != nil {
 		return nil, err
 	}
 	if err := m.programmes.insertInitial(ctx, userID, initial.Programmes); err != nil {

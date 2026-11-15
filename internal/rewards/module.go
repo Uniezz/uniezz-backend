@@ -7,11 +7,12 @@ import (
 )
 
 type Module struct {
-	tx    database.Transactor
-	coins *coinRepository
+	tx     database.Transactor
+	coins  *coinRepository
+	quests *questRepository
 }
 
 func New(pool *pgxpool.Pool) Module {
 	db := database.New(pool)
-	return Module{tx: db, coins: newCoinRepository(db)}
+	return Module{tx: db, coins: newCoinRepository(db), quests: newQuestRepository(db)}
 }

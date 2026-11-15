@@ -146,7 +146,8 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		if err != nil || !complete {
 			return err
 		}
-		return m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
+		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
+		return err
 	})
 	if err != nil {
 		return err

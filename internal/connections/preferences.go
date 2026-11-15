@@ -85,7 +85,8 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 		if err != nil || current.BirthDate != nil || f.BirthDate == nil {
 			return err
 		}
-		return m.rewards.Grant(ctx, userID, rewards.ReasonBirthDate, nil, nil)
+		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonBirthDate, nil, nil)
+		return err
 	})
 	if err != nil {
 		return nil, err

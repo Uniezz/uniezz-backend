@@ -77,7 +77,8 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 		if err != nil || postAuthorID == userID {
 			return err
 		}
-		return m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil)
+		_, err = m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil)
+		return err
 	})
 	if errors.Is(err, errKeyTaken) {
 		comment, err := m.replayComment(ctx, userID, key, fp)

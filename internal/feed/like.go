@@ -31,10 +31,11 @@ func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked
 		if !liked || post.AuthorID == userID {
 			return nil
 		}
-		if err := m.rewards.Grant(ctx, userID, rewards.ReasonLikeGiven, &postID, nil); err != nil {
+		if _, err := m.rewards.Grant(ctx, userID, rewards.ReasonLikeGiven, &postID, nil); err != nil {
 			return err
 		}
-		return m.rewards.Grant(ctx, post.AuthorID, rewards.ReasonLikeReceived, &postID, &userID)
+		_, err = m.rewards.Grant(ctx, post.AuthorID, rewards.ReasonLikeReceived, &postID, &userID)
+		return err
 	})
 	return state, err
 }

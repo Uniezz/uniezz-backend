@@ -66,11 +66,12 @@ func TestGrant(t *testing.T) {
 		}
 	})
 
-	t.Run("the same action pays once", func(t *testing.T) {
+	t.Run("the same action pays once and reports it", func(t *testing.T) {
 		user := newUser(t, pool)
-		for range 2 {
-			if err := m.Grant(ctx, user, ReasonWelcome, nil, nil); err != nil {
-				t.Fatalf("grant: %v", err)
+		for i, want := range []bool{true, false} {
+			paid, err := m.Grant(ctx, user, ReasonWelcome, nil, nil)
+			if err != nil || paid != want {
+				t.Fatalf("grant %d: paid %v, %v; want %v", i, paid, err, want)
 			}
 		}
 		if got, _ := m.Balance(ctx, user); got != 100 || grantRows(t, pool, user) != 1 {
@@ -83,7 +84,7 @@ func TestGrant(t *testing.T) {
 		first, second := newUser(t, pool), newUser(t, pool)
 		grants := []struct{ ref, actor *uuid.UUID }{{&post, &first}, {&post, &first}, {&post, &second}, {&otherPost, &first}}
 		for _, g := range grants {
-			if err := m.Grant(ctx, author, ReasonLikeReceived, g.ref, g.actor); err != nil {
+			if _, err := m.Grant(ctx, author, ReasonLikeReceived, g.ref, g.actor); err != nil {
 				t.Fatalf("grant: %v", err)
 			}
 		}
@@ -97,7 +98,7 @@ func TestGrant(t *testing.T) {
 		var wg sync.WaitGroup
 		errs := make([]error, 10)
 		for i := range errs {
-			wg.Go(func() { errs[i] = m.Grant(ctx, user, ReasonComment, &post, nil) })
+			wg.Go(func() { _, errs[i] = m.Grant(ctx, user, ReasonComment, &post, nil) })
 		}
 		wg.Wait()
 		if err := errors.Join(errs...); err != nil {
@@ -112,7 +113,7 @@ func TestGrant(t *testing.T) {
 		user := newUser(t, pool)
 		rollback := errors.New("rollback")
 		err := database.New(pool).WithTx(ctx, func(ctx context.Context) error {
-			if err := m.Grant(ctx, user, ReasonBirthDate, nil, nil); err != nil {
+			if _, err := m.Grant(ctx, user, ReasonBirthDate, nil, nil); err != nil {
 				return err
 			}
 			return rollback
@@ -127,7 +128,7 @@ func TestGrant(t *testing.T) {
 
 	t.Run("an unknown reason is an error and pays nothing", func(t *testing.T) {
 		user := newUser(t, pool)
-		if err := m.Grant(ctx, user, Reason("bogus"), nil, nil); err == nil {
+		if _, err := m.Grant(ctx, user, Reason("bogus"), nil, nil); err == nil {
 			t.Error("want an error")
 		}
 		if n := grantRows(t, pool, user); n != 0 {
