@@ -175,8 +175,9 @@ components:
           format: date-time
           type: string
         reason:
-          description: "What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: a student you invited signed up. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. More values may be added; show a generic label for unknown ones."
-          enum:
+          description: "What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: inviting another student who signs up. referral_joined: signing up with an invitation code. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. More values may be added; show a generic label for unknown ones."
+          type: string
+          x-extensible-enum:
             - welcome
             - like_given
             - like_received
@@ -184,9 +185,9 @@ components:
             - profile_complete
             - birth_date
             - referral
+            - referral_joined
             - daily_quests
             - faq_approved
-          type: string
       required:
         - reason
         - amount
@@ -919,6 +920,19 @@ components:
         - latitude
         - longitude
       type: object
+    InviteCodeOutputBody:
+      additionalProperties: false
+      properties:
+        code:
+          description: Your seven-character invitation code
+          examples:
+            - A1B2C3D
+          maxLength: 7
+          minLength: 7
+          type: string
+      required:
+        - code
+      type: object
     IssuedSession:
       additionalProperties: false
       properties:
@@ -1210,6 +1224,9 @@ components:
             - jan.kowalski@student.kul.pl
           maxLength: 255
           minLength: 3
+          type: string
+        referralCode:
+          description: Optional seven-character invitation code for a new account
           type: string
         university:
           description: University to log in to
@@ -2407,6 +2424,34 @@ paths:
       summary: Exchange a one-time login code for a session
       tags:
         - auth
+  /auth/invites/me:
+    get:
+      description: Use the code in the /invite/{code} link. New accounts created with it award 100 coins to you and 50 to the new student.
+      operationId: getMyInviteCode
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteCodeOutputBody"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get the logged-in student's invitation code
+      tags:
+        - auth
   /auth/otp/request:
     post:
       description: Sends a 6-digit code to the university email. The code is valid for 10 minutes and a new request replaces the previous code.
@@ -2455,7 +2500,7 @@ paths:
         - auth
   /auth/otp/verify:
     post:
-      description: Returns a session. A code allows 5 attempts; after that, or after it expires, request a new one.
+      description: Returns a session. A referralCode is applied only when this login creates a new account. A code allows 5 attempts; after that, or after it expires, request a new one.
       operationId: verifyOtpCode
       requestBody:
         content:
@@ -2574,7 +2619,7 @@ paths:
         - auth
   /auth/usos/start:
     get:
-      description: Redirects to the university's USOS authorization page. Errors after the platform is known are sent to the app as a redirect with ?error=<code>.
+      description: Redirects to the university's USOS authorization page. An optional referralCode is applied only when this login creates a new account. Errors after the platform is known are sent to the app as a redirect with ?error=<code>.
       operationId: startUsosLogin
       parameters:
         - description: University to log in to
@@ -2597,6 +2642,13 @@ paths:
             enum:
               - web
               - mobile
+            type: string
+        - description: Optional seven-character invitation code for a new account
+          explode: false
+          in: query
+          name: referralCode
+          schema:
+            description: Optional seven-character invitation code for a new account
             type: string
       responses:
         "302":

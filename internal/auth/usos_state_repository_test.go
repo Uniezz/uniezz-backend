@@ -52,6 +52,7 @@ func TestUsosStateRepository_Integration(t *testing.T) {
 	t.Run("take returns what save stored", func(t *testing.T) {
 		for _, platform := range []Platform{PlatformWeb, PlatformMobile} {
 			want := newTestUsosState(t, pool, platform)
+			want.ReferralCode = "A1B2C3D"
 
 			if err := repo.save(ctx, want); err != nil {
 				t.Fatalf("save failed: %v", err)

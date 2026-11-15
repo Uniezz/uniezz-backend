@@ -3,13 +3,12 @@ package rewards
 import (
 	"context"
 	"errors"
-	"reflect"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -106,8 +105,12 @@ func TestGrant(t *testing.T) {
 }
 
 func TestReasonEnumListsEveryReason(t *testing.T) {
-	field, _ := reflect.TypeFor[CoinGrant]().FieldByName("Reason")
-	listed := strings.Split(field.Tag.Get("enum"), ",")
+	schema := (Reason("unknown")).TransformSchema(nil, &huma.Schema{})
+	listedValues := schema.Extensions["x-extensible-enum"].([]any)
+	listed := make([]string, len(listedValues))
+	for i, value := range listedValues {
+		listed[i] = value.(string)
+	}
 	slices.Sort(listed)
 
 	var reasons []string

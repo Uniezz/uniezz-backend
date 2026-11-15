@@ -8,6 +8,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/google/uuid"
 )
 
 func TestInitProfile(t *testing.T) {
@@ -51,5 +52,29 @@ func TestInitProfile(t *testing.T) {
 	}
 	if got := decode[Profile](t, e.api.Get("/profile/me", u.bearer), http.StatusOK).Coins; got != 100 {
 		t.Errorf("coins after a second init = %d, want 100", got)
+	}
+}
+
+func TestInitProfileAwardsReferralCoins(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	inviter, invited := e.otpUser(t), e.otpUser(t)
+
+	err := database.New(e.pool).WithTx(ctx, func(ctx context.Context) error {
+		_, err := e.module.InitProfile(ctx, invited.id, auth.InitialProfile{InviterID: &inviter.id})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("InitProfile: %v", err)
+	}
+
+	for _, tc := range []struct {
+		user uuid.UUID
+		want int
+	}{{inviter.id, 100}, {invited.id, 150}} {
+		got, err := e.module.rewards.Balance(ctx, tc.user)
+		if err != nil || got != tc.want {
+			t.Errorf("balance for %s = %d, %v; want %d", tc.user, got, err, tc.want)
+		}
 	}
 }

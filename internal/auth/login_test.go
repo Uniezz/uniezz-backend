@@ -236,19 +236,45 @@ func TestLogins_Integration(t *testing.T) {
 }
 
 type recordingProfiles struct {
-	db          database.DB
-	initialized []uuid.UUID
-	err         error
-	afterCommit int
+	db              database.DB
+	initialized     []uuid.UUID
+	initialProfiles []InitialProfile
+	err             error
+	afterCommit     int
 }
 
-func (s *recordingProfiles) InitProfile(ctx context.Context, userID uuid.UUID, _ InitialProfile) (func(), error) {
+func (s *recordingProfiles) InitProfile(ctx context.Context, userID uuid.UUID, initial InitialProfile) (func(), error) {
 	var n int
 	if err := s.db.Conn(ctx).QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", userID).Scan(&n); err != nil || n != 1 {
 		return nil, fmt.Errorf("profiles must see the new user in its transaction: n=%d err=%v", n, err)
 	}
 	s.initialized = append(s.initialized, userID)
+	s.initialProfiles = append(s.initialProfiles, initial)
 	return func() { s.afterCommit++ }, s.err
+}
+
+func TestSignInAppliesReferralToNewAccount(t *testing.T) {
+	pool := setupTestDB(t)
+	ctx := context.Background()
+	users := NewUserRepository(database.New(pool))
+	inviter := upsertTestUser(t, pool, users, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+	profiles := &recordingProfiles{db: database.New(pool)}
+	l := newLogins(database.New(pool), users, NewSessionRepository(database.New(pool)), newLoginCodeRepository(database.New(pool)), time.Hour)
+	l.profiles = profiles
+
+	newUser, err := l.signIn(ctx, Identity{
+		UniversityID: UniversityUMCS,
+		UsosUserID:   testUsosUserID(),
+		ReferralCode: inviter.InviteCode,
+	})
+	if err != nil {
+		t.Fatalf("sign in: %v", err)
+	}
+	deleteUserOnCleanup(t, pool, newUser.ID)
+
+	if len(profiles.initialProfiles) != 1 || profiles.initialProfiles[0].InviterID == nil || *profiles.initialProfiles[0].InviterID != inviter.ID {
+		t.Errorf("profile initialization did not receive inviter %s: %+v", inviter.ID, profiles.initialProfiles)
+	}
 }
 
 func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {

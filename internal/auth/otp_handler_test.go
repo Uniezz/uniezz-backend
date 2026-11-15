@@ -143,6 +143,13 @@ func TestOTPLogin_SameUserOnNextLogin(t *testing.T) {
 }
 
 func TestOTPLogin_Errors(t *testing.T) {
+	t.Run("invite code requires a session", func(t *testing.T) {
+		s := newOTPTestServer(t)
+		if rec := s.api.Get("/auth/invites/me"); rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
 	t.Run("wrong code", func(t *testing.T) {
 		s := newOTPTestServer(t)
 		s.requestCode(t)

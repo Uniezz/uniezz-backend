@@ -81,7 +81,20 @@ func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 			return err
 		}
 		user = u
-		if !created || l.profiles == nil {
+		if !created {
+			return nil
+		}
+		if id.ReferralCode != "" {
+			inviterID, err := l.users.inviter(ctx, id.ReferralCode)
+			if err != nil {
+				return err
+			}
+			if inviterID == u.ID {
+				return ErrInvalidReferralCode
+			}
+			id.Profile.InviterID = &inviterID
+		}
+		if l.profiles == nil {
 			return nil
 		}
 		afterCommit, err = l.profiles.InitProfile(ctx, u.ID, id.Profile)

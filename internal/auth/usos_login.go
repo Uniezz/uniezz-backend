@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Uniezz/uniezz-backend/internal/usos"
 )
@@ -25,6 +26,7 @@ type usosState struct {
 	RequestToken usos.RequestToken
 	UniversityID UniversityID
 	Platform     Platform
+	ReferralCode string
 }
 
 var _ usosStateStore = (*usosStateRepository)(nil)
@@ -46,7 +48,11 @@ func newUsosLogin(clients map[UniversityID]usosClient, states usosStateStore) *u
 	}
 }
 
-func (l *usosLogin) start(ctx context.Context, universityID UniversityID, platform Platform) (authorizeURL string, err error) {
+func (l *usosLogin) start(ctx context.Context, universityID UniversityID, platform Platform, referralCode string) (authorizeURL string, err error) {
+	referralCode = strings.ToUpper(strings.TrimSpace(referralCode))
+	if referralCode != "" && !validInviteCode(referralCode) {
+		return "", ErrInvalidReferralCode
+	}
 	un, err := requireUniversity(universityID, AuthTypeUSOS)
 	if err != nil {
 		return "", err
@@ -66,6 +72,7 @@ func (l *usosLogin) start(ctx context.Context, universityID UniversityID, platfo
 		RequestToken: rt,
 		UniversityID: un.ID,
 		Platform:     platform,
+		ReferralCode: referralCode,
 	})
 	if err != nil {
 		return "", fmt.Errorf("save USOS state for %q: %w", un.ID, err)
@@ -110,5 +117,6 @@ func (l *usosLogin) finish(ctx context.Context, requestToken, verifier string) (
 		FirstName:    user.FirstName,
 		LastName:     user.LastName,
 		Profile:      initialProfileFromUSOS(user),
+		ReferralCode: us.ReferralCode,
 	}, us.Platform, nil
 }

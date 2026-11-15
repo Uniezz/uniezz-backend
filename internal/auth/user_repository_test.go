@@ -82,6 +82,9 @@ func TestUserRepository_Integration(t *testing.T) {
 		if u.LastLoginAt == nil {
 			t.Error("expected last_login_at to be set")
 		}
+		if !validInviteCode(u.InviteCode) {
+			t.Errorf("invite code %q is not a seven-character alphanumeric code", u.InviteCode)
+		}
 	})
 
 	t.Run("USOS repeated login returns the same user and bumps last_login_at", func(t *testing.T) {
@@ -92,6 +95,9 @@ func TestUserRepository_Integration(t *testing.T) {
 
 		if second.ID != first.ID {
 			t.Fatalf("expected the same user %v, got %v", first.ID, second.ID)
+		}
+		if second.InviteCode != first.InviteCode {
+			t.Errorf("login changed invite code from %q to %q", first.InviteCode, second.InviteCode)
 		}
 		if second.LastLoginAt == nil || second.LastLoginAt.Before(*first.LastLoginAt) {
 			t.Errorf("expected last_login_at to move forward: first %v, second %v", first.LastLoginAt, second.LastLoginAt)
@@ -186,4 +192,19 @@ func TestUserRepository_Integration(t *testing.T) {
 			t.Fatal("expected different users for different universities")
 		}
 	})
+}
+
+func TestGenerateInviteCode(t *testing.T) {
+	code, err := generateInviteCode()
+	if err != nil {
+		t.Fatalf("generate invite code: %v", err)
+	}
+	if !validInviteCode(code) {
+		t.Errorf("generated invalid invite code %q", code)
+	}
+	for _, invalid := range []string{"", "ABC123", "ABCDEFGH", "abc1234", "ABCD-12"} {
+		if validInviteCode(invalid) {
+			t.Errorf("accepted invalid invite code %q", invalid)
+		}
+	}
 }

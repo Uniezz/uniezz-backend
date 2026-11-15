@@ -17,6 +17,7 @@ const (
 	ReasonProfileComplete Reason = "profile_complete"
 	ReasonBirthDate       Reason = "birth_date"
 	ReasonReferral        Reason = "referral"
+	ReasonReferralJoined  Reason = "referral_joined"
 	ReasonDailyQuests     Reason = "daily_quests"
 	ReasonFAQApproved     Reason = "faq_approved"
 )
@@ -29,6 +30,7 @@ var amounts = map[Reason]int{
 	ReasonProfileComplete: 50,
 	ReasonBirthDate:       10,
 	ReasonReferral:        100,
+	ReasonReferralJoined:  50,
 	ReasonDailyQuests:     10,
 	ReasonFAQApproved:     5,
 }

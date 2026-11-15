@@ -75,6 +75,7 @@ func TestModule_ZeroValueDescribesOperations(t *testing.T) {
 		{"/auth/exchange", http.MethodPost},
 		{"/auth/otp/request", http.MethodPost},
 		{"/auth/otp/verify", http.MethodPost},
+		{"/auth/invites/me", http.MethodGet},
 	} {
 		item := api.OpenAPI().Paths[want.path]
 		if item == nil {
