@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"net/http/httptest"
 	"sync"
 
@@ -143,4 +144,42 @@ func TestAgeOn(t *testing.T) {
 			t.Errorf("ageOn(%s) = %d, want %d", c.birth, got, c.want)
 		}
 	}
+}
+
+func TestBirthDateCoins(t *testing.T) {
+	e := newTestEnv(t)
+	coins := func(t *testing.T, u testUser) int {
+		t.Helper()
+		n, err := rewards.New(e.pool).Balance(context.Background(), u.id)
+		if err != nil {
+			t.Fatalf("balance: %v", err)
+		}
+		return n
+	}
+
+	t.Run("the first birth date pays 10 coins once", func(t *testing.T) {
+		u := e.user(t)
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		if got := coins(t, u); got != 10 {
+			t.Errorf("coins = %d, want 10", got)
+		}
+	})
+
+	t.Run("saving other preferences pays nothing", func(t *testing.T) {
+		u := e.user(t)
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"intent": "Chess", "openTo": []string{"friends"}}), http.StatusOK)
+		if got := coins(t, u); got != 0 {
+			t.Errorf("coins = %d, want 0", got)
+		}
+	})
+
+	t.Run("a rejected birth date pays nothing", func(t *testing.T) {
+		u := e.user(t)
+		minor := time.Now().UTC().AddDate(-17, 0, 0).Format(time.DateOnly)
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": minor, "openTo": []string{"dating"}}), http.StatusBadRequest, "dating_requires_adult")
+		if got := coins(t, u); got != 0 {
+			t.Errorf("coins = %d, want 0", got)
+		}
+	})
 }

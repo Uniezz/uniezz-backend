@@ -60,7 +60,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
 	}
-	module, err := New(pool, profiles, runner)
+	module, err := New(pool, profiles, rewards.New(pool), runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
