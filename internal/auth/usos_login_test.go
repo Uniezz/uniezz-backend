@@ -116,7 +116,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("returns the authorize URL and remembers the state", func(t *testing.T) {
 		login, client, states := newTestUsosLogin()
 
-		url, err := login.start(ctx, UniversityUMCS, PlatformMobile)
+		url, err := login.start(ctx, UniversityUMCS, PlatformMobile, "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -137,7 +137,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("rejects an OTP university without calling USOS", func(t *testing.T) {
 		login, client, _ := newTestUsosLogin()
 
-		_, err := login.start(ctx, UniversityKUL, PlatformWeb)
+		_, err := login.start(ctx, UniversityKUL, PlatformWeb, "")
 		if !errors.Is(err, ErrWrongAuthMethod) {
 			t.Fatalf("expected ErrWrongAuthMethod, got: %v", err)
 		}
@@ -149,7 +149,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("rejects an unknown university", func(t *testing.T) {
 		login, _, _ := newTestUsosLogin()
 
-		_, err := login.start(ctx, "unknown-uni", PlatformWeb)
+		_, err := login.start(ctx, "unknown-uni", PlatformWeb, "")
 		if !errors.Is(err, ErrUnknownUniversity) {
 			t.Fatalf("expected ErrUnknownUniversity, got: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("fails for a USOS university with no configured client", func(t *testing.T) {
 		login, _, _ := newTestUsosLogin()
 
-		_, err := login.start(ctx, UniversityUMLub, PlatformWeb)
+		_, err := login.start(ctx, UniversityUMLub, PlatformWeb, "")
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -169,7 +169,7 @@ func TestUsosLogin_Start(t *testing.T) {
 		cause := errors.New("oauth1: invalid status 401")
 		client.beginErr = cause
 
-		_, err := login.start(ctx, UniversityUMCS, PlatformWeb)
+		_, err := login.start(ctx, UniversityUMCS, PlatformWeb, "")
 		if !errors.Is(err, ErrUpstream) {
 			t.Errorf("expected ErrUpstream, got: %v", err)
 		}
@@ -186,7 +186,7 @@ func TestUsosLogin_Start(t *testing.T) {
 		cause := errors.New("connection refused")
 		states.saveErr = cause
 
-		_, err := login.start(ctx, UniversityUMCS, PlatformWeb)
+		_, err := login.start(ctx, UniversityUMCS, PlatformWeb, "")
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -204,7 +204,7 @@ func TestUsosLogin_Finish(t *testing.T) {
 
 	startLogin := func(t *testing.T, login *usosLogin, platform Platform) {
 		t.Helper()
-		if _, err := login.start(ctx, UniversityUMCS, platform); err != nil {
+		if _, err := login.start(ctx, UniversityUMCS, platform, ""); err != nil {
 			t.Fatalf("start failed: %v", err)
 		}
 	}

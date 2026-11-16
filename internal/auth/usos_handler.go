@@ -29,8 +29,9 @@ func found(location string) *redirectOutput {
 }
 
 type usosStartInput struct {
-	University UniversityID `query:"university" required:"true" doc:"University to log in to" example:"umcs"`
-	Platform   Platform     `query:"platform" required:"true" enum:"web,mobile" doc:"App to send the browser back to when the login is done"`
+	University   UniversityID `query:"university" required:"true" doc:"University to log in to" example:"umcs"`
+	Platform     Platform     `query:"platform" required:"true" enum:"web,mobile" doc:"App to send the browser back to when the login is done"`
+	ReferralCode string       `query:"referralCode" doc:"Optional seven-character invitation code for a new account"`
 }
 
 var usosStartOperation = huma.Operation{
@@ -39,14 +40,14 @@ var usosStartOperation = huma.Operation{
 	Path:        "/auth/usos/start",
 	Summary:     "Start a USOS login",
 	Description: "Redirects to the university's USOS authorization page. " +
-		"Errors after the platform is known are sent to the app as a redirect with ?error=<code>.",
+		"An optional referralCode is applied only when this login creates a new account. Errors after the platform is known are sent to the app as a redirect with ?error=<code>.",
 	Tags:          []string{"auth"},
 	DefaultStatus: http.StatusFound,
 	Errors:        []int{http.StatusBadRequest},
 }
 
 func (h *usosHandler) start(ctx context.Context, in *usosStartInput) (*redirectOutput, error) {
-	authorizeURL, err := h.usos.start(ctx, in.University, in.Platform)
+	authorizeURL, err := h.usos.start(ctx, in.University, in.Platform, in.ReferralCode)
 	if err != nil {
 		return h.redirectWithError(ctx, in.Platform, err), nil
 	}

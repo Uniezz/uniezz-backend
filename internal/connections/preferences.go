@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
@@ -54,18 +55,22 @@ func (m Module) getPreferences(ctx context.Context, userID uuid.UUID) (*Preferen
 	return row.preferences(), nil
 }
 
-func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c preferencesChange) (*Preferences, error) {
+func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c preferencesChange) (*Preferences, int, error) {
 	today := time.Now().UTC()
 	f, err := c.fields(today)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var saved *preferencesRow
+	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		current, err := m.preferences.lockOrCreate(ctx, userID)
 		if err != nil {
 			return err
+		}
+		if f.BirthDate != nil && current.BirthDate != nil && !f.BirthDate.Equal(*current.BirthDate) {
+			return ErrBirthDateImmutable
 		}
 		birthDate, openTo := current.BirthDate, current.OpenTo
 		if f.BirthDate != nil {
@@ -78,12 +83,16 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 			return ErrDatingRequiresAdult
 		}
 		saved, err = m.preferences.update(ctx, userID, f)
+		if err != nil || current.BirthDate != nil || f.BirthDate == nil {
+			return err
+		}
+		earned, err = m.rewards.Grant(ctx, userID, rewards.ReasonBirthDate, nil, nil)
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return saved.preferences(), nil
+	return saved.preferences(), earned, nil
 }
 
 func (row preferencesRow) preferences() *Preferences {

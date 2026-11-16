@@ -105,11 +105,13 @@ func main() {
 	}
 
 	tel, err := telemetry.Setup(context.Background(), telemetry.Options{
-		Resource:          telemetry.Resource{Service: cfg.ServiceName, Env: cfg.Env, Version: httpapi.Version},
-		SentryDSN:         cfg.SentryDSN,
-		SentryEnvironment: cfg.SentryEnvironment,
-		SentryRelease:     cfg.SentryRelease,
-		Stdout:            os.Stdout,
+		Resource:            telemetry.Resource{Service: cfg.ServiceName, Env: cfg.Env, Version: httpapi.Version},
+		SentryDSN:           cfg.SentryDSN,
+		SentryEnvironment:   cfg.SentryEnvironment,
+		SentryRelease:       cfg.SentryRelease,
+		TelegramBotToken:    cfg.TelegramBotToken,
+		TelegramAlertChatID: cfg.TelegramAlertChatID,
+		Stdout:              os.Stdout,
 	})
 	if err != nil {
 		slog.Error("set up telemetry", "error", err)

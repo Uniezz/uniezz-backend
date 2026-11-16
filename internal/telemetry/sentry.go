@@ -60,6 +60,7 @@ func hubFor(ctx context.Context) *sentry.Hub {
 func ReportError(ctx context.Context, msg string, err error, attrs ...slog.Attr) {
 	attrs = append(attrs, slog.Any("error", err))
 	slog.Default().LogAttrs(ctx, slog.LevelError, msg, attrs...)
+	alerts.Load().notifyError(ctx, msg, err)
 
 	hub := hubFor(ctx)
 	client := hub.Client()
@@ -80,6 +81,7 @@ func reportPanic(ctx context.Context, recovered any, stack []byte) {
 		slog.String("panic", fmt.Sprint(recovered)),
 		slog.String("stack", string(stack)),
 	)
+	alerts.Load().notifyPanic(ctx, recovered)
 
 	hub := hubFor(ctx)
 	client := hub.Client()

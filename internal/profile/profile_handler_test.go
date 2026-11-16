@@ -27,7 +27,9 @@ func TestGetMe(t *testing.T) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		want := []string{"avatarUrl", "bannerUrl", "bio", "birthDate", "createdAt", "email", "firstName", "gender", "id", "intent", "interests", "language", "lastName", "openTo", "privacy", "programmes", "songUrl", "universityId"}
+
+		want := []string{"avatarUrl", "bannerUrl", "bio", "birthDate", "coins", "createdAt", "email", "firstName", "gender", "id", "intent", "interests", "language", "lastName", "openTo", "privacy", "programmes", "songUrl", "universityId"}
+
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
 		}

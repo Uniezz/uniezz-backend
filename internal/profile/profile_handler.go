@@ -34,6 +34,7 @@ type Profile struct {
 	SongURL      *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
 	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
 	Privacy      Privacy     `json:"privacy"`
+	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
 	CreatedAt    time.Time   `json:"createdAt"`
 }
 
@@ -103,7 +104,10 @@ func (b *updateMeBody) UnmarshalJSON(data []byte) error {
 }
 
 type updateMeOutput struct {
-	Body Profile
+	Body struct {
+		Profile
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var updateMeOperation = auth.Protected(huma.Operation{
@@ -111,7 +115,7 @@ var updateMeOperation = auth.Protected(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/profile/me",
 	Summary:     "Update the logged-in student's profile",
-	Description: "Changes only the fields that are present. Returns the updated profile.",
+	Description: "Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -122,7 +126,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		return nil, httpapi.Unauthorized()
 	}
 
-	err := h.profile.updateProfile(ctx, userID, profileChange{
+	earned, err := h.profile.updateProfile(ctx, userID, profileChange{
 		FirstName:        in.Body.FirstName,
 		LastName:         in.Body.LastName,
 		Gender:           in.Body.Gender,
@@ -138,6 +142,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		AvatarMediaID:    in.Body.AvatarMediaID,
 		BannerMediaID:    in.Body.BannerMediaID,
 	})
+
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
@@ -146,7 +151,10 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
-	return &updateMeOutput{Body: *p}, nil
+	out := &updateMeOutput{}
+	out.Body.Profile = *p
+	out.Body.CoinsEarned = earned
+	return out, nil
 }
 
 var deleteMeOperation = auth.Protected(huma.Operation{

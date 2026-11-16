@@ -23,7 +23,7 @@ func newGuardedAPI(t *testing.T, pool *pgxpool.Pool) humatest.TestAPI {
 	authModule, err := auth.New(pool, &config.Config{UsosConfigs: map[string]config.UsosCredentials{
 		"umcs":  {BaseURL: "https://usos.test", ConsumerKey: "key", ConsumerSecret: "secret"},
 		"umlub": {BaseURL: "https://usos.test", ConsumerKey: "key", ConsumerSecret: "secret"},
-	}}, nil, nil)
+	}}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
 	}

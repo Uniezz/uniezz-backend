@@ -3,6 +3,8 @@ package auth
 import (
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type Identity struct {
@@ -11,12 +13,14 @@ type Identity struct {
 	Email        string
 	FirstName    string
 	LastName     string
+	ReferralCode string
 	Profile      InitialProfile
 }
 
 type InitialProfile struct {
 	Programmes []InitialProgramme
 	PhotoURL   string
+	InviterID  *uuid.UUID
 }
 
 type InitialProgramme struct {
@@ -31,10 +35,14 @@ func (i Identity) normalized() Identity {
 	i.Email = normalizeEmail(i.Email)
 	i.FirstName = strings.TrimSpace(i.FirstName)
 	i.LastName = strings.TrimSpace(i.LastName)
+	i.ReferralCode = strings.ToUpper(strings.TrimSpace(i.ReferralCode))
 	return i
 }
 
 func (i Identity) validate() error {
+	if i.ReferralCode != "" && !validInviteCode(i.ReferralCode) {
+		return ErrInvalidReferralCode
+	}
 	u, err := GetUniversityByID(i.UniversityID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidIdentity, err)

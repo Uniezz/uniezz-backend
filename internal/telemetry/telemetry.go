@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -29,6 +30,9 @@ type Options struct {
 	SentryDSN         string
 	SentryEnvironment string
 	SentryRelease     string
+
+	TelegramBotToken    string
+	TelegramAlertChatID string
 
 	Stdout io.Writer
 }
@@ -89,6 +93,16 @@ func Setup(ctx context.Context, opts Options) (*Telemetry, error) {
 				return errors.New("sentry: flush timed out")
 			}
 			return nil
+		})
+	}
+
+	if opts.TelegramBotToken != "" && opts.TelegramAlertChatID != "" {
+		a := newAlerter(telegramAPI, opts.TelegramBotToken, opts.TelegramAlertChatID, time.Now)
+		a.resource = opts.Resource
+		alerts.Store(a)
+		t.shutdowns = append(t.shutdowns, func(ctx context.Context) error {
+			alerts.CompareAndSwap(a, nil)
+			return a.shutdown(ctx)
 		})
 	}
 

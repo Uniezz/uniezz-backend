@@ -11,6 +11,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
@@ -81,31 +82,32 @@ func hasDuplicates(ids []uuid.UUID) bool {
 
 // createPost returns the post and whether it was created by an earlier request
 // with the same idempotency key.
-func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, bool, error) {
+func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, int, bool, error) {
 	in, err := in.clean()
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	fp, err := fingerprint(in)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	if key != "" {
 		post, err := m.replayPost(ctx, userID, key, fp)
 		if !errors.Is(err, ErrNotFound) {
-			return post, err == nil, err
+			return post, 0, err == nil, err
 		}
 	}
 
 	if err := m.checkUniversity(ctx, userID, in.University); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	if err := m.checkUploads(ctx, userID, in.MediaIDs); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	postID := uuid.New()
+	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := m.claimKey(ctx, userID, opCreatePost, key, fp, postID); err != nil {
 			return err
@@ -127,18 +129,19 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 				return err
 			}
 		}
-		return nil
+		earned, err = m.rewards.Progress(ctx, userID, rewards.QuestPost)
+		return err
 	})
 	if errors.Is(err, errKeyTaken) {
 		post, err := m.replayPost(ctx, userID, key, fp)
-		return post, err == nil, err
+		return post, 0, err == nil, err
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	post, err := m.post(ctx, userID, postID)
-	return post, false, err
+	return post, earned, false, err
 }
 
 func (m Module) replayPost(ctx context.Context, userID uuid.UUID, key string, fp []byte) (*Post, error) {
@@ -196,15 +199,16 @@ func (m Module) post(ctx context.Context, viewerID, postID uuid.UUID) (*Post, er
 }
 
 type postQuery struct {
-	Search     string
-	ViewerID   uuid.UUID
-	AuthorID   string
-	University string
-	Type       string
-	From       *time.Time
-	To         *time.Time
-	Cursor     string
-	Limit      int
+	Search       string
+	ViewerID     uuid.UUID
+	AuthorID     string
+	University   string
+	Type         string
+	From         *time.Time
+	To           *time.Time
+	Cursor       string
+	BeforeCursor string
+	Limit        int
 }
 
 func (q postQuery) filter() (postFilter, error) {
@@ -223,37 +227,77 @@ func (q postQuery) filter() (postFilter, error) {
 	return postFilter{ViewerID: q.ViewerID, Words: words, AuthorID: q.AuthorID, UniversityID: q.University, Type: q.Type, From: q.From, To: q.To}, nil
 }
 
-func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, error) {
+func (m Module) listPosts(ctx context.Context, q postQuery) ([]Post, *string, *string, error) {
 	filter, err := q.filter()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if q.Cursor != "" && q.BeforeCursor != "" {
+		return nil, nil, nil, ErrInvalidInput
 	}
 	filter.Limit = q.Limit + 1
 	if q.Cursor != "" {
 		var after pageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		filter.After = &after
+	}
+	if q.BeforeCursor != "" {
+		var before pageCursor
+		if err := httpapi.DecodeCursor(q.BeforeCursor, &before); err != nil {
+			return nil, nil, nil, err
+		}
+		filter.Before = &before
 	}
 
 	rows, err := m.posts.list(ctx, filter)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	rows, next, err := httpapi.Page(rows, q.Limit, func(last postRow) any {
-		return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
-	})
-	if err != nil {
-		return nil, nil, err
+	var next, previous *string
+	if filter.Before != nil {
+		hasMore := len(rows) > q.Limit
+		if hasMore {
+			rows = rows[:q.Limit]
+			cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: rows[len(rows)-1].CreatedAt, ID: rows[len(rows)-1].ID})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			previous = &cursor
+		}
+		for left, right := 0, len(rows)-1; left < right; left, right = left+1, right-1 {
+			rows[left], rows[right] = rows[right], rows[left]
+		}
+		if len(rows) > 0 {
+			cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: rows[len(rows)-1].CreatedAt, ID: rows[len(rows)-1].ID})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			next = &cursor
+		}
+	} else {
+		rows, next, err = httpapi.Page(rows, q.Limit, func(last postRow) any {
+			return pageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if q.Cursor != "" && len(rows) > 0 {
+			cursor, err := httpapi.EncodeCursor(pageCursor{CreatedAt: rows[0].CreatedAt, ID: rows[0].ID})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			previous = &cursor
+		}
 	}
 
 	posts, err := m.toPosts(ctx, rows)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return posts, next, nil
+	return posts, next, previous, nil
 }
 
 func (m Module) listSavedPosts(ctx context.Context, viewerID uuid.UUID, cursor string, limit int) ([]Post, *string, error) {

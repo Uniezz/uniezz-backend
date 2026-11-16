@@ -4,13 +4,16 @@ import (
 	"context"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
-func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked bool) (*LikeState, error) {
+func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked bool) (*LikeState, int, error) {
 	var state *LikeState
+	earned := 0
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		if _, err := m.posts.lock(ctx, postID, false); err != nil {
+		post, err := m.posts.lock(ctx, postID, false)
+		if err != nil {
 			return err
 		}
 		if liked {
@@ -18,15 +21,32 @@ func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked
 				return err
 			}
 		}
-		var err error
 		var change *likeChange
 		state, change, err = m.setLike(ctx, postLikes, postID, userID, liked)
 		if err != nil || change == nil {
 			return err
 		}
-		return m.likes.countWeekly(ctx, postID, change.likedAt, change.delta)
+		if err := m.likes.countWeekly(ctx, postID, change.likedAt, change.delta); err != nil {
+			return err
+		}
+		if !liked || post.AuthorID == userID {
+			return nil
+		}
+		paid, err := m.rewards.Grant(ctx, userID, rewards.ReasonLikeGiven, &postID, nil)
+		if err != nil || paid == 0 {
+			return err
+		}
+		if _, err := m.rewards.Grant(ctx, post.AuthorID, rewards.ReasonLikeReceived, &postID, &userID); err != nil {
+			return err
+		}
+		bonus, err := m.rewards.Progress(ctx, userID, rewards.QuestLike)
+		earned = paid + bonus
+		return err
 	})
-	return state, err
+	if err != nil {
+		return nil, 0, err
+	}
+	return state, earned, nil
 }
 
 func (m Module) setCommentLike(ctx context.Context, userID, commentID uuid.UUID, liked bool) (*LikeState, error) {

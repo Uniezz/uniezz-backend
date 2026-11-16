@@ -56,7 +56,10 @@ type createPostInput struct {
 
 type createPostOutput struct {
 	Replayed string `header:"Idempotent-Replayed" doc:"true when the post was created by an earlier request with the same key"`
-	Body     Post
+	Body     struct {
+		Post
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var createPostOperation = auth.Protected(huma.Operation{
@@ -75,7 +78,7 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 		return nil, httpapi.Unauthorized()
 	}
 
-	post, replayed, err := h.feed.createPost(ctx, userID, postInput{
+	post, earned, replayed, err := h.feed.createPost(ctx, userID, postInput{
 		Type:       in.Body.Type,
 		University: in.Body.University,
 		Title:      in.Body.Title,
@@ -88,7 +91,9 @@ func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*cre
 		return nil, errorResponses.Error(err)
 	}
 
-	out := &createPostOutput{Body: *post}
+	out := &createPostOutput{}
+	out.Body.Post = *post
+	out.Body.CoinsEarned = earned
 	if replayed {
 		out.Replayed = "true"
 	}
@@ -119,23 +124,26 @@ func (f PostFilters) query(viewerID uuid.UUID) postQuery {
 type listPostsInput struct {
 	httpapi.PageQuery
 	PostFilters
+	BeforeCursor string `query:"beforeCursor" maxLength:"512" doc:"Pass a previousCursor to load the page before it"`
 }
 
 type listPostsOutput struct {
 	Body struct {
-		Items      []Post  `json:"items"`
-		NextCursor *string `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get the next page; null on the last page"`
+		Items          []Post  `json:"items"`
+		NextCursor     *string `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get the next page; null on the last page"`
+		PreviousCursor *string `json:"previousCursor" nullable:"true" doc:"Pass as beforeCursor to get the previous page; null on the first page"`
 	}
 }
 
 var listPostsOperation = auth.Protected(huma.Operation{
-	OperationID: "listFeedPosts",
-	Method:      http.MethodGet,
-	Path:        "/feed/posts",
-	Summary:     "List feed posts",
-	Description: "Newest first by createdAt, then ID descending. All signed-in students can browse posts across universities. Keep the same search and filters when following a cursor; results reflect current data.",
-	Tags:        []string{"feed"},
-	Errors:      []int{http.StatusBadRequest},
+	OperationID:   "listFeedPosts",
+	Method:        http.MethodGet,
+	Path:          "/feed/posts",
+	Summary:       "List feed posts",
+	Description:   "Newest first by createdAt, then ID descending. All signed-in students can browse posts across universities. Keep the same search and filters when following a cursor; results reflect current data. Pass nextCursor as cursor to load older posts or previousCursor as beforeCursor to load newer posts.",
+	Tags:          []string{"feed"},
+	DefaultStatus: http.StatusOK,
+	Errors:        []int{http.StatusBadRequest},
 })
 
 func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listPostsOutput, error) {
@@ -145,8 +153,8 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 	}
 
 	q := in.query(userID)
-	q.Cursor, q.Limit = in.Cursor, in.Limit
-	items, next, err := h.feed.listPosts(ctx, q)
+	q.Cursor, q.BeforeCursor, q.Limit = in.Cursor, in.BeforeCursor, in.Limit
+	items, next, previous, err := h.feed.listPosts(ctx, q)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
@@ -154,6 +162,7 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 	out := &listPostsOutput{}
 	out.Body.Items = items
 	out.Body.NextCursor = next
+	out.Body.PreviousCursor = previous
 	return out, nil
 }
 

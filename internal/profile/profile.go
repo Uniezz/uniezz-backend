@@ -5,6 +5,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -15,6 +16,10 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		return nil, err
 	}
 	programmes, err := m.programmes.list(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	coins, err := m.rewards.Balance(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +56,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		SongURL:      p.SongURL,
 		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
+		Coins:        coins,
 		CreatedAt:    p.CreatedAt,
 	}
 	for _, row := range programmes {
@@ -157,14 +163,15 @@ func (c profileChange) fields() (profileFields, error) {
 	return f, nil
 }
 
-func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change profileChange) error {
+func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change profileChange) (int, error) {
 	fields, err := change.fields()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	var avatarID, bannerID *uuid.UUID
 	var previousAvatar, previousBanner *uuid.UUID
+	earned := 0
 
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if change.AvatarMediaID != nil {
@@ -204,15 +211,20 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 				return err
 			}
 		}
-		return nil
+		complete, err := m.profiles.isComplete(ctx, userID)
+		if err != nil || !complete {
+			return err
+		}
+		earned, err = m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
+		return err
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	m.deleteMedia(ctx, previousAvatar)
 	m.deleteMedia(ctx, previousBanner)
-	return nil
+	return earned, nil
 }
 
 func trimmedName(name *string) (*string, error) {
