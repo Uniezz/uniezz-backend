@@ -11,17 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type queueRow struct {
-	reportRow
-	TargetAuthorID *uuid.UUID
-	Snapshot       map[string]any
-}
-
-type queueCursor struct {
-	CreatedAt time.Time `json:"c"`
-	ID        uuid.UUID `json:"i"`
-}
-
 type reportRow struct {
 	ID         uuid.UUID
 	TargetType string
@@ -101,36 +90,4 @@ func (r *reportRepository) anonymiseForgotten(ctx context.Context, age time.Dura
 		return fmt.Errorf("anonymise reports: %w", err)
 	}
 	return nil
-}
-
-func (r *reportRepository) listPending(ctx context.Context, after *queueCursor, limit int) ([]queueRow, error) {
-	args := database.Args{}
-	where := "status = 'pending'"
-	if after != nil {
-		where += " AND (created_at, id) < (" + args.Add(after.CreatedAt) + ", " + args.Add(after.ID) + ")"
-	}
-	query := `
-		SELECT id, target_type, target_id, target_author_id, reason, details, snapshot, status, created_at
-		FROM reports WHERE ` + where + `
-		ORDER BY created_at DESC, id DESC LIMIT ` + args.Add(limit)
-
-	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list pending reports: %w", err)
-	}
-	defer rows.Close()
-
-	var reports []queueRow
-	for rows.Next() {
-		var q queueRow
-		if err := rows.Scan(&q.ID, &q.TargetType, &q.TargetID, &q.TargetAuthorID, &q.Reason,
-			&q.Details, &q.Snapshot, &q.Status, &q.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan pending report: %w", err)
-		}
-		reports = append(reports, q)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list pending reports: %w", err)
-	}
-	return reports, nil
 }

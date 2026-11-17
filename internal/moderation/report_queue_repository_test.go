@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestListPending(t *testing.T) {
+func TestQueueRepositoryList(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	reporter := e.user(t)
@@ -46,9 +46,9 @@ func TestListPending(t *testing.T) {
 	want := []uuid.UUID{newest, tieFirst, tieSecond, oldest}
 
 	t.Run("returns only pending reports, newest first, with the snapshot", func(t *testing.T) {
-		rows, err := e.module.reports.listPending(ctx, nil, len(want))
+		rows, err := e.module.queue.list(ctx, queueFilter{Limit: len(want)})
 		if err != nil {
-			t.Fatalf("listPending failed: %v", err)
+			t.Fatalf("list failed: %v", err)
 		}
 		if len(rows) != len(want) {
 			t.Fatalf("expected %d rows, got %d", len(want), len(rows))
@@ -72,9 +72,9 @@ func TestListPending(t *testing.T) {
 	t.Run("pages one by one without skipping or repeating ties", func(t *testing.T) {
 		var after *queueCursor
 		for i, wantID := range want {
-			rows, err := e.module.reports.listPending(ctx, after, 1)
+			rows, err := e.module.queue.list(ctx, queueFilter{After: after, Limit: 1})
 			if err != nil {
-				t.Fatalf("page %d: listPending failed: %v", i, err)
+				t.Fatalf("page %d: list failed: %v", i, err)
 			}
 			if len(rows) != 1 || rows[0].ID != wantID {
 				t.Fatalf("page %d: expected %s, got %v", i, wantID, rows)

@@ -4,30 +4,29 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
-	"github.com/google/uuid"
 )
 
-// QueuedReport is a report as a moderator sees it: the public fields plus the
-// copy of the reported content. It never names the reporter.
-type QueuedReport struct {
-	Report
-	TargetAuthorID *uuid.UUID     `json:"targetAuthorId" format:"uuid" nullable:"true" doc:"Null once the author's data has been anonymised"`
-	Snapshot       map[string]any `json:"snapshot" doc:"Copy of the reported content at the time of the report"`
+type queueQuery struct {
+	Cursor string
+	Limit  int
 }
 
-func (m Module) listQueue(ctx context.Context, cursor string, limit int) ([]QueuedReport, *string, error) {
-	var after *queueCursor
-	if cursor != "" {
-		after = &queueCursor{}
-		if err := httpapi.DecodeCursor(cursor, after); err != nil {
+func (m Module) listQueue(ctx context.Context, q queueQuery) ([]QueuedReport, *string, error) {
+	filter := queueFilter{Limit: q.Limit + 1}
+	if q.Cursor != "" {
+		var after queueCursor
+		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
 			return nil, nil, err
 		}
+		filter.After = &after
 	}
-	rows, err := m.reports.listPending(ctx, after, limit+1)
+
+	rows, err := m.queue.list(ctx, filter)
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, next, err := httpapi.Page(rows, limit, func(last queueRow) any {
+
+	rows, next, err := httpapi.Page(rows, q.Limit, func(last queueRow) any {
 		return queueCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	})
 	if err != nil {
