@@ -23,6 +23,8 @@ var (
 	ErrInvalidTokenString = errors.New("invalid token string")
 
 	ErrSessionNotFound = errors.New("session not found")
+
+	ErrForbidden = errors.New("role required")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -36,6 +38,7 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrInvalidTokenString, Status: http.StatusUnauthorized, Code: "unauthorized"},
 	{Err: ErrSessionNotFound, Status: http.StatusUnauthorized, Code: "unauthorized"},
 	{Err: ErrNotStudent, Status: http.StatusForbidden, Code: "not_student"},
+	{Err: ErrForbidden, Status: http.StatusForbidden, Code: "forbidden"},
 	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 	{Err: ErrUpstream, Status: http.StatusBadGateway, Code: "provider_unavailable"},
 }
