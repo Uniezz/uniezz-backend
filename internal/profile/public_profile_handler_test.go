@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
@@ -123,7 +122,7 @@ func TestPublicProfileAgeDoesNotExposeBirthDate(t *testing.T) {
 	viewer := e.otpUser(t)
 	student := e.otpUser(t)
 
-	birthDate := time.Now().UTC().AddDate(-20, 0, -1).Format(time.DateOnly)
+	birthDate := "2006-02-28"
 	decode[Profile](t, e.api.Patch("/profile/me", student.bearer, map[string]any{
 		"birthDate": birthDate,
 	}), http.StatusOK)
@@ -155,8 +154,8 @@ func TestPublicProfilePhotosOnlyForConnectedUsers(t *testing.T) {
 		rec := e.api.Post("/profile/photos", student.bearer, map[string]any{
 			"mediaId": photo.String(),
 		})
-		if rec.Code != http.StatusNoContent {
-			t.Fatalf("adding photo: expected 204, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("adding photo: expected 201, got %d: %s", rec.Code, rec.Body.String())
 		}
 	}
 

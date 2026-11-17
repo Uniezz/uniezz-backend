@@ -1174,6 +1174,18 @@ components:
         - items
         - nextCursor
       type: object
+    ListProfilePhotosOutputBody:
+      additionalProperties: false
+      properties:
+        photos:
+          items:
+            $ref: "#/components/schemas/ProfilePhoto"
+          type:
+            - array
+            - "null"
+      required:
+        - photos
+      type: object
     ListProfilesOutputBody:
       additionalProperties: false
       properties:
@@ -1378,9 +1390,10 @@ components:
             - string
             - "null"
         intent:
-          description: Shown on the student's discovery card. Null when unset.
+          description: Shown on the student's discovery card. Up to 150 characters; null when unset.
           examples:
             - Looking for a climbing partner
+          maxLength: 150
           type:
             - string
             - "null"
@@ -1546,11 +1559,11 @@ components:
             - string
             - "null"
         openTo:
-          description: Defaults to friends and study buddy
+          description: Empty until the student selects modes
           items:
             enum:
               - friends
-              - study_buddy
+              - studyBuddy
               - dating
             type: string
           type:
@@ -1611,6 +1624,28 @@ components:
         - privacy
         - coins
         - createdAt
+      type: object
+    ProfilePhoto:
+      additionalProperties: false
+      properties:
+        id:
+          description: Media ID used to delete or reorder the photo
+          format: uuid
+          type: string
+        isAvatar:
+          type: boolean
+        position:
+          format: int64
+          maximum: 6
+          minimum: 1
+          type: integer
+        url:
+          type: string
+      required:
+        - id
+        - url
+        - position
+        - isAvatar
       type: object
     ProfileSummary:
       additionalProperties: false
@@ -2136,7 +2171,7 @@ components:
           format: date
           type: string
         intent:
-          description: Up to 200 characters after HTML is stripped. An empty string clears it.
+          description: Up to 150 characters after HTML is stripped. An empty string clears it.
           maxLength: 1000
           type: string
         openTo:
@@ -2171,9 +2206,10 @@ components:
           minimum: 0
           type: integer
         intent:
-          description: Shown on the student's discovery card. Null when unset.
+          description: Shown on the student's discovery card. Up to 150 characters; null when unset.
           examples:
             - Looking for a climbing partner
+          maxLength: 150
           type:
             - string
             - "null"
@@ -2322,7 +2358,8 @@ components:
             - female
           type: string
         intent:
-          maxLength: 150
+          description: Up to 150 characters after HTML is stripped. An empty string clears it.
+          maxLength: 1000
           type: string
         interests:
           description: "Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"
@@ -2348,7 +2385,7 @@ components:
           items:
             enum:
               - friends
-              - study_buddy
+              - studyBuddy
               - dating
             type: string
           maxItems: 3
@@ -2477,11 +2514,11 @@ components:
             - string
             - "null"
         openTo:
-          description: Defaults to friends and study buddy
+          description: Empty until the student selects modes
           items:
             enum:
               - friends
-              - study_buddy
+              - studyBuddy
               - dating
             type: string
           type:
@@ -5159,7 +5196,7 @@ paths:
       tags:
         - profile
     patch:
-      description: Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.
+      description: Changes only the fields that are present. Returns the updated profile. Setting birthDate for the first time pays 10 Uniezz coins once. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.
       operationId: updateMyProfile
       requestBody:
         content:
@@ -5204,7 +5241,41 @@ paths:
       tags:
         - profile
   /profile/photos:
+    get:
+      description: Returns the avatar first, then additional photos by position.
+      operationId: listMyProfilePhotos
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListProfilePhotosOutputBody"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the logged-in student's profile photos
+      tags:
+        - profile
     post:
+      description: Adds a completed upload to the profile. Repeating the same mediaId succeeds without adding another photo; the avatar counts toward the six-photo limit.
       operationId: addMyProfilePhoto
       requestBody:
         content:
@@ -5213,8 +5284,8 @@ paths:
               $ref: "#/components/schemas/AddProfilePhotoInputBody"
         required: true
       responses:
-        "204":
-          description: No Content
+        "201":
+          description: Created
         "400":
           content:
             application/json:
@@ -5245,6 +5316,7 @@ paths:
       tags:
         - profile
     put:
+      description: Replaces the order of all additional profile photos. Include each current photo ID exactly once; the avatar is not included.
       operationId: reorderMyProfilePhotos
       requestBody:
         content:
@@ -5290,12 +5362,13 @@ paths:
       summary: Reorder the logged-in student's profile photos
       tags:
         - profile
-  /profile/photos/{mediaId}:
+  /profile/photos/{id}:
     delete:
+      description: Removes an additional photo. Succeeds if it is already absent; remove the avatar through DELETE /profile/avatar.
       operationId: deleteMyProfilePhoto
       parameters:
         - in: path
-          name: mediaId
+          name: id
           required: true
           schema:
             format: uuid

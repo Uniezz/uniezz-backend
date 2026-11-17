@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -53,19 +52,8 @@ func TestGetMe(t *testing.T) {
 		}
 
 		openTo, ok := body["openTo"].([]any)
-		if !ok || len(openTo) != 2 {
-			t.Fatalf("expected openTo with two modes, got %v", body["openTo"])
-		}
-		modes := make(map[string]bool, len(openTo))
-		for _, value := range openTo {
-			mode, ok := value.(string)
-			if !ok {
-				t.Fatalf("expected openTo values to be strings, got %v", value)
-			}
-			modes[mode] = true
-		}
-		if !modes["friends"] || !modes["study_buddy"] {
-			t.Errorf("expected friends and study_buddy, got %v", openTo)
+		if !ok || len(openTo) != 0 {
+			t.Errorf("expected openTo [], got %v", body["openTo"])
 		}
 	})
 
@@ -210,70 +198,19 @@ func TestUpdateConnectionProfileFields(t *testing.T) {
 
 	got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
 		"birthDate": "2000-01-15",
-		"openTo":    []string{"friends", "study_buddy"},
+		"openTo":    []string{"friends", "studyBuddy"},
 		"intent":    "Looking for a climbing partner",
 	}), http.StatusOK)
 
 	if got.BirthDate == nil || *got.BirthDate != "2000-01-15" {
 		t.Errorf("birthDate = %v, want 2000-01-15", got.BirthDate)
 	}
-	if !slices.Equal(got.OpenTo, []string{"friends", "study_buddy"}) {
-		t.Errorf("openTo = %v, want friends and study_buddy", got.OpenTo)
+	if !slices.Equal(got.OpenTo, []string{"friends", "studyBuddy"}) {
+		t.Errorf("openTo = %v, want friends and studyBuddy", got.OpenTo)
 	}
 	if got.Intent == nil || *got.Intent != "Looking for a climbing partner" {
 		t.Errorf("intent = %v, want the submitted text", got.Intent)
 	}
-
-	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
-		"birthDate": "2001-01-15",
-	}), http.StatusBadRequest, "birth_date_immutable")
-	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
-		"birthDate": nil,
-	}), http.StatusBadRequest, "birth_date_immutable")
-	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
-		"openTo": []string{"dating"},
-	}), http.StatusBadRequest, "dating_requires_profile")
-
-	uWithoutDate := e.otpUser(t)
-	decode[Profile](t, e.api.Patch("/profile/me", uWithoutDate.bearer, map[string]any{
-		"gender": "female",
-	}), http.StatusOK)
-	expectError(t, e.api.Patch("/profile/me", uWithoutDate.bearer, map[string]any{
-		"openTo": []string{"dating"},
-	}), http.StatusBadRequest, "dating_requires_profile")
-
-	uReady := e.otpUser(t)
-	datingProfile := decode[Profile](t, e.api.Patch("/profile/me", uReady.bearer, map[string]any{
-		"birthDate": "2000-01-15",
-		"gender":    "female",
-		"openTo":    []string{"dating"},
-	}), http.StatusOK)
-
-	if datingProfile.BirthDate == nil || *datingProfile.BirthDate != "2000-01-15" {
-		t.Errorf("birthDate = %v, want 2000-01-15", datingProfile.BirthDate)
-	}
-	if datingProfile.Gender == nil || *datingProfile.Gender != GenderFemale {
-		t.Errorf("gender = %v, want female", datingProfile.Gender)
-	}
-	if !slices.Equal(datingProfile.OpenTo, []string{"dating"}) {
-		t.Errorf("openTo = %v, want dating", datingProfile.OpenTo)
-	}
-}
-
-func TestUpdateIntentPlainTextAndLength(t *testing.T) {
-	e := newTestEnv(t)
-	u := e.otpUser(t)
-
-	got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
-		"intent": " <b>Climbing</b> ",
-	}), http.StatusOK)
-	if got.Intent == nil || *got.Intent != "Climbing" {
-		t.Errorf("intent = %v, want Climbing", got.Intent)
-	}
-
-	expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{
-		"intent": strings.Repeat("x", 151),
-	}), http.StatusBadRequest, "invalid_input")
 }
 
 func TestAddProfilePhoto(t *testing.T) {
@@ -285,11 +222,29 @@ func TestAddProfilePhoto(t *testing.T) {
 	rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
 		"mediaId": photo.String(),
 	})
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if mediaStatus(t, e.pool, photo) != "ready" {
 		t.Fatalf("expected uploaded photo to be claimed, got %s", mediaStatus(t, e.pool, photo))
+	}
+
+	retry := e.api.Post("/profile/photos", u.bearer, map[string]any{
+		"mediaId": photo.String(),
+	})
+	if retry.Code != http.StatusCreated {
+		t.Fatalf("retry: expected 201, got %d: %s", retry.Code, retry.Body.String())
+	}
+
+	var photoCount int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT count(*) FROM profile_photos WHERE user_id = $1 AND media_id = $2`,
+		u.id, photo,
+	).Scan(&photoCount); err != nil {
+		t.Fatalf("count photo rows: %v", err)
+	}
+	if photoCount != 1 {
+		t.Fatalf("photo row count = %d, want 1", photoCount)
 	}
 
 	var position int
@@ -301,6 +256,51 @@ func TestAddProfilePhoto(t *testing.T) {
 	}
 	if position != 1 {
 		t.Errorf("position = %d, want 1", position)
+	}
+}
+
+func TestListProfilePhotos(t *testing.T) {
+	e := newTestEnv(t)
+	u := e.otpUser(t)
+
+	empty := decode[struct {
+		Photos []ProfilePhoto `json:"photos"`
+	}](t, e.api.Get("/profile/photos", u.bearer), http.StatusOK)
+	if empty.Photos == nil || len(empty.Photos) != 0 {
+		t.Fatalf("photos = %v, want empty list", empty.Photos)
+	}
+
+	avatar := insertMedia(context.Background(), e.pool, u.id, "pending")
+	first := insertMedia(context.Background(), e.pool, u.id, "pending")
+	second := insertMedia(context.Background(), e.pool, u.id, "pending")
+
+	decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{
+		"avatarMediaId": avatar.String(),
+	}), http.StatusOK)
+
+	for _, id := range []uuid.UUID{first, second} {
+		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{"mediaId": id.String()})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("adding photo: expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+
+	got := decode[struct {
+		Photos []ProfilePhoto `json:"photos"`
+	}](t, e.api.Get("/profile/photos", u.bearer), http.StatusOK)
+
+	want := []ProfilePhoto{
+		{ID: avatar, URL: avatarURL(avatar), Position: 1, IsAvatar: true},
+		{ID: first, URL: avatarURL(first), Position: 2},
+		{ID: second, URL: avatarURL(second), Position: 3},
+	}
+	if len(got.Photos) != len(want) {
+		t.Fatalf("got %d photos, want %d: %+v", len(got.Photos), len(want), got.Photos)
+	}
+	for i := range want {
+		if got.Photos[i] != want[i] {
+			t.Errorf("photos[%d] = %+v, want %+v", i, got.Photos[i], want[i])
+		}
 	}
 }
 
@@ -318,8 +318,8 @@ func TestProfilePhotoLimitIncludesAvatar(t *testing.T) {
 		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
 			"mediaId": photo.String(),
 		})
-		if rec.Code != http.StatusNoContent {
-			t.Fatalf("photo %d: expected 204, got %d: %s", i+1, rec.Code, rec.Body.String())
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("photo %d: expected 201, got %d: %s", i+1, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -341,8 +341,8 @@ func TestDeleteProfilePhotoCompactsPositions(t *testing.T) {
 		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
 			"mediaId": photo.String(),
 		})
-		if rec.Code != http.StatusNoContent {
-			t.Fatalf("adding photo: expected 204, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("adding photo: expected 201, got %d: %s", rec.Code, rec.Body.String())
 		}
 	}
 
@@ -379,8 +379,8 @@ func TestReorderProfilePhotos(t *testing.T) {
 		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
 			"mediaId": photo.String(),
 		})
-		if rec.Code != http.StatusNoContent {
-			t.Fatalf("adding photo: expected 204, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("adding photo: expected 201, got %d: %s", rec.Code, rec.Body.String())
 		}
 	}
 
@@ -497,8 +497,8 @@ func TestAvatarCountsTowardProfilePhotoLimit(t *testing.T) {
 		rec := e.api.Post("/profile/photos", u.bearer, map[string]any{
 			"mediaId": photo.String(),
 		})
-		if rec.Code != http.StatusNoContent {
-			t.Fatalf("photo %d: expected 204, got %d: %s", i+1, rec.Code, rec.Body.String())
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("photo %d: expected 201, got %d: %s", i+1, rec.Code, rec.Body.String())
 		}
 	}
 

@@ -21,9 +21,6 @@ type profileRow struct {
 	FirstName     *string
 	LastName      *string
 	Gender        *Gender
-	BirthDate     *time.Time
-	OpenTo        []string
-	Intent        *string
 	Language      Language
 	AvatarMediaID *uuid.UUID
 	Avatar        *media.Ref
@@ -35,6 +32,12 @@ type profileRow struct {
 	Privacy       Privacy
 	CreatedAt     time.Time
 	SearchRank    int
+}
+
+type connectionPreferencesRow struct {
+	BirthDate *time.Time
+	OpenTo    []string
+	Intent    *string
 }
 
 const profileColumns = `
@@ -66,21 +69,16 @@ func newProfileRepository(db database.DB) *profileRepository {
 }
 
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
-	query := `SELECT ` + profileColumns + `, u.banner_media_id, banner.kind, banner.object_key,
-        cp.birth_date, COALESCE(cp.open_to, ARRAY['friends', 'studyBuddy']::text[]), cp.intent` + profileFrom + `
+	query := `SELECT ` + profileColumns + `, u.banner_media_id, banner.kind, banner.object_key` + profileFrom + `
         LEFT JOIN ready_media banner ON banner.id = u.banner_media_id
-        LEFT JOIN connection_profiles cp ON cp.user_id = u.id
         WHERE u.id = $1 AND u.deleted_at IS NULL`
 
 	var bannerID *uuid.UUID
 	var bannerKind, bannerKey *string
-	var birthDate *time.Time
-	var openTo []string
-	var intent *string
 
 	p, err := scanProfile(
 		r.db.Conn(ctx).QueryRow(ctx, query, userID),
-		&bannerID, &bannerKind, &bannerKey, &birthDate, &openTo, &intent,
+		&bannerID, &bannerKind, &bannerKey,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -91,10 +89,32 @@ func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profile
 
 	p.BannerMediaID = bannerID
 	p.Banner = media.RefOf(bannerKind, bannerKey)
-	p.BirthDate = birthDate
-	p.OpenTo = openTo
-	p.Intent = intent
 	return p, nil
+}
+
+func (r *profileRepository) getConnectionPreferences(ctx context.Context, userID uuid.UUID) (*connectionPreferencesRow, error) {
+	const query = `
+		SELECT birth_date, open_to, intent
+		FROM connection_preferences
+		WHERE user_id = $1
+	`
+	var preferences connectionPreferencesRow
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID).Scan(
+		&preferences.BirthDate,
+		&preferences.OpenTo,
+		&preferences.Intent,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		preferences.OpenTo = []string{}
+		return &preferences, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get connection preferences: %w", err)
+	}
+	if preferences.OpenTo == nil {
+		preferences.OpenTo = []string{}
+	}
+	return &preferences, nil
 }
 
 func (r *profileRepository) getMany(ctx context.Context, userIDs []uuid.UUID) ([]profileRow, error) {
@@ -201,21 +221,15 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 }
 
 type profileFields struct {
-	FirstName    *string
-	LastName     *string
-	Language     *Language
-	BirthDate    *string
-	SetBirthDate bool
-	OpenTo       []string
-	SetOpenTo    bool
-	Intent       *string
-	SetIntent    bool
-	SetBio       bool
-	Bio          *string
-	SetSongURL   bool
-	SongURL      *string
-	Interests    []string
-	Privacy      Privacy
+	FirstName  *string
+	LastName   *string
+	Language   *Language
+	SetBio     bool
+	Bio        *string
+	SetSongURL bool
+	SongURL    *string
+	Interests  []string
+	Privacy    Privacy
 }
 
 func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f profileFields) error {
@@ -232,77 +246,6 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 
 	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, f.FirstName, f.LastName, f.SetBio, f.Bio, f.SetSongURL, f.SongURL, f.Interests, f.Privacy, f.Language); err != nil {
 		return fmt.Errorf("update profile: %w", err)
-	}
-	return nil
-}
-
-func (r *profileRepository) updateConnectionProfile(ctx context.Context, userID uuid.UUID, f profileFields) error {
-	if !f.SetBirthDate && !f.SetOpenTo && !f.SetIntent {
-		return nil
-	}
-
-	_, err := r.db.Conn(ctx).Exec(ctx, `
-        INSERT INTO connection_profiles (user_id, open_to)
-        VALUES ($1, ARRAY['friends', 'studyBuddy']::text[])
-        ON CONFLICT (user_id) DO NOTHING`, userID)
-	if err != nil {
-		return fmt.Errorf("create connection profile: %w", err)
-	}
-
-	var savedBirthDate *time.Time
-	err = r.db.Conn(ctx).QueryRow(ctx,
-		`SELECT birth_date FROM connection_profiles WHERE user_id = $1 FOR UPDATE`, userID,
-	).Scan(&savedBirthDate)
-	if err != nil {
-		return fmt.Errorf("lock connection profile: %w", err)
-	}
-	if f.SetBirthDate && savedBirthDate != nil {
-		return ErrBirthDateImmutable
-	}
-
-	openTo := f.OpenTo
-	if f.SetOpenTo {
-		openTo = make([]string, len(f.OpenTo))
-		copy(openTo, f.OpenTo)
-		for i, mode := range openTo {
-			switch mode {
-			case "study_buddy":
-				openTo[i] = "studyBuddy"
-			case "friends", "dating":
-			default:
-				return ErrInvalidInput
-			}
-		}
-	}
-
-	if f.SetOpenTo {
-		for _, mode := range openTo {
-			if mode != "dating" {
-				continue
-			}
-
-			var gender *Gender
-			if err := r.db.Conn(ctx).QueryRow(ctx,
-				`SELECT gender FROM users WHERE id = $1`, userID,
-			).Scan(&gender); err != nil {
-				return fmt.Errorf("get profile gender: %w", err)
-			}
-			if gender == nil || (f.BirthDate == nil && savedBirthDate == nil) {
-				return ErrDatingRequiresProfile
-			}
-		}
-	}
-
-	_, err = r.db.Conn(ctx).Exec(ctx, `
-        UPDATE connection_profiles
-        SET birth_date = COALESCE($2::date, birth_date),
-            open_to = CASE WHEN $3 THEN $4::text[] ELSE open_to END,
-            intent = CASE WHEN $5 THEN NULLIF($6, '') ELSE intent END
-        WHERE user_id = $1`,
-		userID, f.BirthDate, f.SetOpenTo, openTo, f.SetIntent, f.Intent,
-	)
-	if err != nil {
-		return fmt.Errorf("update connection profile: %w", err)
 	}
 	return nil
 }
@@ -431,30 +374,15 @@ func (r *profileRepository) restartStuckDeletions(ctx context.Context, olderThan
 	return ids, nil
 }
 
-func (r *profileRepository) connected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error) {
-	var connected bool
-	err := r.db.Conn(ctx).QueryRow(ctx, `
-        SELECT EXISTS (
-            SELECT 1
-            FROM connections
-            WHERE user_low = LEAST($1::uuid, $2::uuid)
-              AND user_high = GREATEST($1::uuid, $2::uuid)
-        )
-    `, viewerID, ownerID).Scan(&connected)
-	if err != nil {
-		return false, fmt.Errorf("check profile connection: %w", err)
-	}
-	return connected, nil
-}
-
 func (r *profileRepository) checkAvatarPhotoLimit(ctx context.Context, userID uuid.UUID) error {
 	var avatarID *uuid.UUID
-	err := r.db.Conn(ctx).QueryRow(ctx, `
+	const avatarQuery = `
         SELECT avatar_media_id
         FROM users
         WHERE id = $1 AND deleted_at IS NULL
         FOR UPDATE
-    `, userID).Scan(&avatarID)
+    `
+	err := r.db.Conn(ctx).QueryRow(ctx, avatarQuery, userID).Scan(&avatarID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -468,14 +396,194 @@ func (r *profileRepository) checkAvatarPhotoLimit(ctx context.Context, userID uu
 	}
 
 	var photoCount int
-	if err := r.db.Conn(ctx).QueryRow(ctx,
-		`SELECT count(*) FROM profile_photos WHERE user_id = $1`,
-		userID,
-	).Scan(&photoCount); err != nil {
+	const countQuery = `SELECT count(*) FROM profile_photos WHERE user_id = $1`
+	if err := r.db.Conn(ctx).QueryRow(ctx, countQuery, userID).Scan(&photoCount); err != nil {
 		return fmt.Errorf("count profile photos for avatar: %w", err)
 	}
-	if photoCount >= 6 {
+	if photoCount >= maxProfilePhotos {
 		return ErrProfilePhotoLimit
 	}
 	return nil
+}
+
+type profilePhotoRecord struct {
+	ID       uuid.UUID
+	Position int
+	Ref      media.Ref
+}
+
+func (r *profileRepository) listProfilePhotos(ctx context.Context, userID uuid.UUID) ([]profilePhotoRecord, error) {
+	const query = `
+        SELECT pp.media_id, pp.position, rm.kind, rm.object_key
+        FROM profile_photos pp
+        JOIN ready_media rm ON rm.id = pp.media_id
+        WHERE pp.user_id = $1
+        ORDER BY pp.position
+    `
+	rows, err := r.db.Conn(ctx).Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list profile photos: %w", err)
+	}
+	defer rows.Close()
+
+	photos := make([]profilePhotoRecord, 0)
+	for rows.Next() {
+		var photo profilePhotoRecord
+		var kind string
+		if err := rows.Scan(&photo.ID, &photo.Position, &kind, &photo.Ref.ObjectKey); err != nil {
+			return nil, fmt.Errorf("scan profile photo: %w", err)
+		}
+		photo.Ref.Kind = media.Kind(kind)
+		photos = append(photos, photo)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read profile photos: %w", err)
+	}
+	return photos, nil
+}
+
+func (r *profileRepository) listProfilePhotoIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	const query = `
+		SELECT media_id
+		FROM profile_photos
+		WHERE user_id = $1
+	`
+	rows, err := r.db.Conn(ctx).Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list profile photo ids: %w", err)
+	}
+	defer rows.Close()
+
+	mediaIDs := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan profile photo id: %w", err)
+		}
+		mediaIDs = append(mediaIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read profile photo ids: %w", err)
+	}
+	return mediaIDs, nil
+}
+
+func (r *profileRepository) replaceProfilePhotoOrder(ctx context.Context, userID uuid.UUID, mediaIDs []uuid.UUID) error {
+	const deleteQuery = `DELETE FROM profile_photos WHERE user_id = $1`
+	_, err := r.db.Conn(ctx).Exec(ctx, deleteQuery, userID)
+	if err != nil {
+		return fmt.Errorf("clear profile photo positions: %w", err)
+	}
+
+	if len(mediaIDs) == 0 {
+		return nil
+	}
+
+	const insertQuery = `
+        INSERT INTO profile_photos (user_id, media_id, position)
+        SELECT $1, ordered.media_id, ordered.position::smallint
+        FROM unnest($2::uuid[]) WITH ORDINALITY AS ordered(media_id, position)
+    `
+	_, err = r.db.Conn(ctx).Exec(ctx, insertQuery, userID, mediaIDs)
+	if err != nil {
+		return fmt.Errorf("save reordered profile photos: %w", err)
+	}
+	return nil
+}
+
+func (r *profileRepository) compactProfilePhotoPositions(ctx context.Context, userID uuid.UUID) error {
+	const query = `
+        SELECT media_id
+        FROM profile_photos
+        WHERE user_id = $1
+        ORDER BY position
+    `
+	rows, err := r.db.Conn(ctx).Query(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("list remaining profile photos: %w", err)
+	}
+
+	var mediaIDs []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan remaining profile photo: %w", err)
+		}
+		mediaIDs = append(mediaIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("read remaining profile photos: %w", err)
+	}
+	rows.Close()
+
+	return r.replaceProfilePhotoOrder(ctx, userID, mediaIDs)
+}
+
+func (r *profileRepository) deleteProfilePhoto(ctx context.Context, userID, mediaID uuid.UUID) (*uuid.UUID, error) {
+	var deletedID uuid.UUID
+	const query = `
+        DELETE FROM profile_photos
+        WHERE user_id = $1 AND media_id = $2
+        RETURNING media_id
+    `
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, mediaID).Scan(&deletedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("remove profile photo: %w", err)
+	}
+	return &deletedID, nil
+}
+
+func (r *profileRepository) insertProfilePhoto(ctx context.Context, userID, mediaID uuid.UUID, position int) error {
+	const query = `
+        INSERT INTO profile_photos (user_id, media_id, position)
+        VALUES ($1, $2, $3)
+    `
+	_, err := r.db.Conn(ctx).Exec(ctx, query, userID, mediaID, position)
+	if err != nil {
+		return fmt.Errorf("save profile photo: %w", err)
+	}
+	return nil
+}
+
+func (r *profileRepository) lockProfileForPhoto(ctx context.Context, userID uuid.UUID) (*uuid.UUID, error) {
+	var avatarID *uuid.UUID
+	const query = `
+        SELECT avatar_media_id
+        FROM users
+        WHERE id = $1 AND deleted_at IS NULL
+        FOR UPDATE
+    `
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID).Scan(&avatarID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock profile for photo: %w", err)
+	}
+	return avatarID, nil
+}
+
+func (r *profileRepository) nextProfilePhotoPosition(ctx context.Context, userID uuid.UUID) (int, error) {
+	var position int
+	const query = `
+        SELECT candidate.position
+        FROM generate_series(1, $2::int) AS candidate(position)
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM profile_photos p
+            WHERE p.user_id = $1 AND p.position = candidate.position
+        )
+        ORDER BY candidate.position
+        LIMIT 1
+    `
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, maxProfilePhotos).Scan(&position)
+	if err != nil {
+		return 0, fmt.Errorf("find profile photo position: %w", err)
+	}
+	return position, nil
 }

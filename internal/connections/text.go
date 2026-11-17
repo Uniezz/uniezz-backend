@@ -11,7 +11,7 @@ const (
 	minAge          = 16
 	maxAge          = 100
 	adultAge        = 18
-	maxIntentLength = 200
+	maxIntentLength = 150
 )
 
 func cleanIntent(intent *string) (*string, error) {

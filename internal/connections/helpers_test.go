@@ -68,6 +68,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
+	module.now = func() time.Time {
+		return time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	}
+	profiles.SetConnectionsService(module)
 
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
@@ -102,8 +106,8 @@ func (e *testEnv) user(t *testing.T) testUser {
 
 	var id uuid.UUID
 	err := e.pool.QueryRow(ctx, `
-		INSERT INTO users (university_id, email, first_name, last_name, bio, interests)
-		VALUES ('umcs', $1, 'Jan', 'Kowalski', 'Bio', ARRAY[$2]) RETURNING id`,
+		INSERT INTO users (university_id, email, first_name, last_name, gender, bio, interests)
+		VALUES ('umcs', $1, 'Jan', 'Kowalski', 'female', 'Bio', ARRAY[$2]) RETURNING id`,
 		"connections-"+uuid.NewString()+"@example.test", e.tag).Scan(&id)
 	if err != nil {
 		t.Fatalf("create user: %v", err)

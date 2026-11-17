@@ -40,6 +40,8 @@ type mediaService interface {
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 	Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error)
 	ForgetUser(ctx context.Context, userID uuid.UUID) error
+	CheckUpload(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
+	MarkReady(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error
 }
 
 type rewardService interface {
@@ -51,16 +53,29 @@ type forgetter interface {
 	ForgetUser(ctx context.Context, userID uuid.UUID) error
 }
 
+type ConnectionPreferencesChange struct {
+	BirthDate        *string
+	BirthDatePresent bool
+	OpenTo           *[]string
+	Intent           *string
+}
+
+type connectionService interface {
+	UpdateConnectionPreferences(ctx context.Context, userID uuid.UUID, change ConnectionPreferencesChange) (int, error)
+	AreConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error)
+}
+
 type Module struct {
-	tx         database.Transactor
-	profiles   *profileRepository
-	programmes *programmeRepository
-	media      mediaService
-	feed       forgetter
-	study      forgetter
-	rewards    rewardService
-	jobs       *jobs.Runner
-	now        func() time.Time
+	tx          database.Transactor
+	profiles    *profileRepository
+	connections connectionService
+	programmes  *programmeRepository
+	media       mediaService
+	feed        forgetter
+	study       forgetter
+	rewards     rewardService
+	jobs        *jobs.Runner
+	now         func() time.Time
 }
 
 func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule forgetter, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
@@ -92,6 +107,10 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule f
 	return m, nil
 }
 
+func (m *Module) SetConnectionsService(service connectionService) {
+	m.connections = service
+}
+
 func (m Module) Register(api huma.API) {
 	profiles := &profileHandler{profile: m}
 	programmes := &programmeHandler{programmes: m.programmes}
@@ -102,6 +121,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, deleteMeOperation, profiles.deleteMe)
 	huma.Register(api, deleteAvatarOperation, profiles.deleteAvatar)
 	huma.Register(api, reorderProfilePhotosOperation, profiles.reorderProfilePhotos)
+	huma.Register(api, listProfilePhotosOperation, profiles.listProfilePhotos)
 	huma.Register(api, addProfilePhotoOperation, profiles.addProfilePhoto)
 	huma.Register(api, deleteProfilePhotoOperation, profiles.deleteProfilePhoto)
 	huma.Register(api, deleteBannerOperation, profiles.deleteBanner)

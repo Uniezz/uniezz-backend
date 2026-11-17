@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -61,7 +62,11 @@ func TestDeleteMe(t *testing.T) {
 
 	t.Run("an old sign-in is a 403 and deletes nothing", func(t *testing.T) {
 		u := e.otpUser(t)
-		if _, err := e.pool.Exec(ctx, "UPDATE sessions SET created_at = NOW() - interval '1 hour' WHERE user_id = $1", u.id); err != nil {
+		if _, err := e.pool.Exec(ctx,
+			"UPDATE sessions SET created_at = $2 WHERE user_id = $1",
+			u.id,
+			e.module.now().Add(-time.Hour),
+		); err != nil {
 			t.Fatal(err)
 		}
 

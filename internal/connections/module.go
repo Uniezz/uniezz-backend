@@ -50,6 +50,7 @@ type Module struct {
 	profiles    profiles
 	rewards     rewardService
 	likes       limiter
+	now         func() time.Time
 }
 
 func New(pool *pgxpool.Pool, profileModule profiles, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
@@ -63,6 +64,7 @@ func New(pool *pgxpool.Pool, profileModule profiles, rewardsModule rewardService
 		profiles:    profileModule,
 		rewards:     rewardsModule,
 		likes:       ratelimit.New(pool, "connection-like", likeLimit, likeWindow),
+		now:         time.Now,
 	}
 
 	if err := jobs.Register(runner, m.pruneDiscovery, jobs.Options{Timeout: 5 * time.Minute, MaxAttempts: 3}); err != nil {

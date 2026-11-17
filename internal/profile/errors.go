@@ -11,6 +11,7 @@ var (
 	ErrGenderImmutable       = errors.New("gender cannot be changed or cleared once set")
 	ErrBirthDateImmutable    = errors.New("birth date cannot be changed or cleared once set")
 	ErrDatingRequiresProfile = errors.New("dating requires a birth date and gender")
+	ErrDatingRequiresAdult   = errors.New("dating requires an age of at least 18")
 	ErrNotFound              = errors.New("not found")
 	ErrInvalidInput          = errors.New("invalid input")
 	ErrInvalidAvatar         = errors.New("avatar media is missing, not owned by the user or not uploaded")
@@ -24,6 +25,7 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrGenderImmutable, Status: http.StatusBadRequest, Code: "gender_immutable"},
 	{Err: ErrBirthDateImmutable, Status: http.StatusBadRequest, Code: "birth_date_immutable"},
 	{Err: ErrDatingRequiresProfile, Status: http.StatusBadRequest, Code: "dating_requires_profile"},
+	{Err: ErrDatingRequiresAdult, Status: http.StatusBadRequest, Code: "dating_requires_adult"},
 	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
 	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
 	{Err: ErrInvalidAvatar, Status: http.StatusBadRequest, Code: "invalid_avatar"},

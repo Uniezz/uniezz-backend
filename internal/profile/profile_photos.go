@@ -7,72 +7,82 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
+const maxProfilePhotos = 6
+
 func (m Module) addProfilePhoto(ctx context.Context, userID, mediaID uuid.UUID) error {
-	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		var avatarID *uuid.UUID
-		err := m.profiles.db.Conn(ctx).QueryRow(ctx, `
-            SELECT avatar_media_id
-            FROM users
-            WHERE id = $1 AND deleted_at IS NULL
-            FOR UPDATE
-        `, userID).Scan(&avatarID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+	p, err := m.profiles.get(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	existingPhotos, err := m.profiles.listProfilePhotos(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check existing profile photos: %w", err)
+	}
+	for _, photo := range existingPhotos {
+		if photo.ID == mediaID {
+			return nil
 		}
+	}
+
+	total := len(existingPhotos)
+	if p.AvatarMediaID != nil {
+		total++
+	}
+	if total >= maxProfilePhotos {
+		return ErrProfilePhotoLimit
+	}
+
+	err = m.media.CheckUpload(ctx, mediaID, userID, media.KindAvatar)
+	if errors.Is(err, media.ErrNotFound) || errors.Is(err, media.ErrUploadMismatch) {
+		return errors.Join(ErrInvalidProfilePhoto, err)
+	}
+	if err != nil {
+		return fmt.Errorf("check profile photo upload: %w", err)
+	}
+	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+		avatarID, err := m.profiles.lockProfileForPhoto(ctx, userID)
 		if err != nil {
-			return fmt.Errorf("lock profile for photo: %w", err)
+			return err
 		}
 
-		var photoCount int
-		err = m.profiles.db.Conn(ctx).QueryRow(ctx,
-			`SELECT count(*) FROM profile_photos WHERE user_id = $1`,
-			userID,
-		).Scan(&photoCount)
+		existingPhotos, err := m.profiles.listProfilePhotos(ctx, userID)
 		if err != nil {
-			return fmt.Errorf("count profile photos: %w", err)
+			return fmt.Errorf("check existing profile photos: %w", err)
 		}
+		for _, photo := range existingPhotos {
+			if photo.ID == mediaID {
+				return nil
+			}
+		}
+
+		photoCount := len(existingPhotos)
 
 		total := photoCount
 		if avatarID != nil {
 			total++
 		}
-		if total >= 6 {
+		if total >= maxProfilePhotos {
 			return ErrProfilePhotoLimit
 		}
 
-		var position int
-		err = m.profiles.db.Conn(ctx).QueryRow(ctx, `
-            SELECT candidate.position
-            FROM generate_series(1, 6) AS candidate(position)
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM profile_photos p
-                WHERE p.user_id = $1 AND p.position = candidate.position
-            )
-            ORDER BY candidate.position
-            LIMIT 1
-        `, userID).Scan(&position)
+		position, err := m.profiles.nextProfilePhotoPosition(ctx, userID)
 		if err != nil {
-			return fmt.Errorf("find profile photo position: %w", err)
+			return err
 		}
 
-		err = m.media.Claim(ctx, mediaID, userID, media.KindAvatar)
-		if errors.Is(err, media.ErrNotFound) || errors.Is(err, media.ErrUploadMismatch) {
+		err = m.media.MarkReady(ctx, mediaID, userID, media.KindAvatar)
+		if errors.Is(err, media.ErrNotFound) {
 			return errors.Join(ErrInvalidProfilePhoto, err)
 		}
 		if err != nil {
-			return fmt.Errorf("claim profile photo: %w", err)
+			return fmt.Errorf("mark profile photo ready: %w", err)
 		}
 
-		_, err = m.profiles.db.Conn(ctx).Exec(ctx, `
-            INSERT INTO profile_photos (user_id, media_id, position)
-            VALUES ($1, $2, $3)
-        `, userID, mediaID, position)
-		if err != nil {
-			return fmt.Errorf("save profile photo: %w", err)
+		if err := m.profiles.insertProfilePhoto(ctx, userID, mediaID, position); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -82,72 +92,27 @@ func (m Module) removeProfilePhoto(ctx context.Context, userID, mediaID uuid.UUI
 	var removed *uuid.UUID
 
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		var lockedID uuid.UUID
-		err := m.profiles.db.Conn(ctx).QueryRow(ctx, `
-            SELECT id
-            FROM users
-            WHERE id = $1 AND deleted_at IS NULL
-            FOR UPDATE
-        `, userID).Scan(&lockedID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+		_, err := m.profiles.lockProfileForPhoto(ctx, userID)
 		if err != nil {
-			return fmt.Errorf("lock profile for photo deletion: %w", err)
+			return err
 		}
 
-		var deletedID uuid.UUID
-		err = m.profiles.db.Conn(ctx).QueryRow(ctx, `
-            DELETE FROM profile_photos
-            WHERE user_id = $1 AND media_id = $2
-            RETURNING media_id
-        `, userID, mediaID).Scan(&deletedID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		removed, err = m.profiles.deleteProfilePhoto(ctx, userID, mediaID)
+		if err != nil {
+			return err
+		}
+		if removed == nil {
 			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("remove profile photo: %w", err)
-		}
-		removed = &deletedID
+		deletedID := *removed
 
 		err = m.media.MarkDeleting(ctx, deletedID)
 		if err != nil && !errors.Is(err, media.ErrNotFound) {
 			return fmt.Errorf("mark profile photo for deletion: %w", err)
 		}
 
-		rows, err := m.profiles.db.Conn(ctx).Query(ctx, `
-            SELECT media_id
-            FROM profile_photos
-            WHERE user_id = $1
-            ORDER BY position
-        `, userID)
-		if err != nil {
-			return fmt.Errorf("list remaining profile photos: %w", err)
-		}
-
-		var remaining []uuid.UUID
-		for rows.Next() {
-			var id uuid.UUID
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return fmt.Errorf("scan remaining profile photo: %w", err)
-			}
-			remaining = append(remaining, id)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return fmt.Errorf("read remaining profile photos: %w", err)
-		}
-		rows.Close()
-
-		for i, id := range remaining {
-			if _, err := m.profiles.db.Conn(ctx).Exec(ctx, `
-                UPDATE profile_photos
-                SET position = $3
-                WHERE user_id = $1 AND media_id = $2
-            `, userID, id, i+1); err != nil {
-				return fmt.Errorf("compact profile photo positions: %w", err)
-			}
+		if err := m.profiles.compactProfilePhotoPositions(ctx, userID); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -161,45 +126,20 @@ func (m Module) removeProfilePhoto(ctx context.Context, userID, mediaID uuid.UUI
 
 func (m Module) reorderProfilePhotos(ctx context.Context, userID uuid.UUID, mediaIDs []uuid.UUID) error {
 	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		db := m.profiles.db.Conn(ctx)
-
-		var lockedID uuid.UUID
-		err := db.QueryRow(ctx, `
-            SELECT id
-            FROM users
-            WHERE id = $1 AND deleted_at IS NULL
-            FOR UPDATE
-        `, userID).Scan(&lockedID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+		_, err := m.profiles.lockProfileForPhoto(ctx, userID)
 		if err != nil {
-			return fmt.Errorf("lock profile for photo reorder: %w", err)
+			return err
 		}
 
-		rows, err := db.Query(ctx, `
-            SELECT media_id
-            FROM profile_photos
-            WHERE user_id = $1
-        `, userID)
+		existingIDs, err := m.profiles.listProfilePhotoIDs(ctx, userID)
 		if err != nil {
-			return fmt.Errorf("list profile photos for reorder: %w", err)
+			return err
 		}
 
-		existing := make(map[uuid.UUID]struct{})
-		for rows.Next() {
-			var id uuid.UUID
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return fmt.Errorf("scan profile photo for reorder: %w", err)
-			}
+		existing := make(map[uuid.UUID]struct{}, len(existingIDs))
+		for _, id := range existingIDs {
 			existing[id] = struct{}{}
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return fmt.Errorf("read profile photos for reorder: %w", err)
-		}
-		rows.Close()
 
 		if len(mediaIDs) != len(existing) {
 			return ErrInvalidInput
@@ -216,46 +156,45 @@ func (m Module) reorderProfilePhotos(ctx context.Context, userID uuid.UUID, medi
 			seen[id] = struct{}{}
 		}
 
-		if _, err := db.Exec(ctx, `DELETE FROM profile_photos WHERE user_id = $1`, userID); err != nil {
-			return fmt.Errorf("clear profile photo positions: %w", err)
-		}
-
-		for i, id := range mediaIDs {
-			if _, err := db.Exec(ctx, `
-                INSERT INTO profile_photos (user_id, media_id, position)
-                VALUES ($1, $2, $3)
-            `, userID, id, i+1); err != nil {
-				return fmt.Errorf("save reordered profile photo: %w", err)
-			}
-		}
-		return nil
+		return m.profiles.replaceProfilePhotoOrder(ctx, userID, mediaIDs)
 	})
 }
 
-func (r *profileRepository) listProfilePhotoRefs(ctx context.Context, userID uuid.UUID) ([]media.Ref, error) {
-	rows, err := r.db.Conn(ctx).Query(ctx, `
-        SELECT rm.kind, rm.object_key
-        FROM profile_photos pp
-        JOIN ready_media rm ON rm.id = pp.media_id
-        WHERE pp.user_id = $1
-        ORDER BY pp.position
-    `, userID)
+func (m Module) listMyProfilePhotos(ctx context.Context, userID uuid.UUID) ([]ProfilePhoto, error) {
+	p, err := m.profiles.get(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("list profile photo media: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
 
-	photos := make([]media.Ref, 0)
-	for rows.Next() {
-		var kind string
-		var objectKey string
-		if err := rows.Scan(&kind, &objectKey); err != nil {
-			return nil, fmt.Errorf("scan profile photo media: %w", err)
-		}
-		photos = append(photos, media.Ref{Kind: media.Kind(kind), ObjectKey: objectKey})
+	rows, err := m.profiles.listProfilePhotos(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read profile photo media: %w", err)
+
+	photos := make([]ProfilePhoto, 0, len(rows)+1)
+	offset := 0
+	if p.AvatarMediaID != nil {
+		if p.Avatar == nil {
+			return nil, fmt.Errorf("profile avatar %s has no ready media reference", *p.AvatarMediaID)
+		}
+		url, err := m.media.URLOf(ctx, *p.Avatar)
+		if err != nil {
+			return nil, fmt.Errorf("resolve profile avatar URL: %w", err)
+		}
+		photos = append(photos, ProfilePhoto{
+			ID: *p.AvatarMediaID, URL: url, Position: 1, IsAvatar: true,
+		})
+		offset = 1
+	}
+
+	for _, row := range rows {
+		url, err := m.media.URLOf(ctx, row.Ref)
+		if err != nil {
+			return nil, fmt.Errorf("resolve profile photo %s URL: %w", row.ID, err)
+		}
+		photos = append(photos, ProfilePhoto{
+			ID: row.ID, URL: url, Position: row.Position + offset,
+		})
 	}
 	return photos, nil
 }

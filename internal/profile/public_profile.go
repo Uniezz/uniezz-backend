@@ -20,17 +20,22 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	connectionPreferences, err := m.profiles.getConnectionPreferences(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	programmes, err := m.programmes.list(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	var age *int
-	if p.BirthDate != nil {
+	if connectionPreferences.BirthDate != nil {
+		birthDate := *connectionPreferences.BirthDate
 		today := m.now().UTC()
-		value := today.Year() - p.BirthDate.Year()
-		if today.Month() < p.BirthDate.Month() ||
-			(today.Month() == p.BirthDate.Month() && today.Day() < p.BirthDate.Day()) {
+		value := today.Year() - birthDate.Year()
+		if today.Month() < birthDate.Month() ||
+			(today.Month() == birthDate.Month() && today.Day() < birthDate.Day()) {
 			value--
 		}
 		age = &value
@@ -39,7 +44,7 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 	photos := make([]string, 0)
 	avatarURL := m.mediaURL(ctx, p.Avatar)
 
-	connected, err := m.profiles.connected(ctx, viewerID, userID)
+	connected, err := m.connections.AreConnected(ctx, viewerID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +53,12 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 			photos = append(photos, *avatarURL)
 		}
 
-		refs, err := m.profiles.listProfilePhotoRefs(ctx, userID)
+		refs, err := m.profiles.listProfilePhotos(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
 		for i := range refs {
-			if photoURL := m.mediaURL(ctx, &refs[i]); photoURL != nil {
+			if photoURL := m.mediaURL(ctx, &refs[i].Ref); photoURL != nil {
 				photos = append(photos, *photoURL)
 			}
 		}
