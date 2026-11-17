@@ -82,4 +82,27 @@ func TestQueueRepositoryList(t *testing.T) {
 			after = &queueCursor{CreatedAt: rows[0].CreatedAt, ID: rows[0].ID}
 		}
 	})
+
+	t.Run("content without an author has a null author, not the zero uuid", func(t *testing.T) {
+		var id uuid.UUID
+		err := e.pool.QueryRow(ctx, `
+			INSERT INTO reports (reporter_id, target_type, target_id, target_author_id, reason, snapshot, created_at)
+			VALUES ($1, 'course', $2, $3, 'spam', '{}', $4) RETURNING id`,
+			reporter.id, uuid.New(), uuid.Nil, base.Add(time.Hour)).Scan(&id)
+		if err != nil {
+			t.Fatalf("insert report: %v", err)
+		}
+		t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM reports WHERE id = $1", id) })
+
+		rows, err := e.module.queue.list(ctx, queueFilter{After: &queueCursor{CreatedAt: base.Add(time.Hour + time.Second), ID: uuid.Nil}, Limit: 1})
+		if err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+		if len(rows) != 1 || rows[0].ID != id {
+			t.Fatalf("expected report %s, got %v", id, rows)
+		}
+		if rows[0].TargetAuthorID != nil {
+			t.Errorf("expected a null author, got %s", rows[0].TargetAuthorID)
+		}
+	})
 }

@@ -18,7 +18,7 @@ type queueHandler struct {
 // copy of the reported content. It never names the reporter.
 type QueuedReport struct {
 	Report
-	TargetAuthorID *uuid.UUID     `json:"targetAuthorId" format:"uuid" nullable:"true" doc:"Null once the author's data has been anonymised"`
+	TargetAuthorID *uuid.UUID     `json:"targetAuthorId" format:"uuid" nullable:"true" doc:"Null when the content has no author, or once the author's data has been anonymised"`
 	Snapshot       map[string]any `json:"snapshot" doc:"Copy of the reported content at the time of the report"`
 }
 

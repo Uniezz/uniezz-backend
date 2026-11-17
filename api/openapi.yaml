@@ -1577,7 +1577,7 @@ components:
             - dismissed
           type: string
         targetAuthorId:
-          description: Null once the author's data has been anonymised
+          description: Null when the content has no author, or once the author's data has been anonymised
           format: uuid
           type:
             - string

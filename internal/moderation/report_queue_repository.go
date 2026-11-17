@@ -46,7 +46,7 @@ func (r *queueRepository) list(ctx context.Context, f queueFilter) ([]queueRow, 
 	}
 
 	query := `
-		SELECT id, target_type, target_id, target_author_id, reason, details, snapshot, status, created_at
+		SELECT id, target_type, target_id, NULLIF(target_author_id, ` + arg(uuid.Nil) + `), reason, details, snapshot, status, created_at
 		FROM reports
 		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY created_at DESC, id DESC
