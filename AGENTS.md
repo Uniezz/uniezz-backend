@@ -67,12 +67,12 @@ Export only `Module`, `New`, sentinel errors, response types, enum types and the
   	return nil, httpapi.Unauthorized()
   }
   ```
-  Name it `viewerID` when the operation reads other students' data.
+  Name it `viewerID` when the operation reads other students' data. A role-gated handler whose logic does not use the caller skips this read.
 - Copy the input fields into a `<x>Change` or `<x>Query` and call one method on `Module`, even when that method only passes through to a repository. A handler never touches a repository field, never parses or validates, and never builds a status code.
 - Map every error with `return nil, errorResponses.Error(err)`.
 - Fill list outputs with `out := &xOutput{}`, then `out.Body.Items = …`.
 
-**Logic** (methods on `Module` with a value receiver) owns every rule:
+**Logic** (methods on `Module` with a value receiver) owns every rule except who may call an operation at all, which the operation declares (see HTTP API):
 - Validate and normalise on value types before any I/O, then build the `<x>Fields` or `<x>Filter`.
 - Wrap writes that must be atomic in `m.tx.WithTx(ctx, func(ctx context.Context) error {…})`, and pass the closure's `ctx` to every call inside it. Only logic opens transactions.
 - Run network and storage work (HEAD requests, `media.Claim`, object deletes, `jobs.Wake`) outside the transaction. Run it before the transaction when it decides whether the write may happen, and after commit when it follows from the write.
@@ -96,7 +96,7 @@ Export only `Module`, `New`, sentinel errors, response types, enum types and the
 ## Between modules
 
 - A module reads only its own tables. To read another module's data, it joins a view that the owner publishes in its own migration (`ready_media`, `public_profiles`, `anonymous_profiles`, `user_emails`, `blocked_pairs`). The view is the owner's contract, and it applies the owner's privacy rules, so readers cannot bypass them. Anything that needs code, such as building a URL, stays a Go call to the owner (`media.URLOf`).
-- `users` belongs to auth and profile. Every other module reads one of their views (`public_profiles`, `anonymous_profiles`, `user_emails`) or calls profile; when a module needs a column no view has, the owner adds a view in its own migration.
+- `users` belongs to auth and profile, and `user_roles` belongs to auth. Every other module reads one of their views (`public_profiles`, `anonymous_profiles`, `user_emails`) or calls profile; when a module needs a column no view has, the owner adds a view in its own migration.
 - Use another module through a small unexported interface in `module.go` that lists only the methods called. On the line above it, assert the real type: `var _ mediaService = media.Module{}`, or `var _ limiter = (*ratelimit.Limiter)(nil)`.
 - When a lower module calls back into a higher one, the lower module declares the exported interface (`auth.ProfileInitializer`) and the higher one asserts it. `internal/server` wires them together.
 - Map another module's sentinel errors to your own at the boundary (`media.ErrNotFound` becomes `ErrInvalidAvatar`).
@@ -105,14 +105,15 @@ Export only `Module`, `New`, sentinel errors, response types, enum types and the
 
 ## HTTP API
 
-- Every operation is a literal `var xOperation = auth.Authenticated(huma.Operation{…})` (drop `auth.Authenticated` only for public operations). Set its fields in this order: `OperationID`, `Method`, `Path`, `Summary`, `Description`, `Tags`, `DefaultStatus`, `Errors`.
+- Every operation is a literal `var xOperation = auth.Authenticated(huma.Operation{…})` (drop `auth.Authenticated` only for public operations). An operation for some roles only uses `auth.Authorized(huma.Operation{…}, auth.RoleModerator, auth.RoleAdmin)` instead. Set its fields in this order: `OperationID`, `Method`, `Path`, `Summary`, `Description`, `Tags`, `DefaultStatus`, `Errors`.
 - `OperationID` is camelCase, starts with a verb, and uses `My` for the caller's own resource (`getMyProfile`, `deleteMyAvatar`).
 - Methods: `POST` creates, `PUT` replaces every field or sets an idempotent toggle, `PATCH` updates the fields present, and `DELETE` removes or unsets. A toggle is `PUT` and `DELETE` on the same path. Paths use plural nouns, `/<resource>/me` for the caller's own data, and `{id}` as the path parameter (`ID uuid.UUID \`path:"id" format:"uuid"\``).
 - Every writable resource has a `GET`, and its `PATCH` returns the updated resource.
 - `Summary` is a short third-person phrase with no final period ("Get the logged-in student's profile") that names every kind of target the operation accepts. `Description` gives the client-visible behaviour (null meanings, idempotency, limits, what is left out) in at most three sentences, with no internals.
 - `Tags` is the module name in lowercase, and the first path segment matches it.
 - A create sets `DefaultStatus: http.StatusCreated`. An operation without a body sets `DefaultStatus: http.StatusNoContent`, returns `(*struct{}, error)` and ends with `return nil, nil`.
-- `Errors` lists every 4xx status the operation can return, except 401, which `auth.Authenticated` adds.
+- Roles are checked only at the operation, never in logic: the guard answers 403 `forbidden` before the input is parsed, and the spec lists the roles as scopes of the bearer security. Rules about one resource (its owner, `blocked_pairs`) stay in logic and in the repository's `WHERE`.
+- `Errors` lists every 4xx status the operation can return, except 401, which `auth.Authenticated` adds, and 403 `forbidden`, which `auth.Authorized` adds.
 - JSON names are camelCase and mean the same thing in every response (`universityId`, `avatarUrl`).
 - Field tags:
   - every `uuid.UUID` gets `format:"uuid"`;
@@ -153,7 +154,7 @@ Every list endpoint paginates by cursor:
 - Clean all user-written text with `text.Plain(s, keepNewlines)` and count length with `utf8.RuneCountInString` after cleaning. Use `text.Tags` for tag lists and `text.SearchWords` for search input, and translate their errors into `ErrInvalidInput`. A helper two modules need goes into `internal/text`, not into a second copy.
 - A field where an empty string clears the value is a `*string` stored with a set flag: `CASE WHEN $set THEN $value ELSE col END`.
 - A set-once field rejects any new value with its own error code, and an omitted field leaves it unchanged.
-- No personal data, secrets or hardcoded identities in source. Privileged users come from configuration (`FAQ_PUBLISHER_EMAILS`), read in `internal/config` and passed to `New`.
+- No personal data, secrets or hardcoded identities in source. Privileged users are granted a role in `user_roles` (student is implicit and has no row); a new role widens its `CHECK` and adds an `auth.Role` const. `FAQ_PUBLISHER_EMAILS` is legacy configuration, not to be copied.
 
 ## Migrations
 
