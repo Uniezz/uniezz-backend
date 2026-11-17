@@ -38,7 +38,7 @@ func TestListQueueHandler(t *testing.T) {
 		if len(items) != 1 {
 			t.Fatalf("expected 1 item, got %v", body["items"])
 		}
-		item := items[0].(map[string]any)
+		item, _ := items[0].(map[string]any)
 		if item["id"] != reportID.String() {
 			t.Errorf("expected report %s first, got %v", reportID, item["id"])
 		}
