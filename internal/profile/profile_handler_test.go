@@ -26,7 +26,7 @@ func TestGetMe(t *testing.T) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		want := []string{"avatarUrl", "bannerUrl", "bio", "createdAt", "email", "firstName", "gender", "id", "interests", "language", "lastName", "privacy", "programmes", "songUrl", "universityId"}
+		want := []string{"avatarUrl", "bannerUrl", "bio", "coins", "createdAt", "email", "firstName", "gender", "id", "interests", "language", "lastName", "privacy", "programmes", "songUrl", "universityId"}
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
 		}
@@ -236,7 +236,7 @@ func TestProfileLanguage(t *testing.T) {
 	if p.Language != "pl" {
 		t.Fatalf("default language = %q", p.Language)
 	}
-	for _, language := range []Language{LanguageEnglish, LanguagePolish, LanguageUkrainian, LanguageRussian} {
+	for _, language := range []Language{LanguageEnglish, LanguagePolish, LanguageUkrainian, LanguageRussian, LanguageBelarusian, LanguageGerman, LanguageSpanish} {
 		p = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"language": language}), 200)
 		if p.Language != language {
 			t.Errorf("updated language = %q", p.Language)
@@ -252,11 +252,11 @@ func TestProfileLanguage(t *testing.T) {
 			t.Errorf("saved language = %q", p.Language)
 		}
 	}
-	for _, language := range []string{"", "de", "EN", "en-US"} {
+	for _, language := range []string{"", "fr", "EN", "DE", "en-US"} {
 		expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{"language": language}), 400, "invalid_input")
 	}
 	p = decode[Profile](t, e.api.Patch("/profile/me", u.bearer, map[string]any{"firstName": "Anna"}), 200)
-	if p.Language != "ru" {
+	if p.Language != LanguageSpanish {
 		t.Error("unrelated patch reset language")
 	}
 }

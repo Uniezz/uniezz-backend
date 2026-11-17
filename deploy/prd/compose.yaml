@@ -1,0 +1,36 @@
+# Production API. Traefik runs in deploy/edge; the database is Supabase and
+# migrations run from CI before each deploy, so neither is part of this stack.
+#
+# Reads .env next to this file: the app secrets plus API_HOST.
+# IMAGE_TAG is set by the deploy job.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    image: ghcr.io/uniezz/uniezz-backend:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: unless-stopped
+    logging: *logging
+    env_file: .env
+    # The app drains for 5s, then waits up to 15s for requests; Docker's default 10s would cut it off.
+    stop_grace_period: 30s
+    # No ports: the API must be reachable through Traefik only, or anyone could forge X-Real-IP.
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api-prd.rule=Host(`${API_HOST:?API_HOST is required}`)
+      - traefik.http.routers.api-prd.entrypoints=websecure
+      - traefik.http.routers.api-prd.tls.certresolver=le
+      - traefik.http.routers.api-prd.service=api-prd
+      - traefik.http.services.api-prd.loadbalancer.server.port=8080
+      - traefik.http.services.api-prd.loadbalancer.healthcheck.path=/healthz/live
+      - traefik.http.services.api-prd.loadbalancer.healthcheck.interval=10s
+
+networks:
+  proxy:
+    name: uniezz-proxy
+    external: true

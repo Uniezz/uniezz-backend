@@ -39,9 +39,10 @@ func (h *otpHandler) request(ctx context.Context, in *otpRequestInput) (*struct{
 
 type otpVerifyInput struct {
 	Body struct {
-		University UniversityID `json:"university" minLength:"1" doc:"University to log in to" example:"kul"`
-		Email      string       `json:"email" minLength:"3" maxLength:"255" doc:"Email the code was sent to" example:"jan.kowalski@student.kul.pl"`
-		Code       string       `json:"code" pattern:"^[0-9]{6}$" doc:"Code from the email" example:"123456"`
+		University   UniversityID `json:"university" minLength:"1" doc:"University to log in to" example:"kul"`
+		Email        string       `json:"email" minLength:"3" maxLength:"255" doc:"Email the code was sent to" example:"jan.kowalski@student.kul.pl"`
+		Code         string       `json:"code" pattern:"^[0-9]{6}$" doc:"Code from the email" example:"123456"`
+		ReferralCode *string      `json:"referralCode,omitempty" doc:"Optional seven-character invitation code for a new account"`
 	}
 }
 
@@ -54,7 +55,7 @@ var otpVerifyOperation = huma.Operation{
 	Method:      http.MethodPost,
 	Path:        "/auth/otp/verify",
 	Summary:     "Log in with an emailed code",
-	Description: "Returns a session. A code allows 5 attempts; after that, or after it expires, request a new one.",
+	Description: "Returns a session. A referralCode is applied only when this login creates a new account. A code allows 5 attempts; after that, or after it expires, request a new one.",
 	Tags:        []string{"auth"},
 	Errors:      []int{http.StatusBadRequest, http.StatusUnauthorized},
 }
@@ -63,6 +64,9 @@ func (h *otpHandler) verify(ctx context.Context, in *otpVerifyInput) (*otpVerify
 	id, err := h.otp.verify(ctx, in.Body.University, in.Body.Email, in.Body.Code)
 	if err != nil {
 		return nil, errorResponses.Error(err)
+	}
+	if in.Body.ReferralCode != nil {
+		id.ReferralCode = *in.Body.ReferralCode
 	}
 
 	user, err := h.logins.signIn(ctx, id)

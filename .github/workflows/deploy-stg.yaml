@@ -11,10 +11,6 @@ concurrency:
   group: deploy-stg
   cancel-in-progress: false
 
-env:
-  API_URL: https://api-stg.uniezz.pl
-  DEPLOY_DIR: uniezz-stg
-
 jobs:
   test:
     name: Test
@@ -29,152 +25,26 @@ jobs:
       packages: write
 
   deploy:
-    name: Migrate and deploy
+    name: Deploy
     needs: image
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: https://api-stg.uniezz.pl/docs
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Go and goose
-        uses: jdx/mise-action@v2
-        with:
-          install_args: "--locked go go:github.com/pressly/goose/v3/cmd/goose"
-
-      - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4
-
-      - name: Run migrations
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
-          GOOSE_MIGRATION_DIR: migrations
-        run: doppler run -- goose up
-
-      - name: Set up SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          echo "SSH_TARGET=${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" >> "$GITHUB_ENV"
-
-      - name: Upload compose file and env
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
-        run: |
-          ssh "$SSH_TARGET" "mkdir -p $DEPLOY_DIR"
-          scp deploy/stg/compose.yaml "$SSH_TARGET:$DEPLOY_DIR/compose.yaml"
-          doppler secrets download --no-file --format env \
-            | ssh "$SSH_TARGET" "umask 077 && cat > $DEPLOY_DIR/.env"
-
-      - name: Start the new version
-        run: |
-          ssh "$SSH_TARGET" bash -s -- "$DEPLOY_DIR" "$GITHUB_SHA" <<'EOF'
-          set -euo pipefail
-          cd "$1"
-          export IMAGE_TAG="$2"
-          export DOCKER_GID="$(getent group docker | cut -d: -f3)"
-          docker compose pull
-          docker compose up -d --wait --wait-timeout 120 --remove-orphans
-          EOF
-
-      - name: Smoke test
-        run: |
-          host="${API_URL#https://}"
-          origin() {
-            ssh "$SSH_TARGET" curl -fsS --retry 10 --retry-delay 3 --retry-all-errors \
-              --resolve "$host:443:127.0.0.1" "https://$host$1"
-          }
-          origin /healthz/ready
-          version="$(origin /openapi.json | jq -r .info.version)"
-          if [ "$version" != "${GITHUB_SHA::7}" ]; then
-            echo "::error::Expected API version ${GITHUB_SHA::7}, got $version"
-            exit 1
-          fi
+    uses: ./.github/workflows/deploy.yaml
+    secrets: inherit
+    with:
+      environment: staging
+      stack: stg
+      api_url: https://api-stg.uniezz.pl
 
   notify:
-    name: Telegram notification
+    name: Notify
     needs: [test, image, deploy]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    environment: staging
+    uses: ./.github/workflows/deploy-notify.yaml
+    secrets: inherit
     permissions:
       contents: read
       actions: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4
-
-      - name: Load Telegram secrets
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
-        run: |
-          token="$(doppler secrets get TELEGRAM_BOT_TOKEN --plain)"
-          chat="$(doppler secrets get TELEGRAM_CHAT_ID --plain)"
-          echo "::add-mask::$token"
-          echo "TELEGRAM_BOT_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "TELEGRAM_CHAT_ID=$chat" >> "$GITHUB_ENV"
-
-      - name: Build message
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DEPLOY_RESULT: ${{ needs.deploy.result }}
-        run: |
-          repo_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
-          short="${GITHUB_SHA::7}"
-
-          if [ "$DEPLOY_RESULT" != success ]; then
-            printf '❌ Staging deploy failed: %s\n%s\nRun: %s\n' \
-              "$GITHUB_REF_NAME" "$short" "$repo_url/actions/runs/$GITHUB_RUN_ID" > message.txt
-            exit 0
-          fi
-
-          prev="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-stg.yaml/runs?status=success&per_page=5" \
-            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID)][0].head_sha // empty")"
-
-          if [ "$prev" = "$GITHUB_SHA" ]; then
-            echo "Same SHA as the previous deploy, nothing to announce"
-            exit 0
-          fi
-
-          if [ -n "$prev" ] && git merge-base --is-ancestor "$prev" "$GITHUB_SHA"; then
-            range=("$prev..$GITHUB_SHA")
-            compare="Compare: $repo_url/compare/${prev::7}...$short"
-          else
-            range=(-1 "$GITHUB_SHA")
-            compare="Commit: $repo_url/commit/$short"
-          fi
-
-          total="$(git rev-list --count --no-merges "${range[@]}")"
-          {
-            printf '🚀 Staging deployed: %s\n' "$GITHUB_REF_NAME"
-            printf '%s · %s commits\n' "$short" "$total"
-            git log --no-merges --max-count=30 --format='• %s — %an' "${range[@]}"
-            if [ "$total" -gt 30 ]; then
-              printf '… and %s more\n' "$((total - 30))"
-            fi
-            printf '%s\n' "$compare"
-          } > message.txt
-
-      - name: Send to Telegram
-        run: |
-          if [ ! -s message.txt ]; then
-            exit 0
-          fi
-          jq -n --rawfile text message.txt --arg chat "$TELEGRAM_CHAT_ID" \
-            '{chat_id: $chat, text: $text, link_preview_options: {is_disabled: true}}' \
-            | curl -fsS -X POST -H 'Content-Type: application/json' -d @- \
-              "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null
+    with:
+      environment: staging
+      label: Staging
+      workflow: deploy-stg.yaml
+      result: ${{ needs.deploy.result }}

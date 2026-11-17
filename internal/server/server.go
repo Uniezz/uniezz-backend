@@ -17,6 +17,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/moderation"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,6 +32,7 @@ type Modules struct {
 	Connections connections.Module
 	Study       study.Module
 	Moderation  moderation.Module
+	Rewards     rewards.Module
 	Jobs        *jobs.Runner
 }
 
@@ -41,7 +43,11 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, fmt.Errorf("initialize media: %w", err)
 	}
 
-	feedModule, err := feed.New(db, mediaModule, runner)
+	rewardsModule, err := rewards.New(db, runner)
+	if err != nil {
+		return Modules{}, err
+	}
+	feedModule, err := feed.New(db, mediaModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
@@ -50,28 +56,28 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, runner)
+	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
-	connectionsModule, err := connections.New(db, profileModule, runner)
+	connectionsModule, err := connections.New(db, profileModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
 
-	faqModule := faq.New(db, cfg.FAQPublisherEmails)
+	faqModule := faq.New(db, cfg.FAQPublisherEmails, rewardsModule)
 	moderationModule, err := moderation.New(db, feedModule, profileModule, connectionsModule, studyModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
 
 	mailModule := mail.NewResendSender(cfg)
-	authModule, err := auth.New(db, cfg, mailModule, profileModule)
+	authModule, err := auth.New(db, cfg, mailModule, profileModule, profileModule)
 	if err != nil {
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Jobs: runner}, nil
+	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Rewards: rewardsModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -84,4 +90,5 @@ func (m Modules) Register(api huma.API) {
 	m.Connections.Register(api)
 	m.Study.Register(api)
 	m.Moderation.Register(api)
+	m.Rewards.Register(api)
 }

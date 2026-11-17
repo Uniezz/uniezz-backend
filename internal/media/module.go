@@ -24,6 +24,7 @@ type mediaStore interface {
 	markReady(ctx context.Context, id, ownerUserID uuid.UUID, kind Kind) error
 	getReady(ctx context.Context, id uuid.UUID) (*mediaRow, error)
 	markDeleting(ctx context.Context, id uuid.UUID) error
+	markManyDeleting(ctx context.Context, ids []uuid.UUID) error
 	getDeleting(ctx context.Context, id uuid.UUID) (*mediaRow, error)
 	deleteDeleting(ctx context.Context, id uuid.UUID) error
 	markAbandonedDeleting(ctx context.Context, olderThan time.Duration) error

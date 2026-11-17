@@ -2,6 +2,7 @@ package feed
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -324,8 +325,9 @@ func (e *testEnv) createPostWithKey(t *testing.T, author testUser, key string, o
 }
 
 type postPage struct {
-	Items      []Post  `json:"items"`
-	NextCursor *string `json:"nextCursor"`
+	Items          []Post  `json:"items"`
+	NextCursor     *string `json:"nextCursor"`
+	PreviousCursor *string `json:"previousCursor"`
 }
 
 func TestListPosts(t *testing.T) {
@@ -421,6 +423,8 @@ func TestListPosts(t *testing.T) {
 
 	t.Run("rejects bad queries", func(t *testing.T) {
 		expectError(t, e.api.Get("/feed/posts?cursor=not-a-cursor", author.bearer), 400, "invalid_cursor")
+		expectError(t, e.api.Get("/feed/posts?beforeCursor=not-a-cursor", author.bearer), 400, "invalid_cursor")
+		expectError(t, e.api.Get("/feed/posts?cursor=x&beforeCursor=y", author.bearer), 400, "invalid_input")
 		expectError(t, e.api.Get("/feed/posts?university=nowhere", author.bearer), 400, "invalid_input")
 		expectError(t, e.api.Get("/feed/posts?from=2026-01-02T00:00:00Z&to=2026-01-01T00:00:00Z", author.bearer), 400, "invalid_input")
 		expectError(t, e.api.Get("/feed/posts?limit=51", author.bearer), 400, "invalid_input")
@@ -441,6 +445,56 @@ func TestListPosts(t *testing.T) {
 			t.Error("author did not like the post")
 		}
 	})
+}
+
+func TestListPostsReverseCursor(t *testing.T) {
+	e := newTestEnv(t)
+	author := e.user(t)
+	t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", author.id) })
+	for range 4 {
+		post := e.createPost(t, author, nil)
+		t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM feed_posts WHERE id = $1", post.ID) })
+	}
+	if _, err := e.pool.Exec(context.Background(), "UPDATE feed_posts SET created_at = '2026-01-01T00:00:00Z' WHERE author_id = $1", author.id); err != nil {
+		t.Fatal(err)
+	}
+
+	query := url.Values{
+		"authorId": {author.id.String()},
+		"from":     {"2026-01-01T00:00:00Z"},
+		"to":       {"2026-01-02T00:00:00Z"},
+		"limit":    {"2"},
+	}
+	first := decode[postPage](t, e.api.Get("/feed/posts?"+query.Encode(), author.bearer), http.StatusOK)
+	if first.NextCursor == nil {
+		t.Fatal("first page has no next cursor")
+	}
+	query.Set("cursor", *first.NextCursor)
+	second := decode[postPage](t, e.api.Get("/feed/posts?"+query.Encode(), author.bearer), http.StatusOK)
+	if second.PreviousCursor == nil {
+		t.Fatal("second page has no previous cursor")
+	}
+	query.Del("cursor")
+	query.Set("beforeCursor", *second.PreviousCursor)
+	previous := decode[postPage](t, e.api.Get("/feed/posts?"+query.Encode(), author.bearer), http.StatusOK)
+	if len(previous.Items) != len(first.Items) {
+		t.Fatalf("reverse page has %d items, want %d", len(previous.Items), len(first.Items))
+	}
+	if previous.Items[0].ID != first.Items[0].ID || previous.Items[1].ID != first.Items[1].ID {
+		t.Fatalf("reverse page = %v, want first page %v", []uuid.UUID{previous.Items[0].ID, previous.Items[1].ID}, []uuid.UUID{first.Items[0].ID, first.Items[1].ID})
+	}
+	if len(second.Items) != 2 || previous.NextCursor == nil {
+		t.Fatal("reverse page must preserve the forward cursor")
+	}
+	query.Del("beforeCursor")
+	query.Set("cursor", *previous.NextCursor)
+	next := decode[postPage](t, e.api.Get("/feed/posts?"+query.Encode(), author.bearer), http.StatusOK)
+	if len(next.Items) != len(second.Items) {
+		t.Fatalf("forward page after reverse has %d items, want %d", len(next.Items), len(second.Items))
+	}
+	if next.Items[0].ID != second.Items[0].ID || next.Items[1].ID != second.Items[1].ID {
+		t.Fatalf("forward page after reverse = %v, want second page %v", []uuid.UUID{next.Items[0].ID, next.Items[1].ID}, []uuid.UUID{second.Items[0].ID, second.Items[1].ID})
+	}
 }
 
 func sorted(s []string) []string {

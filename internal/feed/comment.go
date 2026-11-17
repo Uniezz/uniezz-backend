@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
@@ -16,48 +17,51 @@ type commentInput struct {
 
 // createComment adds a root comment, or a reply when ReplyToCommentID is set.
 // A reply to a reply joins the same thread: its parent is the thread's root.
-func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentInput, key string) (*Comment, bool, error) {
+func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentInput, key string) (*Comment, int, bool, error) {
 	content, err := cleanText(in.Content, true, 1, maxCommentLength)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	in.Content = content
 	fp, err := fingerprint(in)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	if key != "" {
 		comment, err := m.replayComment(ctx, userID, key, fp)
 		if !errors.Is(err, ErrNotFound) {
-			return comment, err == nil, err
+			return comment, 0, err == nil, err
 		}
 	}
 
 	if err := m.posts.visible(ctx, userID, in.PostID); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
-	var parentID *uuid.UUID
+	var parentID, replyToAuthorID *uuid.UUID
 	if in.ReplyToCommentID != nil {
 		if err := m.comments.visible(ctx, userID, *in.ReplyToCommentID); err != nil {
-			return nil, false, err
+			return nil, 0, false, err
 		}
 		target, err := m.comments.ref(ctx, *in.ReplyToCommentID)
 		if err != nil {
-			return nil, false, err
+			return nil, 0, false, err
 		}
 		if target.PostID != in.PostID {
-			return nil, false, ErrNotFound
+			return nil, 0, false, ErrNotFound
 		}
 		parentID = &target.ThreadID
+		replyToAuthorID = target.AuthorID
 	}
 
 	commentID := uuid.New()
+	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := m.claimKey(ctx, userID, opCreateComment, key, fp, commentID); err != nil {
 			return err
 		}
-		if err := m.posts.countComments(ctx, in.PostID, 1); err != nil {
+		postAuthorID, err := m.posts.countComments(ctx, in.PostID, 1)
+		if err != nil {
 			return err
 		}
 		if parentID != nil {
@@ -68,21 +72,35 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 				return err
 			}
 		}
-		return m.comments.insert(ctx, newComment{
+		err = m.comments.insert(ctx, newComment{
 			ID: commentID, PostID: in.PostID, AuthorID: userID,
 			ParentID: parentID, ReplyToCommentID: in.ReplyToCommentID, Content: in.Content,
 		})
+		if err != nil {
+			return err
+		}
+		if postAuthorID != userID {
+			if earned, err = m.rewards.Grant(ctx, userID, rewards.ReasonComment, &in.PostID, nil); err != nil {
+				return err
+			}
+		}
+		if replyToAuthorID == nil || *replyToAuthorID == userID {
+			return nil
+		}
+		bonus, err := m.rewards.Progress(ctx, userID, rewards.QuestReply)
+		earned += bonus
+		return err
 	})
 	if errors.Is(err, errKeyTaken) {
 		comment, err := m.replayComment(ctx, userID, key, fp)
-		return comment, err == nil, err
+		return comment, 0, err == nil, err
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 
 	comment, err := m.comment(ctx, userID, commentID)
-	return comment, false, err
+	return comment, earned, false, err
 }
 
 func (m Module) replayComment(ctx context.Context, userID uuid.UUID, key string, fp []byte) (*Comment, error) {
@@ -227,7 +245,7 @@ func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, allow fu
 		if err := allow(locked.AuthorID); err != nil {
 			return err
 		}
-		if err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {
+		if _, err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {
 			return err
 		}
 

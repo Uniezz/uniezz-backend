@@ -41,17 +41,24 @@ func (m Module) propose(ctx context.Context, authorID uuid.UUID, question, answe
 }
 
 func (m Module) publish(ctx context.Context, authorID uuid.UUID, question, answer string) (*Entry, error) {
-	email, err := m.entries.userEmail(ctx, authorID)
-	if errors.Is(err, ErrNotFound) {
-		return nil, ErrForbidden
-	}
-	if err != nil {
+	if err := m.checkPublisher(ctx, authorID); err != nil {
 		return nil, err
 	}
-	if !m.publishers[strings.ToLower(email)] {
-		return nil, ErrForbidden
-	}
 	return m.create(ctx, authorID, question, answer, statusPublished)
+}
+
+func (m Module) checkPublisher(ctx context.Context, userID uuid.UUID) error {
+	email, err := m.entries.userEmail(ctx, userID)
+	if errors.Is(err, ErrNotFound) {
+		return ErrForbidden
+	}
+	if err != nil {
+		return err
+	}
+	if !m.publishers[strings.ToLower(email)] {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func (m Module) create(ctx context.Context, authorID uuid.UUID, question, answer, status string) (*Entry, error) {

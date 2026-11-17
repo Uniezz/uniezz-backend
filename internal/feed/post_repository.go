@@ -149,6 +149,7 @@ type postFilter struct {
 	From         *time.Time
 	To           *time.Time
 	After        *pageCursor
+	Before       *pageCursor
 	Limit        int
 }
 
@@ -192,6 +193,9 @@ func postWhere(f postFilter, args *database.Args) string {
 	if f.After != nil {
 		where = append(where, "(p.created_at, p.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
+	if f.Before != nil {
+		where = append(where, "(p.created_at, p.id) > ("+arg(f.Before.CreatedAt)+", "+arg(f.Before.ID)+")")
+	}
 
 	if len(where) == 0 {
 		return ""
@@ -201,7 +205,11 @@ func postWhere(f postFilter, args *database.Args) string {
 
 func (r *postRepository) list(ctx context.Context, f postFilter) ([]postRow, error) {
 	args := database.Args{f.ViewerID}
-	query := postSelect + postWhere(f, &args) + " ORDER BY p.created_at DESC, p.id DESC LIMIT " + args.Add(f.Limit)
+	order := " DESC"
+	if f.Before != nil {
+		order = " ASC"
+	}
+	query := postSelect + postWhere(f, &args) + " ORDER BY p.created_at" + order + ", p.id" + order + " LIMIT " + args.Add(f.Limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -396,15 +404,17 @@ func (r *postRepository) idsByAuthor(ctx context.Context, authorID uuid.UUID) ([
 	return ids, nil
 }
 
-func (r *postRepository) countComments(ctx context.Context, postID uuid.UUID, delta int) error {
-	result, err := r.db.Conn(ctx).Exec(ctx, `UPDATE feed_posts SET comments_count = comments_count + $2 WHERE id = $1`, postID, delta)
-	if err != nil {
-		return fmt.Errorf("count comments: %w", err)
+func (r *postRepository) countComments(ctx context.Context, postID uuid.UUID, delta int) (uuid.UUID, error) {
+	const query = `UPDATE feed_posts SET comments_count = comments_count + $2 WHERE id = $1 RETURNING author_id`
+
+	var authorID uuid.UUID
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, postID, delta).Scan(&authorID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, fmt.Errorf("count comments: %w", err)
 	}
-	if result.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return authorID, nil
 }
 
 func (r *postRepository) visible(ctx context.Context, viewerID, postID uuid.UUID) error {

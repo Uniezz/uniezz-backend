@@ -1,7 +1,11 @@
 package connections
 
 import (
+	"context"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"net/http/httptest"
+	"sync"
 
 	"github.com/google/uuid"
 	"net/http"
@@ -56,6 +60,49 @@ func TestSavePreferences(t *testing.T) {
 			t.Errorf("read back = %+v", again)
 		}
 	})
+
+	t.Run("a birth date can be set only once and sending it again changes nothing", func(t *testing.T) {
+		u := e.user(t)
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+
+		again := decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01", "intent": "Chess"}), http.StatusOK)
+		if again.BirthDate == nil || *again.BirthDate != "2000-01-01" || again.Intent == nil || *again.Intent != "Chess" {
+			t.Errorf("same date again = %+v", again)
+		}
+
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2001-02-03", "intent": "Go"}), http.StatusBadRequest, "birth_date_immutable")
+		got := decode[Preferences](t, e.api.Get("/connections/me", u.bearer), http.StatusOK)
+		if got.BirthDate == nil || *got.BirthDate != "2000-01-01" || got.Intent == nil || *got.Intent != "Chess" {
+			t.Errorf("after a rejected change = %+v", got)
+		}
+	})
+
+	t.Run("two different first birth dates at once save exactly one", func(t *testing.T) {
+		u := e.user(t)
+		dates := []string{"2000-01-01", "2001-02-03"}
+		codes := make([]int, len(dates))
+		var wg sync.WaitGroup
+		for i, date := range dates {
+			wg.Go(func() { codes[i] = e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": date}).Code })
+		}
+		wg.Wait()
+
+		var saved time.Time
+		if err := e.pool.QueryRow(context.Background(), "SELECT birth_date FROM connection_profiles WHERE user_id = $1", u.id).Scan(&saved); err != nil {
+			t.Fatalf("read birth date: %v", err)
+		}
+		winner := -1
+		for i, code := range codes {
+			if code == http.StatusOK {
+				winner = i
+			} else if code != http.StatusBadRequest {
+				t.Errorf("%s: status %d", dates[i], code)
+			}
+		}
+		if winner < 0 || codes[0] == codes[1] || saved.Format(time.DateOnly) != dates[winner] {
+			t.Errorf("codes = %v, saved = %s", codes, saved.Format(time.DateOnly))
+		}
+	})
 }
 
 func TestOperationsNeedASession(t *testing.T) {
@@ -98,4 +145,52 @@ func TestAgeOn(t *testing.T) {
 			t.Errorf("ageOn(%s) = %d, want %d", c.birth, got, c.want)
 		}
 	}
+}
+
+func TestBirthDateCoins(t *testing.T) {
+	e := newTestEnv(t)
+	coins := func(t *testing.T, u testUser) int {
+		t.Helper()
+		m, err := rewards.New(e.pool, jobs.NewRunner(e.pool, 1, 0))
+		if err != nil {
+			t.Fatalf("rewards.New: %v", err)
+		}
+		n, err := m.Balance(context.Background(), u.id)
+		if err != nil {
+			t.Fatalf("balance: %v", err)
+		}
+		return n
+	}
+
+	t.Run("the first birth date pays 10 coins once", func(t *testing.T) {
+		u := e.user(t)
+		type saved struct {
+			CoinsEarned int `json:"coinsEarned"`
+		}
+		first := decode[saved](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		again := decode[saved](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": "2000-01-01"}), http.StatusOK)
+		if first.CoinsEarned != 10 || again.CoinsEarned != 0 {
+			t.Errorf("coinsEarned first %d, again %d; want 10, 0", first.CoinsEarned, again.CoinsEarned)
+		}
+		if got := coins(t, u); got != 10 {
+			t.Errorf("coins = %d, want 10", got)
+		}
+	})
+
+	t.Run("saving other preferences pays nothing", func(t *testing.T) {
+		u := e.user(t)
+		decode[Preferences](t, e.api.Patch("/connections/me", u.bearer, map[string]any{"intent": "Chess", "openTo": []string{"friends"}}), http.StatusOK)
+		if got := coins(t, u); got != 0 {
+			t.Errorf("coins = %d, want 0", got)
+		}
+	})
+
+	t.Run("a rejected birth date pays nothing", func(t *testing.T) {
+		u := e.user(t)
+		minor := time.Now().UTC().AddDate(-17, 0, 0).Format(time.DateOnly)
+		expectError(t, e.api.Patch("/connections/me", u.bearer, map[string]any{"birthDate": minor, "openTo": []string{"dating"}}), http.StatusBadRequest, "dating_requires_adult")
+		if got := coins(t, u); got != 0 {
+			t.Errorf("coins = %d, want 0", got)
+		}
+	})
 }

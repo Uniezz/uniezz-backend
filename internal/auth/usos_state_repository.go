@@ -20,11 +20,11 @@ func newUsosStateRepository(db database.DB) *usosStateRepository {
 
 func (r *usosStateRepository) save(ctx context.Context, s usosState) error {
 	const query = `
-		INSERT INTO oauth_states (request_token, request_secret, university_id, platform)
-		VALUES ($1, $2, $3, $4);
+		INSERT INTO oauth_states (request_token, request_secret, university_id, platform, referral_code)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''));
 	`
 
-	_, err := r.db.Conn(ctx).Exec(ctx, query, s.RequestToken.Token, s.RequestToken.Secret, s.UniversityID, s.Platform)
+	_, err := r.db.Conn(ctx).Exec(ctx, query, s.RequestToken.Token, s.RequestToken.Secret, s.UniversityID, s.Platform, s.ReferralCode)
 	if err != nil {
 		return fmt.Errorf("failed to save usos state: %w", err)
 	}
@@ -35,7 +35,7 @@ func (r *usosStateRepository) take(ctx context.Context, requestToken string) (us
 	const query = `
 		DELETE FROM oauth_states
 		WHERE request_token = $1
-		RETURNING request_secret, university_id, platform, expires_at > NOW();
+		RETURNING request_secret, university_id, platform, COALESCE(referral_code, ''), expires_at > NOW();
 	`
 
 	s := usosState{RequestToken: usos.RequestToken{Token: requestToken}}
@@ -44,6 +44,7 @@ func (r *usosStateRepository) take(ctx context.Context, requestToken string) (us
 		&s.RequestToken.Secret,
 		&s.UniversityID,
 		&s.Platform,
+		&s.ReferralCode,
 		&active,
 	)
 	if err != nil {

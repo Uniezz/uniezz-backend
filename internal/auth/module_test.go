@@ -75,6 +75,8 @@ func TestModule_ZeroValueDescribesOperations(t *testing.T) {
 		{"/auth/exchange", http.MethodPost},
 		{"/auth/otp/request", http.MethodPost},
 		{"/auth/otp/verify", http.MethodPost},
+		{"/auth/invites/me", http.MethodGet},
+		{"/auth/invites/redeem", http.MethodPost},
 	} {
 		item := api.OpenAPI().Paths[want.path]
 		if item == nil {
@@ -91,13 +93,13 @@ func TestModule_ZeroValueDescribesOperations(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	if _, err := New(nil, testConfig("production", fullUsosCredentials()), nil, nil); err != nil {
+	if _, err := New(nil, testConfig("production", fullUsosCredentials()), nil, nil, nil); err != nil {
 		t.Fatalf("expected no error with full credentials, got: %v", err)
 	}
 
 	creds := fullUsosCredentials()
 	delete(creds, "umcs")
-	if _, err := New(nil, testConfig("production", creds), nil, nil); err == nil {
+	if _, err := New(nil, testConfig("production", creds), nil, nil, nil); err == nil {
 		t.Error("expected an error for missing umcs credentials outside development, got nil")
 	}
 }

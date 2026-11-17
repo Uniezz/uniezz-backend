@@ -23,7 +23,7 @@ type Module struct {
 	mobileRedirectURL string
 }
 
-func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles ProfileInitializer) (Module, error) {
+func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles ProfileInitializer, referrals ReferralRewarder) (Module, error) {
 	clients, err := newUsosClients(cfg)
 	if err != nil {
 		return Module{}, err
@@ -33,6 +33,7 @@ func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles Prof
 	sessions := NewSessionRepository(db)
 	logins := newLogins(db, NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
 	logins.profiles = profiles
+	logins.referrals = referrals
 
 	return Module{
 		logins: logins,
@@ -60,6 +61,7 @@ func (m Module) Register(api huma.API) {
 	sessions := &sessionHandler{logins: m.logins}
 	universities := &universitiesHandler{}
 	otp := &otpHandler{otp: m.otp, logins: m.logins}
+	invites := &inviteCodeHandler{auth: m}
 
 	huma.Register(api, usosStartOperation, usos.start)
 	huma.Register(api, usosCallbackOperation, usos.callback)
@@ -67,6 +69,8 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, universitiesOperation, universities.list)
 	huma.Register(api, otpRequestOperation, otp.request)
 	huma.Register(api, otpVerifyOperation, otp.verify)
+	huma.Register(api, getMyInviteCodeOperation, invites.getMyInviteCode)
+	huma.Register(api, redeemInviteOperation, invites.redeemInvite)
 }
 
 func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {

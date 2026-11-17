@@ -18,7 +18,7 @@ const (
 func (m Module) ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
 	switch reportTarget(targetType) {
 	case reportTargetCourse:
-		row, err := m.courses.get(ctx, id)
+		row, err := m.courses.get(ctx, uuid.Nil, id)
 		if err != nil {
 			return uuid.Nil, nil, err
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -26,9 +27,10 @@ const (
 )
 
 var (
-	_ mediaService = media.Module{}
-	_ forgetter    = feed.Module{}
-	_ forgetter    = study.Module{}
+	_ mediaService  = media.Module{}
+	_ forgetter     = feed.Module{}
+	_ forgetter     = study.Module{}
+	_ rewardService = rewards.Module{}
 )
 
 type mediaService interface {
@@ -38,6 +40,11 @@ type mediaService interface {
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 	Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error)
 	ForgetUser(ctx context.Context, userID uuid.UUID) error
+}
+
+type rewardService interface {
+	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
+	Balance(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
 type forgetter interface {
@@ -51,11 +58,12 @@ type Module struct {
 	media      mediaService
 	feed       forgetter
 	study      forgetter
+	rewards    rewardService
 	jobs       *jobs.Runner
 	now        func() time.Time
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule forgetter, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule forgetter, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -64,6 +72,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule f
 		media:      mediaModule,
 		feed:       feedModule,
 		study:      studyModule,
+		rewards:    rewardsModule,
 		jobs:       runner,
 		now:        time.Now,
 	}

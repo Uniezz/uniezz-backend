@@ -54,7 +54,7 @@ func newTestEnv(t *testing.T) *testEnv {
 			usos[string(u.ID)] = config.UsosCredentials{BaseURL: "https://usos.test", ConsumerKey: "key", ConsumerSecret: "secret"}
 		}
 	}
-	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil)
+	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
 	}
@@ -200,6 +200,11 @@ func (f *fakeMedia) MarkDeleting(ctx context.Context, mediaID uuid.UUID) error {
 		return media.ErrNotFound
 	}
 	return nil
+}
+
+func (f *fakeMedia) MarkDeletingMany(ctx context.Context, mediaIDs []uuid.UUID) error {
+	_, err := database.New(f.pool).Conn(ctx).Exec(ctx, "UPDATE media SET status = 'deleting' WHERE id = ANY($1) AND status = 'ready'", mediaIDs)
+	return err
 }
 
 func (f *fakeMedia) Delete(ctx context.Context, mediaID uuid.UUID) error {

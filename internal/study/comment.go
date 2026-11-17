@@ -53,7 +53,7 @@ func (m Module) listComments(ctx context.Context, q commentQuery) ([]CourseComme
 	if err != nil {
 		return nil, nil, err
 	}
-	if _, err := m.courses.get(ctx, q.CourseID); err != nil {
+	if _, err := m.courses.get(ctx, q.ViewerID, q.CourseID); err != nil {
 		return nil, nil, err
 	}
 	rows, err := m.comments.list(ctx, filter)

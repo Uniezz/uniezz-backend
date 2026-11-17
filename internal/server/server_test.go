@@ -67,7 +67,7 @@ func TestModules_OnlyAuthRoutesArePublic(t *testing.T) {
 			if op == nil {
 				continue
 			}
-			public := strings.HasPrefix(path, "/auth/")
+			public := strings.HasPrefix(path, "/auth/") && !strings.HasPrefix(path, "/auth/invites/")
 			if hasBearer := len(op.Security) > 0; hasBearer == public {
 				t.Errorf("%s %s: public=%v but security=%v", op.Method, path, public, op.Security)
 			}

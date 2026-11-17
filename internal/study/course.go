@@ -5,6 +5,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -89,6 +90,7 @@ type courseQuery struct {
 	Faculty      string
 	Subject      string
 	Semester     int
+	Search       string
 	Cursor       string
 	Limit        int
 }
@@ -110,15 +112,21 @@ func (q courseQuery) filter() (courseFilter, error) {
 	if err != nil {
 		return courseFilter{}, err
 	}
+	words, err := text.SearchWords(q.Search)
+	if err != nil {
+		return courseFilter{}, ErrInvalidInput
+	}
 	after, err := decodePageCursor(q.Cursor)
 	if err != nil {
 		return courseFilter{}, err
 	}
 	return courseFilter{
+		ViewerID:     q.ViewerID,
 		UniversityID: q.UniversityID,
 		Faculty:      faculty,
 		Subject:      subject,
 		Semester:     q.Semester,
+		Words:        words,
 		After:        after,
 		Limit:        q.Limit + 1,
 	}, nil
@@ -146,7 +154,7 @@ func (m Module) createCourse(ctx context.Context, authorID uuid.UUID, change cou
 }
 
 func (m Module) getCourse(ctx context.Context, viewerID, id uuid.UUID) (*Course, error) {
-	row, err := m.courses.get(ctx, id)
+	row, err := m.courses.get(ctx, viewerID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +195,26 @@ func (m Module) updateCourse(ctx context.Context, userID, id uuid.UUID, change c
 	}
 	course := toCourse(*row, userID)
 	return &course, nil
+}
+
+func (m Module) deleteCourse(ctx context.Context, userID, id uuid.UUID) error {
+	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+		found, err := m.courses.lockOwned(ctx, id, userID)
+		if err != nil || !found {
+			return err
+		}
+		mediaIDs, err := m.files.deleteByCourse(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := m.media.MarkDeletingMany(ctx, mediaIDs); err != nil {
+			return err
+		}
+		if err := m.comments.deleteByCourse(ctx, id); err != nil {
+			return err
+		}
+		return m.courses.delete(ctx, id)
+	})
 }
 
 func (m Module) rateCourse(ctx context.Context, userID, id uuid.UUID, rating int) (*Course, error) {
@@ -247,5 +275,6 @@ func toCourse(row courseRow, viewerID uuid.UUID) Course {
 		RatingAverage: ratingAverage(row.RatingSum, row.RatingCount),
 		RatingCount:   row.RatingCount,
 		IsMine:        row.AuthorID != nil && *row.AuthorID == viewerID,
+		MyRating:      row.MyRating,
 	}
 }

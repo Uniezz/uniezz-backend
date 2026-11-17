@@ -29,9 +29,9 @@ Tokens, OTP and login codes, cookies, `Authorization` headers, USOS consumer sec
 
 The tests in `internal/telemetry` check each output against a set of representative secrets.
 
-## Staging configuration (Doppler `stg`)
+## Configuration (Doppler `stg` and `prd`)
 
-In Sentry: **Settings → Projects → uniezz-api → Client Keys (DSN)**. Copy the DSN, then open the **OpenTelemetry** tab and copy the complete traces and logs URLs and the auth header. The URLs already end in `/v1/traces` and `/v1/logs`; use them as they are.
+Staging and production report to the same Sentry project and are told apart by environment. In Sentry: **Settings → Projects → uniezz-api → Client Keys (DSN)**. Copy the DSN, then open the **OpenTelemetry** tab and copy the complete traces and logs URLs and the auth header. The URLs already end in `/v1/traces` and `/v1/logs`; use them as they are.
 
 | Variable | Value |
 | -------- | ----- |
@@ -43,10 +43,10 @@ In Sentry: **Settings → Projects → uniezz-api → Client Keys (DSN)**. Copy 
 | `OTEL_SERVICE_NAME` | `uniezz-api` |
 | `OTEL_TRACES_SAMPLER` | `parentbased_traceidratio` |
 | `OTEL_TRACES_SAMPLER_ARG` | `1.0` while verifying, then see [Sampling](#sampling-and-quotas) |
-| `SENTRY_ENVIRONMENT` | Leave unset: it defaults to `ENV` (`staging`) |
+| `SENTRY_ENVIRONMENT` | Leave unset: it defaults to `ENV` (`staging`, `production`) |
 | `SENTRY_RELEASE` | Leave unset: it defaults to the build SHA, the same as `service.version` |
 
-The deploy job writes the whole `stg` config to the server's `.env`, so the next deploy picks the values up. To apply a change without new code, re-run the latest **Deploy staging** workflow.
+The deploy job writes the whole config to the server's `.env`, so the next deploy picks the values up. To apply a change without new code, re-run the latest **Deploy staging** or **Deploy production** workflow.
 
 Doppler `dev` has none of these, so telemetry stays off locally.
 
@@ -60,7 +60,7 @@ A request trace is about 1 server span plus one span per query, usually 2–6 sp
 
 The free Developer plan includes per month 5k errors, 5M spans, 5 GB of logs and one uptime monitor, with 30 days of retention. It cannot be charged: once a quota is used up, Sentry drops new data of that kind until the month resets. Check the current numbers in **Settings → Subscription / Usage**.
 
-At about 5 spans per request, 5M spans cover about 1M traced requests per month, so staging can keep `1.0`. Lower the rate once traffic gets close to the span quota; otherwise traces stop for the rest of the month.
+At about 5 spans per request, 5M spans cover about 1M traced requests per month, shared by staging and production, so both can keep `1.0` for now. Lower the rate once traffic gets close to the span quota; otherwise traces stop for the rest of the month.
 
 ## Sentry setup (no code)
 
@@ -68,26 +68,28 @@ At about 5 spans per request, 5M spans cover about 1M traced requests per month,
 
 **Alerts → Create Alert → Uptime Monitor** (in newer UIs, **Monitors → Uptime**):
 
-- URL `https://api-stg.uniezz.pl/healthz/ready`, method `GET`, interval 1 minute
+- URL `https://api.uniezz.pl/healthz/ready`, method `GET`, interval 1 minute (the free plan has one monitor, so it watches production)
 - Expected: HTTP 200 (`/healthz/ready` answers 503 while shutting down or without a database)
-- Environment `staging`; notify on downtime and on recovery
+- Environment `production`; notify on downtime and on recovery
 
-### Alerts
+### Email alerts
 
-On the free Developer plan, alerts are delivered by email. Slack needs a plan that supports the Slack integration (Team or above), which is a separate decision; do not upgrade silently.
+On the free Developer plan, Sentry delivers alerts by email only. Slack needs the Team plan or above; do not upgrade silently.
 
-- **Issue alert**: a new issue is created, environment `staging` → email (or `#alerts` on Slack once available). This covers unexpected 5xx and panics.
-- **Uptime**: down and recovered → email (or `#alerts`).
-- **Error log spikes**, if the plan offers log alerts: count of logs with `severity:error` over 5 minutes above a threshold → email (or `#alerts`).
+- **Issue alert**: a new issue is created, environment `production` → email.
+- **Uptime**: down and recovered → email.
 
-### Slack (when the plan supports it)
+## Telegram alerts
 
-1. **Settings → Integrations → Slack**, connect the workspace, then point the alerts above at `#alerts`.
-2. Independently of Sentry, the GitHub app for Slack reports failed CI on `main` and failed staging deploys. In `#alerts`:
+Production posts unexpected errors to the team Telegram chat, without Sentry and without a paid plan. Deploy results go to the same chat from the deploy workflows.
 
-   ```
-   /github subscribe Uniezz/uniezz-backend workflows:{event:"push" branch:"main","release/*"}
-   ```
+- **What alerts:** every `ReportError` and every recovered panic: 5xx responses, USOS login failures and failed background jobs. 4xx responses never alert.
+- **What a message holds:** environment, operation, route, version and request ID. The error text is scrubbed like Sentry events and cut to 300 characters; search the request ID in Sentry or `docker logs` for the rest.
+- **Noise limits:**
+  - one message per operation and route every 10 minutes; the next message says how many were held back;
+  - at most 20 messages an hour;
+  - alerts that do not fit in the queue are counted and dropped, so a request never waits for Telegram.
+- **Configuration:** set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALERT_CHAT_ID` in Doppler `prd` only. Without the chat ID, alerts are off, so staging and local runs post nothing.
 
 ## Verifying on staging
 
@@ -96,5 +98,5 @@ On the free Developer plan, alerts are delivered by email. Slack needs a plan th
 3. In **Explore → Logs**, each request has one record with the fields above; it links to its trace.
 4. In **Explore → Traces**, the request shows a server span with its database query spans.
 5. An unexpected error creates one issue linked to its trace. To induce one without code, start a login at a university whose USOS key is wrong: `/auth/usos/start` fails upstream, the browser is redirected with `error=provider_unavailable`, and the failure is reported. Panics are covered by the tests in `internal/telemetry`, which also check that the server keeps serving.
-6. `docker logs uniezz-stg-api-1` on the server still shows JSON lines.
+6. `docker logs uniezz-stg-api-1` (or `uniezz-prd-api-1`) on the server still shows JSON lines.
 7. Lower `OTEL_TRACES_SAMPLER_ARG` and re-run the deploy.

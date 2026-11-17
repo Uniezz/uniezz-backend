@@ -21,7 +21,7 @@ type Profile struct {
 	FirstName    *string     `json:"firstName" nullable:"true" example:"Jan"`
 	LastName     *string     `json:"lastName" nullable:"true" example:"Kowalski"`
 	Gender       *Gender     `json:"gender" nullable:"true" enum:"male,female" doc:"Set once; null until set. Visible to other students, with no privacy toggle."`
-	Language     Language    `json:"language" enum:"en,pl,uk,ru" doc:"Interface language; defaults to pl"`
+	Language     Language    `json:"language" enum:"en,pl,uk,ru,be,de,es" doc:"Interface language; defaults to pl"`
 	UniversityID string      `json:"universityId" example:"umcs"`
 	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
 	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
@@ -30,6 +30,7 @@ type Profile struct {
 	SongURL      *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
 	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
 	Privacy      Privacy     `json:"privacy"`
+	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
 	CreatedAt    time.Time   `json:"createdAt"`
 }
 
@@ -64,7 +65,7 @@ type updateMeInput struct {
 		FirstName     *string    `json:"firstName,omitempty" minLength:"1" maxLength:"100"`
 		LastName      *string    `json:"lastName,omitempty" minLength:"1" maxLength:"100"`
 		Gender        *Gender    `json:"gender,omitempty" enum:"male,female" doc:"Can be set only once: when a gender is already saved, returns 400 gender_immutable"`
-		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru"`
+		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru,be,de,es"`
 		Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
 		SongURL       *string    `json:"songUrl,omitempty" maxLength:"2000" doc:"http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged."`
 		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
@@ -75,7 +76,10 @@ type updateMeInput struct {
 }
 
 type updateMeOutput struct {
-	Body Profile
+	Body struct {
+		Profile
+		CoinsEarned int `json:"coinsEarned" minimum:"0" doc:"Uniezz coins this request paid you, daily quest reward included; 0 when it paid nothing" example:"1"`
+	}
 }
 
 var updateMeOperation = auth.Authenticated(huma.Operation{
@@ -83,7 +87,7 @@ var updateMeOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/profile/me",
 	Summary:     "Update the logged-in student's profile",
-	Description: "Changes only the fields that are present. Returns the updated profile.",
+	Description: "Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -94,7 +98,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		return nil, httpapi.Unauthorized()
 	}
 
-	err := h.profile.updateProfile(ctx, userID, profileChange{
+	earned, err := h.profile.updateProfile(ctx, userID, profileChange{
 		FirstName:     in.Body.FirstName,
 		LastName:      in.Body.LastName,
 		Gender:        in.Body.Gender,
@@ -114,7 +118,10 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
-	return &updateMeOutput{Body: *p}, nil
+	out := &updateMeOutput{}
+	out.Body.Profile = *p
+	out.Body.CoinsEarned = earned
+	return out, nil
 }
 
 var deleteMeOperation = auth.Authenticated(huma.Operation{
