@@ -9,51 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestIsModerator(t *testing.T) {
-	e := newTestEnv(t)
-	ctx := context.Background()
-
-	grant := func(t *testing.T, u testUser) {
-		t.Helper()
-		if _, err := e.pool.Exec(ctx, "INSERT INTO moderators (user_id) VALUES ($1)", u.id); err != nil {
-			t.Fatalf("grant moderator: %v", err)
-		}
-	}
-	check := func(t *testing.T, u testUser) bool {
-		t.Helper()
-		ok, err := e.module.reports.isModerator(ctx, u.id)
-		if err != nil {
-			t.Fatalf("isModerator failed: %v", err)
-		}
-		return ok
-	}
-
-	t.Run("a student is not a moderator", func(t *testing.T) {
-		if check(t, e.user(t)) {
-			t.Error("expected a student without a grant not to be a moderator")
-		}
-	})
-
-	t.Run("a granted user is a moderator", func(t *testing.T) {
-		mod := e.user(t)
-		grant(t, mod)
-		if !check(t, mod) {
-			t.Error("expected a granted user to be a moderator")
-		}
-	})
-
-	t.Run("a deleted moderator loses access", func(t *testing.T) {
-		mod := e.user(t)
-		grant(t, mod)
-		if _, err := e.pool.Exec(ctx, "UPDATE users SET deleted_at = NOW(), email = NULL WHERE id = $1", mod.id); err != nil {
-			t.Fatal(err)
-		}
-		if check(t, mod) {
-			t.Error("expected a soft-deleted moderator not to be a moderator")
-		}
-	})
-}
-
 func TestListPending(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()

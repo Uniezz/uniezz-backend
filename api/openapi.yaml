@@ -4089,7 +4089,7 @@ paths:
         - media
   /moderation/reports:
     get:
-      description: Pending reports about posts, comments, students, exam files and courses, newest first. Moderators only; everyone else gets 403.
+      description: Pending reports about posts, comments, students, exam files and courses, newest first. Moderators and admins only; everyone else gets 403.
       operationId: listPendingReports
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -4149,7 +4149,9 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
           description: Internal Server Error
       security:
-        - bearer: []
+        - bearer:
+            - moderator
+            - admin
       summary: List pending reports for moderators
       tags:
         - moderation

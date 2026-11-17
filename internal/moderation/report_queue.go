@@ -15,15 +15,7 @@ type QueuedReport struct {
 	Snapshot       map[string]any `json:"snapshot" doc:"Copy of the reported content at the time of the report"`
 }
 
-func (m Module) listQueue(ctx context.Context, moderatorID uuid.UUID, cursor string, limit int) ([]QueuedReport, *string, error) {
-	ok, err := m.reports.isModerator(ctx, moderatorID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !ok {
-		return nil, nil, ErrForbidden
-	}
-
+func (m Module) listQueue(ctx context.Context, cursor string, limit int) ([]QueuedReport, *string, error) {
 	var after *queueCursor
 	if cursor != "" {
 		after = &queueCursor{}

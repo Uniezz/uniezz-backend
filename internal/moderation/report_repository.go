@@ -103,18 +103,6 @@ func (r *reportRepository) anonymiseForgotten(ctx context.Context, age time.Dura
 	return nil
 }
 
-func (r *reportRepository) isModerator(ctx context.Context, userID uuid.UUID) (bool, error) {
-	var found bool
-	err := r.db.Conn(ctx).QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM moderators m JOIN users u ON u.id = m.user_id
-			WHERE m.user_id = $1 AND u.deleted_at IS NULL)`, userID).Scan(&found)
-	if err != nil {
-		return false, fmt.Errorf("check moderator: %w", err)
-	}
-	return found, nil
-}
-
 func (r *reportRepository) listPending(ctx context.Context, after *queueCursor, limit int) ([]queueRow, error) {
 	args := database.Args{}
 	where := "status = 'pending'"

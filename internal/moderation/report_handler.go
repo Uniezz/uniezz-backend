@@ -93,22 +93,18 @@ type listQueueOutput struct {
 	}
 }
 
-var listQueueOperation = auth.Authenticated(huma.Operation{
+var listQueueOperation = auth.Authorized(huma.Operation{
 	OperationID: "listPendingReports",
 	Method:      http.MethodGet,
 	Path:        "/moderation/reports",
 	Summary:     "List pending reports for moderators",
-	Description: "Pending reports about posts, comments, students, exam files and courses, newest first. Moderators only; everyone else gets 403.",
+	Description: "Pending reports about posts, comments, students, exam files and courses, newest first. Moderators and admins only; everyone else gets 403.",
 	Tags:        []string{"moderation"},
-	Errors:      []int{http.StatusBadRequest, http.StatusForbidden},
-})
+	Errors:      []int{http.StatusBadRequest},
+}, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *reportHandler) listQueue(ctx context.Context, in *listQueueInput) (*listQueueOutput, error) {
-	userID, ok := auth.UserIDFrom(ctx)
-	if !ok {
-		return nil, httpapi.Unauthorized()
-	}
-	items, next, err := h.moderation.listQueue(ctx, userID, in.Cursor, in.Limit)
+	items, next, err := h.moderation.listQueue(ctx, in.Cursor, in.Limit)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/google/uuid"
 )
 
@@ -15,7 +16,7 @@ func TestListQueueHandler(t *testing.T) {
 
 	reporter, author := e.user(t), e.user(t)
 	moderator, student := e.user(t), e.user(t)
-	if _, err := e.pool.Exec(ctx, "INSERT INTO moderators (user_id) VALUES ($1)", moderator.id); err != nil {
+	if _, err := e.pool.Exec(ctx, "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", moderator.id, auth.RoleModerator); err != nil {
 		t.Fatalf("grant moderator: %v", err)
 	}
 
@@ -29,6 +30,12 @@ func TestListQueueHandler(t *testing.T) {
 		t.Fatalf("insert report: %v", err)
 	}
 	t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM reports WHERE id = $1", reportID) })
+	if _, err := e.pool.Exec(ctx, `
+		INSERT INTO reports (reporter_id, target_type, target_id, target_author_id, reason, snapshot, created_at)
+		VALUES ($1, 'post', $2, $3, 'spam', '{}', $4)`,
+		reporter.id, uuid.New(), author.id, time.Date(2998, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("insert older report: %v", err)
+	}
 
 	t.Run("a moderator sees the pending report first, without the reporter", func(t *testing.T) {
 		rec := e.api.Get("/moderation/reports?limit=1", moderator.bearer)
