@@ -51,7 +51,7 @@ func newGuardTestAPI(t *testing.T, sessions sessionStore) humatest.TestAPI {
 			UserID string `json:"userId"`
 		}
 	}
-	huma.Register(api, Protected(huma.Operation{Method: http.MethodGet, Path: "/protected"}),
+	huma.Register(api, Authenticated(huma.Operation{Method: http.MethodGet, Path: "/protected"}),
 		func(ctx context.Context, _ *struct{}) (*whoami, error) {
 			out := &whoami{}
 			id, ok := UserIDFrom(ctx)

@@ -105,14 +105,14 @@ Export only `Module`, `New`, sentinel errors, response types, enum types and the
 
 ## HTTP API
 
-- Every operation is a literal `var xOperation = auth.Protected(huma.Operation{…})` (drop `auth.Protected` only for public operations). Set its fields in this order: `OperationID`, `Method`, `Path`, `Summary`, `Description`, `Tags`, `DefaultStatus`, `Errors`.
+- Every operation is a literal `var xOperation = auth.Authenticated(huma.Operation{…})` (drop `auth.Authenticated` only for public operations). Set its fields in this order: `OperationID`, `Method`, `Path`, `Summary`, `Description`, `Tags`, `DefaultStatus`, `Errors`.
 - `OperationID` is camelCase, starts with a verb, and uses `My` for the caller's own resource (`getMyProfile`, `deleteMyAvatar`).
 - Methods: `POST` creates, `PUT` replaces every field or sets an idempotent toggle, `PATCH` updates the fields present, and `DELETE` removes or unsets. A toggle is `PUT` and `DELETE` on the same path. Paths use plural nouns, `/<resource>/me` for the caller's own data, and `{id}` as the path parameter (`ID uuid.UUID \`path:"id" format:"uuid"\``).
 - Every writable resource has a `GET`, and its `PATCH` returns the updated resource.
 - `Summary` is a short third-person phrase with no final period ("Get the logged-in student's profile") that names every kind of target the operation accepts. `Description` gives the client-visible behaviour (null meanings, idempotency, limits, what is left out) in at most three sentences, with no internals.
 - `Tags` is the module name in lowercase, and the first path segment matches it.
 - A create sets `DefaultStatus: http.StatusCreated`. An operation without a body sets `DefaultStatus: http.StatusNoContent`, returns `(*struct{}, error)` and ends with `return nil, nil`.
-- `Errors` lists every 4xx status the operation can return, except 401, which `auth.Protected` adds.
+- `Errors` lists every 4xx status the operation can return, except 401, which `auth.Authenticated` adds.
 - JSON names are camelCase and mean the same thing in every response (`universityId`, `avatarUrl`).
 - Field tags:
   - every `uuid.UUID` gets `format:"uuid"`;

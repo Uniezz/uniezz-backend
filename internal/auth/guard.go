@@ -109,7 +109,7 @@ func (g *guard) authenticate(ctx context.Context, header string) (principal, err
 
 var bearerSecurity = []map[string][]string{{httpapi.BearerAuth: {}}}
 
-func Protected(op huma.Operation) huma.Operation {
+func Authenticated(op huma.Operation) huma.Operation {
 	op.Security = bearerSecurity
 	if !slices.Contains(op.Errors, http.StatusUnauthorized) {
 		op.Errors = append(slices.Clone(op.Errors), http.StatusUnauthorized)
@@ -118,7 +118,7 @@ func Protected(op huma.Operation) huma.Operation {
 }
 
 func Authorized(op huma.Operation, roles ...Role) huma.Operation {
-	op = Protected(op)
+	op = Authenticated(op)
 	scopes := make([]string, 0, len(roles))
 	for _, role := range roles {
 		scopes = append(scopes, string(role))

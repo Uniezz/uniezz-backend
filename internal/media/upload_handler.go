@@ -25,7 +25,7 @@ type createUploadOutput struct {
 	Body Upload
 }
 
-var createUploadOperation = auth.Protected(huma.Operation{
+var createUploadOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createMediaUpload",
 	Method:        http.MethodPost,
 	Path:          "/media/uploads",

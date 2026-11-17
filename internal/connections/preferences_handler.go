@@ -23,7 +23,7 @@ type getPreferencesOutput struct {
 	Body Preferences
 }
 
-var getPreferencesOperation = auth.Protected(huma.Operation{
+var getPreferencesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getMyConnectionPreferences",
 	Method:      http.MethodGet,
 	Path:        "/connections/me",
@@ -56,7 +56,7 @@ type savePreferencesOutput struct {
 	Body Preferences
 }
 
-var savePreferencesOperation = auth.Protected(huma.Operation{
+var savePreferencesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "updateMyConnectionPreferences",
 	Method:      http.MethodPatch,
 	Path:        "/connections/me",

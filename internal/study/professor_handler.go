@@ -35,7 +35,7 @@ type listProfessorsOutput struct {
 	}
 }
 
-var listProfessorsOperation = auth.Protected(huma.Operation{
+var listProfessorsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listProfessors",
 	Method:      http.MethodGet,
 	Path:        "/study/professors",
@@ -72,7 +72,7 @@ type getProfessorOutput struct {
 	Body Professor
 }
 
-var getProfessorOperation = auth.Protected(huma.Operation{
+var getProfessorOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getProfessor",
 	Method:      http.MethodGet,
 	Path:        "/study/professors/{id}",
@@ -105,7 +105,7 @@ type rateProfessorOutput struct {
 	Body Professor
 }
 
-var rateProfessorOperation = auth.Protected(huma.Operation{
+var rateProfessorOperation = auth.Authenticated(huma.Operation{
 	OperationID: "rateProfessor",
 	Method:      http.MethodPut,
 	Path:        "/study/professors/{id}/rating",

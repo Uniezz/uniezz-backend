@@ -24,7 +24,7 @@ type listEntriesOutput struct {
 	}
 }
 
-var listEntriesOperation = auth.Protected(huma.Operation{
+var listEntriesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listFaqEntries",
 	Method:      http.MethodGet,
 	Path:        "/faq",
@@ -34,7 +34,7 @@ var listEntriesOperation = auth.Protected(huma.Operation{
 	Errors:      []int{http.StatusBadRequest},
 })
 
-var publishEntryOperation = auth.Protected(huma.Operation{
+var publishEntryOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "publishFaqEntry",
 	Method:        http.MethodPost,
 	Path:          "/faq",
@@ -79,7 +79,7 @@ type createProposalOutput struct {
 	Body Entry
 }
 
-var createProposalOperation = auth.Protected(huma.Operation{
+var createProposalOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createFaqProposal",
 	Method:        http.MethodPost,
 	Path:          "/faq/proposals",
@@ -102,7 +102,7 @@ func (h *entryHandler) createProposal(ctx context.Context, in *createProposalInp
 	return &createProposalOutput{Body: *entry}, nil
 }
 
-var listProposalsOperation = auth.Protected(huma.Operation{
+var listProposalsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listMyFaqProposals",
 	Method:      http.MethodGet,
 	Path:        "/faq/proposals",

@@ -59,7 +59,7 @@ type createPostOutput struct {
 	Body     Post
 }
 
-var createPostOperation = auth.Protected(huma.Operation{
+var createPostOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createFeedPost",
 	Method:        http.MethodPost,
 	Path:          "/feed/posts",
@@ -128,7 +128,7 @@ type listPostsOutput struct {
 	}
 }
 
-var listPostsOperation = auth.Protected(huma.Operation{
+var listPostsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listFeedPosts",
 	Method:      http.MethodGet,
 	Path:        "/feed/posts",
@@ -158,7 +158,7 @@ func (h *postHandler) listPosts(ctx context.Context, in *listPostsInput) (*listP
 }
 
 var (
-	listSavedPostsOperation = auth.Protected(huma.Operation{
+	listSavedPostsOperation = auth.Authenticated(huma.Operation{
 		OperationID: "listSavedFeedPosts",
 		Method:      http.MethodGet,
 		Path:        "/feed/posts/saved",
@@ -167,7 +167,7 @@ var (
 		Tags:        []string{"feed"},
 		Errors:      []int{http.StatusBadRequest},
 	})
-	listLikedPostsOperation = auth.Protected(huma.Operation{
+	listLikedPostsOperation = auth.Authenticated(huma.Operation{
 		OperationID: "listLikedFeedPosts",
 		Method:      http.MethodGet,
 		Path:        "/feed/posts/liked",
@@ -214,7 +214,7 @@ type saveOutput struct {
 }
 
 var (
-	savePostOperation = auth.Protected(huma.Operation{
+	savePostOperation = auth.Authenticated(huma.Operation{
 		OperationID: "saveFeedPost",
 		Method:      http.MethodPut,
 		Path:        "/feed/posts/{id}/save",
@@ -223,7 +223,7 @@ var (
 		Tags:        []string{"feed"},
 		Errors:      []int{http.StatusNotFound},
 	})
-	unsavePostOperation = auth.Protected(huma.Operation{
+	unsavePostOperation = auth.Authenticated(huma.Operation{
 		OperationID: "unsaveFeedPost",
 		Method:      http.MethodDelete,
 		Path:        "/feed/posts/{id}/save",
@@ -268,7 +268,7 @@ type postOutput struct {
 	Body Post
 }
 
-var getPostOperation = auth.Protected(huma.Operation{
+var getPostOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getFeedPost",
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/{id}",
@@ -300,7 +300,7 @@ type updatePostInput struct {
 	}
 }
 
-var updatePostOperation = auth.Protected(huma.Operation{
+var updatePostOperation = auth.Authenticated(huma.Operation{
 	OperationID: "updateFeedPost",
 	Method:      http.MethodPatch,
 	Path:        "/feed/posts/{id}",
@@ -328,7 +328,7 @@ func (h *postHandler) updatePost(ctx context.Context, in *updatePostInput) (*pos
 	return &postOutput{Body: *post}, nil
 }
 
-var deletePostOperation = auth.Protected(huma.Operation{
+var deletePostOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteFeedPost",
 	Method:        http.MethodDelete,
 	Path:          "/feed/posts/{id}",
@@ -365,7 +365,7 @@ type featuredPostsOutput struct {
 	}
 }
 
-var featuredPostsOperation = auth.Protected(huma.Operation{
+var featuredPostsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listFeaturedFeedPosts",
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/featured",
@@ -402,7 +402,7 @@ type adjacentPostsOutput struct {
 	Body PostNavigation
 }
 
-var adjacentPostsOperation = auth.Protected(huma.Operation{
+var adjacentPostsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getFeedPostNavigation",
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/{id}/navigation",

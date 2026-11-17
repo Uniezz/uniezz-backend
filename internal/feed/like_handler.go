@@ -28,7 +28,7 @@ type likeOutput struct {
 }
 
 func likeOperation(id, method, path, summary string) huma.Operation {
-	return auth.Protected(huma.Operation{
+	return auth.Authenticated(huma.Operation{
 		OperationID: id,
 		Method:      method,
 		Path:        path,

@@ -37,7 +37,7 @@ type getMeOutput struct {
 	Body Profile
 }
 
-var getMeOperation = auth.Protected(huma.Operation{
+var getMeOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getMyProfile",
 	Method:      http.MethodGet,
 	Path:        "/profile/me",
@@ -78,7 +78,7 @@ type updateMeOutput struct {
 	Body Profile
 }
 
-var updateMeOperation = auth.Protected(huma.Operation{
+var updateMeOperation = auth.Authenticated(huma.Operation{
 	OperationID: "updateMyProfile",
 	Method:      http.MethodPatch,
 	Path:        "/profile/me",
@@ -117,7 +117,7 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	return &updateMeOutput{Body: *p}, nil
 }
 
-var deleteMeOperation = auth.Protected(huma.Operation{
+var deleteMeOperation = auth.Authenticated(huma.Operation{
 	OperationID: "deleteMyProfile",
 	Method:      http.MethodDelete,
 	Path:        "/profile/me",
@@ -143,7 +143,7 @@ func (h *profileHandler) deleteMe(ctx context.Context, _ *struct{}) (*struct{}, 
 	return nil, nil
 }
 
-var deleteAvatarOperation = auth.Protected(huma.Operation{
+var deleteAvatarOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteMyAvatar",
 	Method:        http.MethodDelete,
 	Path:          "/profile/avatar",
@@ -165,7 +165,7 @@ func (h *profileHandler) deleteAvatar(ctx context.Context, _ *struct{}) (*struct
 	return nil, nil
 }
 
-var deleteBannerOperation = auth.Protected(huma.Operation{
+var deleteBannerOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteMyBanner",
 	Method:        http.MethodDelete,
 	Path:          "/profile/banner",

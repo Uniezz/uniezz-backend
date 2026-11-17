@@ -46,7 +46,7 @@ type discoverOutput struct {
 	}
 }
 
-var discoverOperation = auth.Protected(huma.Operation{
+var discoverOperation = auth.Authenticated(huma.Operation{
 	OperationID: "discoverConnections",
 	Method:      http.MethodGet,
 	Path:        "/connections/discover",
@@ -93,7 +93,7 @@ type actOnCandidateOutput struct {
 	Body ActionResult
 }
 
-var actOnCandidateOperation = auth.Protected(huma.Operation{
+var actOnCandidateOperation = auth.Authenticated(huma.Operation{
 	OperationID: "actOnCandidate",
 	Method:      http.MethodPut,
 	Path:        "/connections/candidates/{id}",

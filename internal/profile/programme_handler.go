@@ -65,7 +65,7 @@ type listProgrammesOutput struct {
 	}
 }
 
-var listProgrammesOperation = auth.Protected(huma.Operation{
+var listProgrammesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listMyProgrammes",
 	Method:      http.MethodGet,
 	Path:        "/profile/programmes",
@@ -100,7 +100,7 @@ type createProgrammeOutput struct {
 	Body Programme
 }
 
-var createProgrammeOperation = auth.Protected(huma.Operation{
+var createProgrammeOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createMyProgramme",
 	Method:        http.MethodPost,
 	Path:          "/profile/programmes",
@@ -136,7 +136,7 @@ type replaceProgrammeOutput struct {
 	Body Programme
 }
 
-var replaceProgrammeOperation = auth.Protected(huma.Operation{
+var replaceProgrammeOperation = auth.Authenticated(huma.Operation{
 	OperationID: "replaceMyProgramme",
 	Method:      http.MethodPut,
 	Path:        "/profile/programmes/{id}",
@@ -167,7 +167,7 @@ type deleteProgrammeInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-var deleteProgrammeOperation = auth.Protected(huma.Operation{
+var deleteProgrammeOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteMyProgramme",
 	Method:        http.MethodDelete,
 	Path:          "/profile/programmes/{id}",
