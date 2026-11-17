@@ -34,7 +34,7 @@ type addCourseCommentOutput struct {
 	Body CourseComment
 }
 
-var addCourseCommentOperation = auth.Protected(huma.Operation{
+var addCourseCommentOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "addCourseComment",
 	Method:        http.MethodPost,
 	Path:          "/study/courses/{id}/comments",
@@ -70,7 +70,7 @@ type listCourseCommentsOutput struct {
 	}
 }
 
-var listCourseCommentsOperation = auth.Protected(huma.Operation{
+var listCourseCommentsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listCourseComments",
 	Method:      http.MethodGet,
 	Path:        "/study/courses/{id}/comments",
@@ -105,7 +105,7 @@ type deleteCommentInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-var deleteCommentOperation = auth.Protected(huma.Operation{
+var deleteCommentOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteComment",
 	Method:        http.MethodDelete,
 	Path:          "/study/comments/{id}",

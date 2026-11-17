@@ -38,7 +38,7 @@ type addCourseFileOutput struct {
 	Body CourseFile
 }
 
-var addCourseFileOperation = auth.Protected(huma.Operation{
+var addCourseFileOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "addCourseFile",
 	Method:        http.MethodPost,
 	Path:          "/study/courses/{id}/files",
@@ -79,7 +79,7 @@ type listCourseFilesOutput struct {
 	}
 }
 
-var listCourseFilesOperation = auth.Protected(huma.Operation{
+var listCourseFilesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listCourseFiles",
 	Method:      http.MethodGet,
 	Path:        "/study/courses/{id}/files",
@@ -127,7 +127,7 @@ type searchFilesOutput struct {
 	}
 }
 
-var searchFilesOperation = auth.Protected(huma.Operation{
+var searchFilesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "searchFiles",
 	Method:      http.MethodGet,
 	Path:        "/study/files",
@@ -171,7 +171,7 @@ type getFileOutput struct {
 	Body CourseFile
 }
 
-var getFileOperation = auth.Protected(huma.Operation{
+var getFileOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getFile",
 	Method:      http.MethodGet,
 	Path:        "/study/files/{id}",
@@ -198,7 +198,7 @@ type deleteFileInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-var deleteFileOperation = auth.Protected(huma.Operation{
+var deleteFileOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteFile",
 	Method:        http.MethodDelete,
 	Path:          "/study/files/{id}",

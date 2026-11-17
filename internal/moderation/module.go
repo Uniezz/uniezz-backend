@@ -57,6 +57,7 @@ type limiter interface {
 type Module struct {
 	tx         database.Transactor
 	reports    *reportRepository
+	queue      *queueRepository
 	feed       feedTargets
 	profiles   profileTargets
 	candidates candidateTargets
@@ -69,6 +70,7 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 	m := Module{
 		tx:         db,
 		reports:    newReportRepository(db),
+		queue:      newQueueRepository(db),
 		feed:       feedModule,
 		profiles:   profileModule,
 		candidates: candidates,
@@ -88,4 +90,7 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 func (m Module) Register(api huma.API) {
 	reports := &reportHandler{moderation: m}
 	huma.Register(api, createReportOperation, reports.createReport)
+
+	queue := &queueHandler{moderation: m}
+	huma.Register(api, listQueueOperation, queue.listQueue)
 }

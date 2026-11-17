@@ -47,7 +47,7 @@ type createCommentOutput struct {
 	}
 }
 
-var createCommentOperation = auth.Protected(huma.Operation{
+var createCommentOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createFeedComment",
 	Method:        http.MethodPost,
 	Path:          "/feed/posts/{id}/comments",
@@ -94,7 +94,7 @@ type listCommentsOutput struct {
 	}
 }
 
-var listCommentsOperation = auth.Protected(huma.Operation{
+var listCommentsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listFeedComments",
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/{id}/comments",
@@ -120,7 +120,7 @@ func (h *commentHandler) listComments(ctx context.Context, in *listCommentsInput
 	return out, nil
 }
 
-var listRepliesOperation = auth.Protected(huma.Operation{
+var listRepliesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listFeedCommentReplies",
 	Method:      http.MethodGet,
 	Path:        "/feed/comments/{id}/replies",
@@ -157,7 +157,7 @@ type commentOutput struct {
 	Body Comment
 }
 
-var updateCommentOperation = auth.Protected(huma.Operation{
+var updateCommentOperation = auth.Authenticated(huma.Operation{
 	OperationID: "updateFeedComment",
 	Method:      http.MethodPatch,
 	Path:        "/feed/comments/{id}",
@@ -183,7 +183,7 @@ type commentPath struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-var deleteCommentOperation = auth.Protected(huma.Operation{
+var deleteCommentOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteFeedComment",
 	Method:        http.MethodDelete,
 	Path:          "/feed/comments/{id}",

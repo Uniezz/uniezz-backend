@@ -53,7 +53,7 @@ type createReportOutput struct {
 	Body Report
 }
 
-var createReportOperation = auth.Protected(huma.Operation{
+var createReportOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createReport",
 	Method:        http.MethodPost,
 	Path:          "/reports",

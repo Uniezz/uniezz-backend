@@ -123,6 +123,7 @@ func TestReasonEnumListsEveryReason(t *testing.T) {
 		}
 		listed[i] = stringValue
 	}
+
 	slices.Sort(listed)
 
 	var reasons []string

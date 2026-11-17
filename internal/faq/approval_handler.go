@@ -25,7 +25,7 @@ type listPendingProposalsOutput struct {
 	}
 }
 
-var listPendingProposalsOperation = auth.Protected(huma.Operation{
+var listPendingProposalsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listPendingFaqProposals",
 	Method:      http.MethodGet,
 	Path:        "/faq/proposals/pending",
@@ -59,7 +59,7 @@ type approveProposalOutput struct {
 	Body Entry
 }
 
-var approveProposalOperation = auth.Protected(huma.Operation{
+var approveProposalOperation = auth.Authenticated(huma.Operation{
 	OperationID: "approveFaqProposal",
 	Method:      http.MethodPut,
 	Path:        "/faq/proposals/{id}/approval",

@@ -144,3 +144,41 @@ func TestSessionRepository_Integration(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionRepository_GetActiveSessionByHash_Roles(t *testing.T) {
+	pool := setupTestDB(t)
+	ctx := context.Background()
+	repo := NewSessionRepository(database.New(pool))
+
+	session := func(t *testing.T, roles ...Role) *Session {
+		t.Helper()
+		userID := createTestUser(t, pool)
+		for _, role := range roles {
+			if _, err := pool.Exec(ctx, "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", userID, role); err != nil {
+				t.Fatalf("grant role: %v", err)
+			}
+		}
+		hash := GenerateSessionToken().Hash()
+		if _, err := repo.CreateSession(ctx, userID, hash[:], time.Now().Add(time.Hour)); err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		s, err := repo.GetActiveSessionByHash(ctx, hash[:])
+		if err != nil {
+			t.Fatalf("GetActiveSessionByHash failed: %v", err)
+		}
+		return s
+	}
+
+	t.Run("a student has no roles", func(t *testing.T) {
+		if s := session(t); len(s.Roles) != 0 {
+			t.Errorf("expected no roles, got %v", s.Roles)
+		}
+	})
+
+	t.Run("every granted role is loaded with the session", func(t *testing.T) {
+		s := session(t, RoleModerator, RoleAdmin)
+		if len(s.Roles) != 2 || s.Roles[0] != RoleAdmin || s.Roles[1] != RoleModerator {
+			t.Errorf("expected [admin moderator], got %v", s.Roles)
+		}
+	})
+}

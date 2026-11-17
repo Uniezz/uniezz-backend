@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func newGuardTestAPI(t *testing.T, sessions sessionStore) humatest.TestAPI {
 			UserID string `json:"userId"`
 		}
 	}
-	huma.Register(api, Protected(huma.Operation{Method: http.MethodGet, Path: "/protected"}),
+	huma.Register(api, Authenticated(huma.Operation{Method: http.MethodGet, Path: "/protected"}),
 		func(ctx context.Context, _ *struct{}) (*whoami, error) {
 			out := &whoami{}
 			id, ok := UserIDFrom(ctx)
@@ -59,6 +60,10 @@ func newGuardTestAPI(t *testing.T, sessions sessionStore) humatest.TestAPI {
 			}
 			out.Body.UserID = id.String()
 			return out, nil
+		})
+	huma.Register(api, Authorized(huma.Operation{Method: http.MethodGet, Path: "/moderation"}, RoleModerator, RoleAdmin),
+		func(ctx context.Context, _ *struct{}) (*struct{}, error) {
+			return nil, nil
 		})
 	huma.Register(api, huma.Operation{Method: http.MethodGet, Path: "/public"},
 		func(ctx context.Context, _ *struct{}) (*struct{}, error) {
@@ -123,6 +128,59 @@ func TestGuard(t *testing.T) {
 			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+func TestGuard_Roles(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		roles []Role
+		want  int
+	}{
+		{"a student gets 403 on a role-gated operation", nil, http.StatusForbidden},
+		{"a moderator passes", []Role{RoleModerator}, http.StatusNoContent},
+		{"an admin passes when admin is listed", []Role{RoleAdmin}, http.StatusNoContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			token, session := validSession(20 * 24 * time.Hour)
+			session.Roles = tc.roles
+			api := newGuardTestAPI(t, &fakeSessions{session: session})
+
+			rec := api.Get("/moderation", "Authorization: Bearer "+token)
+			if tc.want == http.StatusForbidden {
+				expectJSONError(t, rec, http.StatusForbidden, "forbidden")
+				return
+			}
+			if rec.Code != tc.want {
+				t.Fatalf("expected %d, got %d: %s", tc.want, rec.Code, rec.Body.String())
+			}
+		})
+	}
+
+	t.Run("a role-gated operation without a session gets 401, not 403", func(t *testing.T) {
+		api := newGuardTestAPI(t, &fakeSessions{})
+
+		expectJSONError(t, api.Get("/moderation"), http.StatusUnauthorized, "unauthorized")
+	})
+
+	t.Run("a student keeps access to operations without roles", func(t *testing.T) {
+		token, session := validSession(20 * 24 * time.Hour)
+		api := newGuardTestAPI(t, &fakeSessions{session: session})
+
+		if rec := api.Get("/protected", "Authorization: Bearer "+token); rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestAuthorized(t *testing.T) {
+	op := Authorized(huma.Operation{Errors: []int{http.StatusBadRequest}}, RoleModerator, RoleAdmin)
+
+	if want := []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden}; !slices.Equal(op.Errors, want) {
+		t.Errorf("expected errors %v, got %v", want, op.Errors)
+	}
+	if len(op.Security) != 1 || !slices.Equal(op.Security[0][httpapi.BearerAuth], []string{"moderator", "admin"}) {
+		t.Errorf("expected bearer security with the roles as scopes, got %v", op.Security)
+	}
 }
 
 func TestGuard_SlidingExpiry(t *testing.T) {

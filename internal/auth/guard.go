@@ -21,6 +21,7 @@ type principal struct {
 	userID     uuid.UUID
 	sessionID  uuid.UUID
 	signedInAt time.Time
+	roles      []Role
 }
 
 func UserIDFrom(ctx context.Context) (uuid.UUID, bool) {
@@ -48,7 +49,8 @@ type sessionStore interface {
 
 func (m Module) Guard(api huma.API) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		if !requiresBearer(ctx.Operation()) {
+		roles, ok := bearerRoles(ctx.Operation())
+		if !ok {
 			next(ctx)
 			return
 		}
@@ -59,15 +61,25 @@ func (m Module) Guard(api huma.API) func(huma.Context, func(huma.Context)) {
 			_ = huma.WriteErr(api, ctx, status, "authenticate session", err)
 			return
 		}
+		if err := p.authorize(roles); err != nil {
+			status, _ := errorResponses.Lookup(err)
+			_ = huma.WriteErr(api, ctx, status, "authorize role", err)
+			return
+		}
 		next(huma.WithValue(ctx, principalKey{}, p))
 	}
 }
 
-func requiresBearer(op *huma.Operation) bool {
-	return op != nil && slices.ContainsFunc(op.Security, func(req map[string][]string) bool {
-		_, ok := req[httpapi.BearerAuth]
-		return ok
-	})
+func bearerRoles(op *huma.Operation) ([]string, bool) {
+	if op == nil {
+		return nil, false
+	}
+	for _, req := range op.Security {
+		if roles, ok := req[httpapi.BearerAuth]; ok {
+			return roles, true
+		}
+	}
+	return nil, false
 }
 
 func (g *guard) authenticate(ctx context.Context, header string) (principal, error) {
@@ -92,15 +104,28 @@ func (g *guard) authenticate(ctx context.Context, header string) (principal, err
 		}
 	}
 
-	return principal{userID: s.UserID, sessionID: s.ID, signedInAt: s.CreatedAt}, nil
+	return principal{userID: s.UserID, sessionID: s.ID, signedInAt: s.CreatedAt, roles: s.Roles}, nil
 }
 
 var bearerSecurity = []map[string][]string{{httpapi.BearerAuth: {}}}
 
-func Protected(op huma.Operation) huma.Operation {
+func Authenticated(op huma.Operation) huma.Operation {
 	op.Security = bearerSecurity
 	if !slices.Contains(op.Errors, http.StatusUnauthorized) {
 		op.Errors = append(slices.Clone(op.Errors), http.StatusUnauthorized)
+	}
+	return op
+}
+
+func Authorized(op huma.Operation, roles ...Role) huma.Operation {
+	op = Authenticated(op)
+	scopes := make([]string, 0, len(roles))
+	for _, role := range roles {
+		scopes = append(scopes, string(role))
+	}
+	op.Security = []map[string][]string{{httpapi.BearerAuth: scopes}}
+	if !slices.Contains(op.Errors, http.StatusForbidden) {
+		op.Errors = append(slices.Clone(op.Errors), http.StatusForbidden)
 	}
 	return op
 }

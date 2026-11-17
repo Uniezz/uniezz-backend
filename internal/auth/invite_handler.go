@@ -30,7 +30,7 @@ type redeemInviteOutput struct {
 	}
 }
 
-var getMyInviteCodeOperation = Protected(huma.Operation{
+var getMyInviteCodeOperation = Authenticated(huma.Operation{
 	OperationID:   "getMyInviteCode",
 	Method:        http.MethodGet,
 	Path:          "/auth/invites/me",
@@ -55,7 +55,7 @@ func (h *inviteCodeHandler) getMyInviteCode(ctx context.Context, _ *struct{}) (*
 	return out, nil
 }
 
-var redeemInviteOperation = Protected(huma.Operation{
+var redeemInviteOperation = Authenticated(huma.Operation{
 	OperationID:   "redeemInvite",
 	Method:        http.MethodPost,
 	Path:          "/auth/invites/redeem",
