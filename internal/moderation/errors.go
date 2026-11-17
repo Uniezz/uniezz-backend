@@ -21,4 +21,5 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrSelfReport, Status: http.StatusBadRequest, Code: "self_report"},
 	{Err: ErrAlreadyReport, Status: http.StatusConflict, Code: "already_reported"},
 	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
+	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

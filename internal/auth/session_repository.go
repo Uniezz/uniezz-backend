@@ -18,6 +18,7 @@ type Session struct {
 	TokenHash []byte
 	ExpiresAt time.Time
 	CreatedAt time.Time
+	Roles     []Role
 }
 
 type SessionRepository struct {
@@ -59,7 +60,8 @@ func (r *SessionRepository) GetActiveSessionByHash(
 	tokenHash []byte,
 ) (*Session, error) {
 	const query = `
-		SELECT s.id, s.user_id, s.token_hash, s.expires_at, s.created_at
+		SELECT s.id, s.user_id, s.token_hash, s.expires_at, s.created_at,
+			ARRAY(SELECT r.role FROM user_roles r WHERE r.user_id = s.user_id ORDER BY r.role)
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.deleted_at IS NULL;
@@ -72,6 +74,7 @@ func (r *SessionRepository) GetActiveSessionByHash(
 		&s.TokenHash,
 		&s.ExpiresAt,
 		&s.CreatedAt,
+		&s.Roles,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

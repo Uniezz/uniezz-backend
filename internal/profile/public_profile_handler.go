@@ -61,7 +61,7 @@ type listProfilesOutput struct {
 	}
 }
 
-var listProfilesOperation = auth.Protected(huma.Operation{
+var listProfilesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listProfiles",
 	Method:      http.MethodGet,
 	Path:        "/profiles",
@@ -102,7 +102,7 @@ type getProfileOutput struct {
 	Body PublicProfile
 }
 
-var getProfileOperation = auth.Protected(huma.Operation{
+var getProfileOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getProfile",
 	Method:      http.MethodGet,
 	Path:        "/profiles/{id}",

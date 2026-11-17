@@ -106,10 +106,10 @@ func TestGrant(t *testing.T) {
 
 func TestReasonEnumListsEveryReason(t *testing.T) {
 	schema := (Reason("unknown")).TransformSchema(nil, &huma.Schema{})
-	listedValues := schema.Extensions["x-extensible-enum"].([]any)
+	listedValues, _ := schema.Extensions["x-extensible-enum"].([]any)
 	listed := make([]string, len(listedValues))
 	for i, value := range listedValues {
-		listed[i] = value.(string)
+		listed[i], _ = value.(string)
 	}
 	slices.Sort(listed)
 

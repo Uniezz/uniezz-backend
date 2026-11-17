@@ -34,7 +34,7 @@ type listConnectionsOutput struct {
 	}
 }
 
-var listConnectionsOperation = auth.Protected(huma.Operation{
+var listConnectionsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listConnections",
 	Method:      http.MethodGet,
 	Path:        "/connections",
@@ -65,7 +65,7 @@ type deleteConnectionInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-var deleteConnectionOperation = auth.Protected(huma.Operation{
+var deleteConnectionOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteConnection",
 	Method:        http.MethodDelete,
 	Path:          "/connections/{id}",

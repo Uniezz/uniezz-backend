@@ -44,7 +44,7 @@ type getMyDailyQuestsOutput struct {
 	Body DailyQuests
 }
 
-var getMyDailyQuestsOperation = auth.Protected(huma.Operation{
+var getMyDailyQuestsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getMyDailyQuests",
 	Method:      http.MethodGet,
 	Path:        "/rewards/me/quests",

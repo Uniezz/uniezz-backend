@@ -18,7 +18,7 @@ type blockStudentInput struct {
 	ID uuid.UUID `path:"id" format:"uuid" doc:"The blocked student's profile id"`
 }
 
-var blockStudentOperation = auth.Protected(huma.Operation{
+var blockStudentOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "blockStudent",
 	Method:        http.MethodPut,
 	Path:          "/connections/blocks/{id}",
@@ -45,7 +45,7 @@ type unblockStudentInput struct {
 	ID uuid.UUID `path:"id" format:"uuid" doc:"The blocked student's profile id"`
 }
 
-var unblockStudentOperation = auth.Protected(huma.Operation{
+var unblockStudentOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "unblockStudent",
 	Method:        http.MethodDelete,
 	Path:          "/connections/blocks/{id}",

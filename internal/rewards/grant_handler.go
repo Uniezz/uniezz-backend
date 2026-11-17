@@ -40,7 +40,7 @@ type listMyCoinGrantsOutput struct {
 	}
 }
 
-var listMyCoinGrantsOperation = auth.Protected(huma.Operation{
+var listMyCoinGrantsOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listMyCoinGrants",
 	Method:      http.MethodGet,
 	Path:        "/rewards/me/grants",

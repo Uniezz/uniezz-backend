@@ -45,7 +45,7 @@ type createCourseOutput struct {
 	Body Course
 }
 
-var createCourseOperation = auth.Protected(huma.Operation{
+var createCourseOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createCourse",
 	Method:        http.MethodPost,
 	Path:          "/study/courses",
@@ -93,7 +93,7 @@ type listCoursesOutput struct {
 	}
 }
 
-var listCoursesOperation = auth.Protected(huma.Operation{
+var listCoursesOperation = auth.Authenticated(huma.Operation{
 	OperationID: "listCourses",
 	Method:      http.MethodGet,
 	Path:        "/study/courses",
@@ -136,7 +136,7 @@ type getCourseOutput struct {
 	Body Course
 }
 
-var getCourseOperation = auth.Protected(huma.Operation{
+var getCourseOperation = auth.Authenticated(huma.Operation{
 	OperationID: "getCourse",
 	Method:      http.MethodGet,
 	Path:        "/study/courses/{id}",
@@ -172,7 +172,7 @@ type updateCourseOutput struct {
 	Body Course
 }
 
-var updateCourseOperation = auth.Protected(huma.Operation{
+var updateCourseOperation = auth.Authenticated(huma.Operation{
 	OperationID: "updateCourse",
 	Method:      http.MethodPatch,
 	Path:        "/study/courses/{id}",
@@ -203,7 +203,7 @@ type deleteCourseInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-var deleteCourseOperation = auth.Protected(huma.Operation{
+var deleteCourseOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "deleteCourse",
 	Method:        http.MethodDelete,
 	Path:          "/study/courses/{id}",
@@ -236,7 +236,7 @@ type rateCourseOutput struct {
 	Body Course
 }
 
-var rateCourseOperation = auth.Protected(huma.Operation{
+var rateCourseOperation = auth.Authenticated(huma.Operation{
 	OperationID: "rateCourse",
 	Method:      http.MethodPut,
 	Path:        "/study/courses/{id}/rating",
