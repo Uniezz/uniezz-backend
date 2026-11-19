@@ -6,14 +6,16 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/google/uuid"
 )
 
 type preferencesChange struct {
-	BirthDate *string
-	OpenTo    []Mode
-	Intent    *string
+	BirthDate        *string
+	BirthDatePresent bool
+	OpenTo           []Mode
+	Intent           *string
 }
 
 func (c preferencesChange) fields(today time.Time) (preferencesFields, error) {
@@ -55,8 +57,40 @@ func (m Module) getPreferences(ctx context.Context, userID uuid.UUID) (*Preferen
 	return row.preferences(), nil
 }
 
+func (m Module) UpdateConnectionPreferences(ctx context.Context, userID uuid.UUID, change profile.ConnectionPreferencesChange) (int, error) {
+	var openTo []Mode
+	if change.OpenTo != nil {
+		openTo = make([]Mode, len(*change.OpenTo))
+		for i, mode := range *change.OpenTo {
+			openTo[i] = Mode(mode)
+		}
+	}
+
+	_, earned, err := m.savePreferences(ctx, userID, preferencesChange{
+		BirthDate:        change.BirthDate,
+		BirthDatePresent: change.BirthDatePresent,
+		OpenTo:           openTo,
+		Intent:           change.Intent,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			return 0, profile.ErrInvalidInput
+		case errors.Is(err, ErrBirthDateImmutable):
+			return 0, profile.ErrBirthDateImmutable
+		case errors.Is(err, ErrDatingRequiresProfile):
+			return 0, profile.ErrDatingRequiresProfile
+		case errors.Is(err, ErrDatingRequiresAdult):
+			return 0, profile.ErrDatingRequiresAdult
+		default:
+			return 0, err
+		}
+	}
+	return earned, nil
+}
+
 func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c preferencesChange) (*Preferences, int, error) {
-	today := time.Now().UTC()
+	today := m.now().UTC()
 	f, err := c.fields(today)
 	if err != nil {
 		return nil, 0, err
@@ -69,6 +103,9 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 		if err != nil {
 			return err
 		}
+		if c.BirthDatePresent && c.BirthDate == nil && current.BirthDate != nil {
+			return ErrBirthDateImmutable
+		}
 		if f.BirthDate != nil && current.BirthDate != nil && !f.BirthDate.Equal(*current.BirthDate) {
 			return ErrBirthDateImmutable
 		}
@@ -79,8 +116,22 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 		if f.OpenTo != nil {
 			openTo = f.OpenTo
 		}
-		if slices.Contains(openTo, ModeDating) && (birthDate == nil || ageOn(*birthDate, today) < adultAge) {
-			return ErrDatingRequiresAdult
+		if slices.Contains(openTo, ModeDating) {
+			if birthDate == nil {
+				return ErrDatingRequiresProfile
+			}
+
+			summaries, err := m.profiles.Summaries(ctx, []uuid.UUID{userID})
+			if err != nil {
+				return err
+			}
+			summary, ok := summaries[userID]
+			if !ok || summary.Gender == nil {
+				return ErrDatingRequiresProfile
+			}
+			if ageOn(*birthDate, today) < adultAge {
+				return ErrDatingRequiresAdult
+			}
 		}
 		saved, err = m.preferences.update(ctx, userID, f)
 		if err != nil || current.BirthDate != nil || f.BirthDate == nil {

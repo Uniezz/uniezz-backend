@@ -58,7 +58,31 @@ type fakeMedia struct {
 }
 
 func (f *fakeMedia) Claim(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error {
-	result, err := f.pool.Exec(ctx,
+	if err := f.CheckUpload(ctx, mediaID, ownerUserID, kind); err != nil {
+		return err
+	}
+	return f.MarkReady(ctx, mediaID, ownerUserID, kind)
+}
+
+func (f *fakeMedia) CheckUpload(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error {
+	var found bool
+	err := f.pool.QueryRow(ctx, `
+        SELECT EXISTS (
+            SELECT 1 FROM media
+            WHERE id = $1 AND owner_user_id = $2 AND kind = $3 AND status = 'pending'
+        )
+    `, mediaID, ownerUserID, kind).Scan(&found)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return media.ErrNotFound
+	}
+	return nil
+}
+
+func (f *fakeMedia) MarkReady(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error {
+	result, err := database.New(f.pool).Conn(ctx).Exec(ctx,
 		"UPDATE media SET status = 'ready' WHERE id = $1 AND owner_user_id = $2 AND kind = $3 AND status = 'pending'",
 		mediaID, ownerUserID, kind)
 	if err != nil {
@@ -143,6 +167,52 @@ func (f *fakeForgetter) forgotten(userID uuid.UUID) bool {
 	return false
 }
 
+type fakeConnectionPreferences struct {
+	pool *pgxpool.Pool
+}
+
+func (f *fakeConnectionPreferences) UpdateConnectionPreferences(
+	ctx context.Context, userID uuid.UUID, change ConnectionPreferencesChange,
+) (int, error) {
+	var openTo []string
+	if change.OpenTo != nil {
+		openTo = *change.OpenTo
+	}
+	const query = `
+		INSERT INTO connection_profiles (user_id, birth_date, open_to, intent)
+		VALUES (
+			$1,
+			CASE WHEN $2 THEN $3::date ELSE NULL END,
+			COALESCE($4::text[], '{}'::text[]),
+			CASE WHEN $5 THEN NULLIF($6, '') ELSE NULL END
+		)
+		ON CONFLICT (user_id) DO UPDATE
+		SET birth_date = CASE WHEN $2 THEN $3::date ELSE connection_profiles.birth_date END,
+			open_to = COALESCE($4::text[], connection_profiles.open_to),
+			intent = CASE WHEN $5 THEN NULLIF($6, '') ELSE connection_profiles.intent END
+	`
+	if _, err := f.pool.Exec(ctx, query, userID, change.BirthDatePresent, change.BirthDate, openTo, change.Intent != nil, change.Intent); err != nil {
+		return 0, err
+	}
+	return 0, nil
+}
+
+func (f *fakeConnectionPreferences) AreConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM connections
+			WHERE user_low = LEAST($1::uuid, $2::uuid)
+			  AND user_high = GREATEST($1::uuid, $2::uuid)
+		)
+	`
+	var connected bool
+	if err := f.pool.QueryRow(ctx, query, viewerID, ownerID).Scan(&connected); err != nil {
+		return false, err
+	}
+	return connected, nil
+}
+
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
 	return insertMediaOf(ctx, pool, ownerID, media.KindAvatar, status)
 }
@@ -197,6 +267,14 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
+	m.now = func() time.Time {
+		return time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	}
+
+	connectionPreferences := &fakeConnectionPreferences{
+		pool: pool,
+	}
+	m.SetConnectionsService(connectionPreferences)
 
 	authModule, err := auth.New(pool, &config.Config{UsosConfigs: map[string]config.UsosCredentials{
 		"umcs":  {BaseURL: "https://usos.test", ConsumerKey: "key", ConsumerSecret: "secret"},

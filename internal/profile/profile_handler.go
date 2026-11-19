@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -21,6 +22,9 @@ type Profile struct {
 	FirstName    *string     `json:"firstName" nullable:"true" example:"Jan"`
 	LastName     *string     `json:"lastName" nullable:"true" example:"Kowalski"`
 	Gender       *Gender     `json:"gender" nullable:"true" enum:"male,female" doc:"Set once; null until set. Visible to other students, with no privacy toggle."`
+	BirthDate    *string     `json:"birthDate" nullable:"true" format:"date" doc:"Set once; age must be 16 to 100"`
+	OpenTo       []string    `json:"openTo" enum:"friends,studyBuddy,dating" doc:"Empty until the student selects modes"`
+	Intent       *string     `json:"intent" nullable:"true" maxLength:"150" doc:"Short discovery-card line"`
 	Language     Language    `json:"language" enum:"en,pl,uk,ru,be,de,es" doc:"Interface language; defaults to pl"`
 	UniversityID string      `json:"universityId" example:"umcs"`
 	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
@@ -32,6 +36,19 @@ type Profile struct {
 	Privacy      Privacy     `json:"privacy"`
 	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
 	CreatedAt    time.Time   `json:"createdAt"`
+}
+
+type ProfilePhoto struct {
+	ID       uuid.UUID `json:"id" format:"uuid" doc:"Media ID used to delete or reorder the photo"`
+	URL      string    `json:"url"`
+	Position int       `json:"position" minimum:"1" maximum:"6"`
+	IsAvatar bool      `json:"isAvatar"`
+}
+
+type listProfilePhotosOutput struct {
+	Body struct {
+		Photos []ProfilePhoto `json:"photos"`
+	}
 }
 
 type getMeOutput struct {
@@ -61,18 +78,42 @@ func (h *profileHandler) getMe(ctx context.Context, _ *struct{}) (*getMeOutput, 
 }
 
 type updateMeInput struct {
-	Body struct {
-		FirstName     *string    `json:"firstName,omitempty" minLength:"1" maxLength:"100"`
-		LastName      *string    `json:"lastName,omitempty" minLength:"1" maxLength:"100"`
-		Gender        *Gender    `json:"gender,omitempty" enum:"male,female" doc:"Can be set only once: when a gender is already saved, returns 400 gender_immutable"`
-		Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru,be,de,es"`
-		Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
-		SongURL       *string    `json:"songUrl,omitempty" maxLength:"2000" doc:"http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged."`
-		Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
-		Privacy       Privacy    `json:"privacy,omitempty"`
-		AvatarMediaID *uuid.UUID `json:"avatarMediaId,omitempty" format:"uuid" doc:"mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted"`
-		BannerMediaID *uuid.UUID `json:"bannerMediaId,omitempty" format:"uuid" doc:"mediaId of a banner uploaded through createMediaUpload; the previous banner is deleted"`
+	Body updateMeBody
+}
+
+type updateMeBody struct {
+	FirstName     *string    `json:"firstName,omitempty" minLength:"1" maxLength:"100"`
+	LastName      *string    `json:"lastName,omitempty" minLength:"1" maxLength:"100"`
+	Gender        *Gender    `json:"gender,omitempty" enum:"male,female" doc:"Can be set only once: when a gender is already saved, returns 400 gender_immutable"`
+	BirthDate     *string    `json:"birthDate,omitempty" format:"date" doc:"Set once; age must be 16 to 100"`
+	OpenTo        *[]string  `json:"openTo,omitempty" enum:"friends,studyBuddy,dating" maxItems:"3"`
+	Intent        *string    `json:"intent,omitempty" maxLength:"1000" doc:"Up to 150 characters after HTML is stripped. An empty string clears it."`
+	Language      *Language  `json:"language,omitempty" enum:"en,pl,uk,ru,be,de,es"`
+	Bio           *string    `json:"bio,omitempty" maxLength:"2000" doc:"Plain text; HTML is stripped and the result may be up to 500 characters. An empty string clears it."`
+	SongURL       *string    `json:"songUrl,omitempty" maxLength:"2000" doc:"http or https URL, up to 500 characters. An empty string clears it. Anything else returns 400 invalid_input and leaves the saved link unchanged."`
+	Interests     *[]string  `json:"interests,omitempty" maxItems:"10" doc:"Replaces all interests: up to 10 tags of up to 30 characters, duplicates ignored"`
+	Privacy       Privacy    `json:"privacy,omitempty"`
+	AvatarMediaID *uuid.UUID `json:"avatarMediaId,omitempty" format:"uuid" doc:"mediaId of an avatar uploaded through createMediaUpload; the previous avatar is deleted"`
+	BannerMediaID *uuid.UUID `json:"bannerMediaId,omitempty" format:"uuid" doc:"mediaId of a banner uploaded through createMediaUpload; the previous banner is deleted"`
+
+	birthDatePresent bool
+}
+
+func (b *updateMeBody) UnmarshalJSON(data []byte) error {
+	type plain updateMeBody
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
 	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	*b = updateMeBody(decoded)
+	_, b.birthDatePresent = fields["birthDate"]
+	return nil
 }
 
 type updateMeOutput struct {
@@ -87,7 +128,7 @@ var updateMeOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/profile/me",
 	Summary:     "Update the logged-in student's profile",
-	Description: "Changes only the fields that are present. Returns the updated profile. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.",
+	Description: "Changes only the fields that are present. Returns the updated profile. Setting birthDate for the first time pays 10 Uniezz coins once. The update that first fills first name, last name, gender, avatar, banner, bio, song link and interests pays 50 Uniezz coins once.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -99,17 +140,22 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 	}
 
 	earned, err := h.profile.updateProfile(ctx, userID, profileChange{
-		FirstName:     in.Body.FirstName,
-		LastName:      in.Body.LastName,
-		Gender:        in.Body.Gender,
-		Language:      in.Body.Language,
-		Bio:           in.Body.Bio,
-		SongURL:       in.Body.SongURL,
-		Interests:     in.Body.Interests,
-		Privacy:       in.Body.Privacy,
-		AvatarMediaID: in.Body.AvatarMediaID,
-		BannerMediaID: in.Body.BannerMediaID,
+		FirstName:        in.Body.FirstName,
+		LastName:         in.Body.LastName,
+		Gender:           in.Body.Gender,
+		BirthDate:        in.Body.BirthDate,
+		BirthDatePresent: in.Body.birthDatePresent,
+		OpenTo:           in.Body.OpenTo,
+		Intent:           in.Body.Intent,
+		Language:         in.Body.Language,
+		Bio:              in.Body.Bio,
+		SongURL:          in.Body.SongURL,
+		Interests:        in.Body.Interests,
+		Privacy:          in.Body.Privacy,
+		AvatarMediaID:    in.Body.AvatarMediaID,
+		BannerMediaID:    in.Body.BannerMediaID,
 	})
+
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
@@ -150,7 +196,119 @@ func (h *profileHandler) deleteMe(ctx context.Context, _ *struct{}) (*struct{}, 
 	return nil, nil
 }
 
+type addProfilePhotoInput struct {
+	Body struct {
+		MediaID uuid.UUID `json:"mediaId" format:"uuid"`
+	}
+}
+
+type reorderProfilePhotosInput struct {
+	Body struct {
+		MediaIDs []uuid.UUID `json:"mediaIds" maxItems:"6" doc:"All profile photo IDs in the desired order"`
+	}
+}
+
+var reorderProfilePhotosOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "reorderMyProfilePhotos",
+	Method:        http.MethodPut,
+	Path:          "/profile/photos",
+	Summary:       "Reorder the logged-in student's profile photos",
+	Description:   "Replaces the order of all additional profile photos. Include each current photo ID exactly once; the avatar is not included.",
+	Tags:          []string{"profile"},
+	DefaultStatus: http.StatusNoContent,
+	Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
+})
+
+func (h *profileHandler) reorderProfilePhotos(ctx context.Context, in *reorderProfilePhotosInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.profile.reorderProfilePhotos(ctx, userID, in.Body.MediaIDs); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
+var listProfilePhotosOperation = auth.Authenticated(huma.Operation{
+	OperationID: "listMyProfilePhotos",
+	Method:      http.MethodGet,
+	Path:        "/profile/photos",
+	Summary:     "List the logged-in student's profile photos",
+	Description: "Returns the avatar first, then additional photos by position.",
+	Tags:        []string{"profile"},
+	Errors:      []int{http.StatusNotFound},
+})
+
+func (h *profileHandler) listProfilePhotos(ctx context.Context, _ *struct{}) (*listProfilePhotosOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	photos, err := h.profile.listMyProfilePhotos(ctx, userID)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+
+	out := &listProfilePhotosOutput{}
+	out.Body.Photos = photos
+	return out, nil
+}
+
+var addProfilePhotoOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "addMyProfilePhoto",
+	Method:        http.MethodPost,
+	Path:          "/profile/photos",
+	Summary:       "Add a photo to the logged-in student's profile",
+	Description:   "Adds a completed upload to the profile. Repeating the same mediaId succeeds without adding another photo; the avatar counts toward the six-photo limit.",
+	Tags:          []string{"profile"},
+	DefaultStatus: http.StatusCreated,
+	Errors:        []int{http.StatusBadRequest},
+})
+
+type deleteProfilePhotoInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+var deleteProfilePhotoOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "deleteMyProfilePhoto",
+	Method:        http.MethodDelete,
+	Path:          "/profile/photos/{id}",
+	Summary:       "Remove a photo from the logged-in student's profile",
+	Description:   "Removes an additional photo. Succeeds if it is already absent; remove the avatar through DELETE /profile/avatar.",
+	Tags:          []string{"profile"},
+	DefaultStatus: http.StatusNoContent,
+	Errors:        []int{http.StatusNotFound},
+})
+
+func (h *profileHandler) deleteProfilePhoto(ctx context.Context, in *deleteProfilePhotoInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.profile.removeProfilePhoto(ctx, userID, in.ID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
+func (h *profileHandler) addProfilePhoto(ctx context.Context, in *addProfilePhotoInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.profile.addProfilePhoto(ctx, userID, in.Body.MediaID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
 var deleteAvatarOperation = auth.Authenticated(huma.Operation{
+
 	OperationID:   "deleteMyAvatar",
 	Method:        http.MethodDelete,
 	Path:          "/profile/avatar",

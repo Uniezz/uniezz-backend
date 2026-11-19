@@ -106,11 +106,24 @@ func TestGrant(t *testing.T) {
 
 func TestReasonEnumListsEveryReason(t *testing.T) {
 	schema := (Reason("unknown")).TransformSchema(nil, &huma.Schema{})
-	listedValues, _ := schema.Extensions["x-extensible-enum"].([]any)
+	extensionEnum, ok := schema.Extensions["x-extensible-enum"]
+	if !ok {
+		t.Fatal("schema is missing x-extensible-enum")
+	}
+	listedValues, ok := extensionEnum.([]any)
+	if !ok {
+		t.Fatalf("x-extensible-enum has type %T, want []any", extensionEnum)
+	}
+
 	listed := make([]string, len(listedValues))
 	for i, value := range listedValues {
-		listed[i], _ = value.(string)
+		stringValue, ok := value.(string)
+		if !ok {
+			t.Fatalf("enum value %d has type %T, want string", i, value)
+		}
+		listed[i] = stringValue
 	}
+
 	slices.Sort(listed)
 
 	var reasons []string

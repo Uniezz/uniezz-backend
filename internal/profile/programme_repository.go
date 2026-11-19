@@ -111,6 +111,17 @@ func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID,
 		if err := r.lockUser(ctx, userID); err != nil {
 			return err
 		}
+
+		var wasPrimary bool
+		err := r.db.Conn(ctx).QueryRow(ctx, `
+            SELECT COALESCE(
+                (SELECT is_primary FROM student_programmes WHERE id = $1 AND user_id = $2),
+                FALSE
+            )`, id, userID).Scan(&wasPrimary)
+		if err != nil {
+			return fmt.Errorf("get programme primary status: %w", err)
+		}
+
 		if f.IsPrimary {
 			if err := r.clearPrimary(ctx, userID, id); err != nil {
 				return err
@@ -118,16 +129,22 @@ func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID,
 		}
 
 		result, err := r.db.Conn(ctx).Exec(ctx, `
-			UPDATE student_programmes
-			SET faculty_name = $3, programme_name = $4, level = $5, mode_of_studies = $6,
-				year_of_study = $7, status = $8, is_primary = $9
-			WHERE id = $1 AND user_id = $2`,
+            UPDATE student_programmes
+            SET faculty_name = $3, programme_name = $4, level = $5, mode_of_studies = $6,
+                year_of_study = $7, status = $8, is_primary = $9
+            WHERE id = $1 AND user_id = $2`,
 			id, userID, f.Faculty, f.Programme, f.Level, f.ModeOfStudies, f.YearOfStudy, f.Status, f.IsPrimary)
 		if err != nil {
 			return fmt.Errorf("replace programme: %w", err)
 		}
 		if result.RowsAffected() == 0 {
 			return ErrNotFound
+		}
+
+		if wasPrimary && !f.IsPrimary {
+			if err := r.promoteOldestOther(ctx, userID, id); err != nil {
+				return err
+			}
 		}
 		if err := r.ensurePrimary(ctx, userID); err != nil {
 			return err
@@ -137,6 +154,23 @@ func (r *programmeRepository) replace(ctx context.Context, userID, id uuid.UUID,
 		return err
 	})
 	return updated, err
+}
+
+func (r *programmeRepository) promoteOldestOther(ctx context.Context, userID, exceptID uuid.UUID) error {
+	_, err := r.db.Conn(ctx).Exec(ctx, `
+        UPDATE student_programmes
+        SET is_primary = TRUE
+        WHERE id = (
+            SELECT id
+            FROM student_programmes
+            WHERE user_id = $1 AND id <> $2
+            ORDER BY created_at, id
+            LIMIT 1
+        )`, userID, exceptID)
+	if err != nil {
+		return fmt.Errorf("promote another primary programme: %w", err)
+	}
+	return nil
 }
 
 func (r *programmeRepository) delete(ctx context.Context, userID, id uuid.UUID) error {

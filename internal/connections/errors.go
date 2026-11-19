@@ -8,11 +8,12 @@ import (
 )
 
 var (
-	ErrNotFound            = errors.New("not found")
-	ErrInvalidInput        = errors.New("invalid input")
-	ErrDatingRequiresAdult = errors.New("dating requires a birth date at least 18 years ago")
-	ErrRateLimited         = errors.New("too many likes")
-	ErrBirthDateImmutable  = errors.New("birth date cannot be changed once set")
+	ErrNotFound              = errors.New("not found")
+	ErrInvalidInput          = errors.New("invalid input")
+	ErrDatingRequiresAdult   = errors.New("dating requires a birth date at least 18 years ago")
+	ErrRateLimited           = errors.New("too many likes")
+	ErrBirthDateImmutable    = errors.New("birth date cannot be changed once set")
+	ErrDatingRequiresProfile = errors.New("dating requires a birth date and gender")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -22,4 +23,5 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrBirthDateImmutable, Status: http.StatusBadRequest, Code: "birth_date_immutable"},
 	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
+	{Err: ErrDatingRequiresProfile, Status: http.StatusBadRequest, Code: "dating_requires_profile"},
 }

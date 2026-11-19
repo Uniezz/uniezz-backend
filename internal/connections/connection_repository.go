@@ -90,3 +90,19 @@ func (r *connectionRepository) delete(ctx context.Context, userID, id uuid.UUID)
 	}
 	return nil
 }
+
+func (r *connectionRepository) areConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM connections
+			WHERE user_low = LEAST($1::uuid, $2::uuid)
+			  AND user_high = GREATEST($1::uuid, $2::uuid)
+		)
+	`
+	var connected bool
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, viewerID, ownerID).Scan(&connected); err != nil {
+		return false, fmt.Errorf("check connection: %w", err)
+	}
+	return connected, nil
+}

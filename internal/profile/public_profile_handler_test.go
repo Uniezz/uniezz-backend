@@ -117,6 +117,80 @@ func TestGetProfile(t *testing.T) {
 	})
 }
 
+func TestPublicProfileAgeDoesNotExposeBirthDate(t *testing.T) {
+	e := newTestEnv(t)
+	viewer := e.otpUser(t)
+	student := e.otpUser(t)
+
+	birthDate := "2006-02-28"
+	decode[Profile](t, e.api.Patch("/profile/me", student.bearer, map[string]any{
+		"birthDate": birthDate,
+	}), http.StatusOK)
+
+	public := decode[map[string]any](t, e.api.Get("/profiles/"+student.id.String(), viewer.bearer), http.StatusOK)
+
+	if _, exists := public["birthDate"]; exists {
+		t.Fatal("public profile must not expose birthDate")
+	}
+	if age, ok := public["age"].(float64); !ok || age != 20 {
+		t.Errorf("age = %v, want 20", public["age"])
+	}
+}
+
+func TestPublicProfilePhotosOnlyForConnectedUsers(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	viewer := e.otpUser(t)
+	student := e.otpUser(t)
+
+	avatar := insertMedia(ctx, e.pool, student.id, "pending")
+	first := insertMedia(ctx, e.pool, student.id, "pending")
+	second := insertMedia(ctx, e.pool, student.id, "pending")
+
+	decode[Profile](t, e.api.Patch("/profile/me", student.bearer, map[string]any{
+		"avatarMediaId": avatar.String(),
+	}), http.StatusOK)
+	for _, photo := range []uuid.UUID{first, second} {
+		rec := e.api.Post("/profile/photos", student.bearer, map[string]any{
+			"mediaId": photo.String(),
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("adding photo: expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+
+	getPhotos := func() []any {
+		profile := decode[map[string]any](t,
+			e.api.Get("/profiles/"+student.id.String(), viewer.bearer), http.StatusOK)
+		photos, ok := profile["photos"].([]any)
+		if !ok {
+			t.Fatalf("photos = %T, want array", profile["photos"])
+		}
+		return photos
+	}
+
+	if photos := getPhotos(); len(photos) != 0 {
+		t.Fatalf("unconnected viewer got photos: %v", photos)
+	}
+
+	if _, err := e.pool.Exec(ctx, `
+        INSERT INTO connections (user_low, user_high, mode)
+        VALUES (LEAST($1::uuid, $2::uuid), GREATEST($1::uuid, $2::uuid), 'friends')
+    `, viewer.id, student.id); err != nil {
+		t.Fatal(err)
+	}
+
+	photos := getPhotos()
+	if len(photos) != 3 {
+		t.Fatalf("connected viewer got %d photos, want 3: %v", len(photos), photos)
+	}
+	for i, want := range []string{avatarURL(avatar), avatarURL(first), avatarURL(second)} {
+		if photos[i] != want {
+			t.Errorf("photos[%d] = %v, want %s", i, photos[i], want)
+		}
+	}
+}
+
 func TestListProfiles(t *testing.T) {
 	e := newTestEnv(t)
 	viewer := e.otpUser(t)

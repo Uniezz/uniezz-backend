@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -10,6 +11,10 @@ import (
 
 func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error) {
 	p, err := m.profiles.get(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	connectionPreferences, err := m.profiles.getConnectionPreferences(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -22,12 +27,23 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		return nil, err
 	}
 
+	var birthDate *string
+	if connectionPreferences.BirthDate != nil {
+		value := connectionPreferences.BirthDate.Format(time.DateOnly)
+		birthDate = &value
+	}
+
+	openTo := connectionPreferences.OpenTo
+
 	out := &Profile{
 		ID:           p.ID,
 		Email:        p.Email,
 		FirstName:    p.FirstName,
 		LastName:     p.LastName,
 		Gender:       p.Gender,
+		BirthDate:    birthDate,
+		OpenTo:       openTo,
+		Intent:       connectionPreferences.Intent,
 		Language:     p.Language,
 		UniversityID: p.UniversityID,
 		Programmes:   make([]Programme, 0, len(programmes)),
@@ -66,16 +82,20 @@ const (
 )
 
 type profileChange struct {
-	FirstName     *string
-	LastName      *string
-	Gender        *Gender
-	Language      *Language
-	Bio           *string
-	SongURL       *string
-	Interests     *[]string
-	Privacy       Privacy
-	AvatarMediaID *uuid.UUID
-	BannerMediaID *uuid.UUID
+	FirstName        *string
+	LastName         *string
+	Gender           *Gender
+	BirthDate        *string
+	BirthDatePresent bool
+	OpenTo           *[]string
+	Intent           *string
+	Language         *Language
+	Bio              *string
+	SongURL          *string
+	Interests        *[]string
+	Privacy          Privacy
+	AvatarMediaID    *uuid.UUID
+	BannerMediaID    *uuid.UUID
 }
 
 func (c profileChange) fields() (profileFields, error) {
@@ -112,18 +132,26 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		return 0, err
 	}
 
-	avatarID, err := m.claimMedia(ctx, userID, avatarSlot, change.AvatarMediaID)
+	var avatarID, bannerID *uuid.UUID
+	var previousAvatar, previousBanner *uuid.UUID
+	earned := 0
+
+	avatarID, err = m.claimMedia(ctx, userID, avatarSlot, change.AvatarMediaID)
 	if err != nil {
 		return 0, err
 	}
-	bannerID, err := m.claimMedia(ctx, userID, bannerSlot, change.BannerMediaID)
+	bannerID, err = m.claimMedia(ctx, userID, bannerSlot, change.BannerMediaID)
 	if err != nil {
 		return 0, err
 	}
 
-	var previousAvatar, previousBanner *uuid.UUID
-	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if change.AvatarMediaID != nil {
+			if err := m.profiles.checkAvatarPhotoLimit(ctx, userID); err != nil {
+				return err
+			}
+		}
+
 		if change.Gender != nil {
 			if err := m.profiles.setGender(ctx, userID, *change.Gender); err != nil {
 				return err
@@ -132,7 +160,19 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		if err := m.profiles.update(ctx, userID, fields); err != nil {
 			return err
 		}
-		var err error
+		if change.BirthDatePresent || change.OpenTo != nil || change.Intent != nil {
+			connectionEarned, err := m.connections.UpdateConnectionPreferences(ctx, userID, ConnectionPreferencesChange{
+				BirthDate:        change.BirthDate,
+				BirthDatePresent: change.BirthDatePresent,
+				OpenTo:           change.OpenTo,
+				Intent:           change.Intent,
+			})
+			if err != nil {
+				return err
+			}
+			earned += connectionEarned
+		}
+
 		if avatarID != nil {
 			if previousAvatar, err = m.swapMedia(ctx, userID, avatarSlot, avatarID); err != nil {
 				return err
@@ -147,8 +187,12 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 		if err != nil || !complete {
 			return err
 		}
-		earned, err = m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
-		return err
+		profileCompleteEarned, err := m.rewards.Grant(ctx, userID, rewards.ReasonProfileComplete, nil, nil)
+		if err != nil {
+			return err
+		}
+		earned += profileCompleteEarned
+		return nil
 	})
 	if err != nil {
 		return 0, err
