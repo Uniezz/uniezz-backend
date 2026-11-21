@@ -113,7 +113,7 @@ func (s *objectStorage) presignGet(ctx context.Context, key string) (string, err
 	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
-	}, s3.WithPresignExpires(privateURLTTL))
+	}, s3.WithPresignExpires(PrivateURLTTL))
 	if err != nil {
 		return "", fmt.Errorf("presign media download: %w", err)
 	}

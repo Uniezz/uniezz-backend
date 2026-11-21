@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/chat"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/faq"
@@ -26,6 +27,7 @@ import (
 type Modules struct {
 	Auth        auth.Module
 	Media       media.Module
+	Chat        chat.Module
 	Profile     profile.Module
 	Feed        feed.Module
 	FAQ         faq.Module
@@ -56,7 +58,9 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, rewardsModule, runner)
+	chatModule := chat.New(db, mediaModule)
+
+	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, chatModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
@@ -75,12 +79,12 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	moderationModule, err := moderation.New(db, feedModule, profileModule, connectionsModule, studyModule, authModule, runner)
+	moderationModule, err := moderation.New(db, feedModule, profileModule, connectionsModule, studyModule, chatModule, authModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Rewards: rewardsModule, Jobs: runner}, nil
+	return Modules{Auth: authModule, Media: mediaModule, Chat: chatModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Rewards: rewardsModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -91,6 +95,7 @@ func (m Modules) Register(api huma.API) {
 	m.Feed.Register(api)
 	m.FAQ.Register(api)
 	m.Connections.Register(api)
+	m.Chat.Register(api)
 	m.Study.Register(api)
 	m.Moderation.Register(api)
 	m.Rewards.Register(api)

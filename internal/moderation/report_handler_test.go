@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/chat"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
@@ -78,6 +79,18 @@ func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uu
 	return author, map[string]any{"content": "reported text"}, nil
 }
 
+type fakeChat struct {
+	authors map[uuid.UUID]uuid.UUID
+}
+
+func (f fakeChat) ReportTarget(_ context.Context, _ uuid.UUID, id uuid.UUID) (uuid.UUID, map[string]any, error) {
+	author, ok := f.authors[id]
+	if !ok {
+		return uuid.Nil, nil, chat.ErrNotFound
+	}
+	return author, map[string]any{"text": "reported message"}, nil
+}
+
 type fakeCandidates struct {
 	users  map[uuid.UUID]uuid.UUID
 	hidden map[uuid.UUID][]uuid.UUID
@@ -113,6 +126,7 @@ type testEnv struct {
 	targets    fakeTargets
 	users      fakeProfiles
 	candidates fakeCandidates
+	messages   fakeChat
 	module     Module
 }
 
@@ -125,6 +139,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}, removed: map[uuid.UUID]string{}},
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
+		messages:   fakeChat{authors: map[uuid.UUID]uuid.UUID{}},
 	}
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
@@ -137,7 +152,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("auth.New failed: %v", err)
 	}
 
-	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, authModule, jobs.NewRunner(pool, 1, time.Minute))
+	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, e.messages, authModule, jobs.NewRunner(pool, 1, time.Minute))
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
@@ -364,4 +379,30 @@ func TestReportLimits(t *testing.T) {
 			decode[Report](t, e.api.Post("/reports", reporter.bearer, report("post", e.contentBy(author))), 201)
 		}
 	})
+}
+
+func TestChatMessageReport(t *testing.T) {
+	e := newTestEnv(t)
+	reporter := e.user(t)
+	author := e.user(t)
+	message := uuid.New()
+	e.messages.authors[message] = author.id
+
+	got := decode[Report](t, e.api.Post("/reports", reporter.bearer, report("message", message)), 201)
+	if got.TargetType != "message" || got.TargetID != message {
+		t.Errorf("report = %+v", got)
+	}
+
+	var snapshot map[string]any
+	var targetAuthor uuid.UUID
+	err := e.pool.QueryRow(context.Background(), "SELECT snapshot, target_author_id FROM reports WHERE id = $1", got.ID).Scan(&snapshot, &targetAuthor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot["text"] != "reported message" || targetAuthor != author.id {
+		t.Errorf("stored snapshot = %v author = %s", snapshot, targetAuthor)
+	}
+
+	expectError(t, e.api.Post("/reports", reporter.bearer, report("message", uuid.New())), 404, "not_found")
+	expectError(t, e.api.Post("/reports", author.bearer, report("message", message)), 400, "self_report")
 }

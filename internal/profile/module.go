@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/chat"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
@@ -30,6 +31,7 @@ var (
 	_ mediaService  = media.Module{}
 	_ forgetter     = feed.Module{}
 	_ forgetter     = study.Module{}
+	_ forgetter     = chat.Module{}
 	_ rewardService = rewards.Module{}
 )
 
@@ -73,12 +75,13 @@ type Module struct {
 	media       mediaService
 	feed        forgetter
 	study       forgetter
+	chat        forgetter
 	rewards     rewardService
 	jobs        *jobs.Runner
 	now         func() time.Time
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule forgetter, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule, chatModule forgetter, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -87,6 +90,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule f
 		media:      mediaModule,
 		feed:       feedModule,
 		study:      studyModule,
+		chat:       chatModule,
 		rewards:    rewardsModule,
 		jobs:       runner,
 		now:        time.Now,

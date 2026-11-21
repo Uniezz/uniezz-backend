@@ -1,0 +1,195 @@
+package chat
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
+)
+
+type messageHandler struct {
+	chat Module
+}
+
+type MessageKind string
+
+const (
+	MessageText   MessageKind = "text"
+	MessageSystem MessageKind = "system"
+)
+
+type Attachment struct {
+	MediaID   uuid.UUID `json:"mediaId" format:"uuid"`
+	URL       string    `json:"url" doc:"Presigned download URL, valid until expiresAt; fetch the message again for a fresh one"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type Message struct {
+	ID             uuid.UUID      `json:"id" format:"uuid"`
+	ConversationID uuid.UUID      `json:"conversationId" format:"uuid"`
+	Seq            int64          `json:"seq" doc:"Position in the conversation; display order"`
+	ChangeSeq      int64          `json:"changeSeq" doc:"Sync cursor value of the message's latest change"`
+	Kind           MessageKind    `json:"kind" enum:"text,system"`
+	Sender         Student        `json:"sender"`
+	Body           *string        `json:"body" nullable:"true" doc:"Null for system messages, image-only messages and deleted messages"`
+	Payload        map[string]any `json:"payload" doc:"System messages: {event, actorId, params}; empty for others. Clients translate the event code"`
+	ClientID       *uuid.UUID     `json:"clientId" format:"uuid" nullable:"true" doc:"The Idempotency-Key the sender used; null for system messages"`
+	Attachments    []Attachment   `json:"attachments"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	DeletedAt      *time.Time     `json:"deletedAt" nullable:"true" doc:"Set when the sender deleted the message; body, payload and attachments are then empty"`
+}
+
+type listChatMessagesInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+	httpapi.PageQuery
+	ChangedAfter string `query:"changedAfter" pattern:"^[0-9]{1,18}$" maxLength:"18" doc:"Catch-up mode: list messages created or changed after this changeSeq, oldest change first. Pass nextCursor as cursor to continue. Without it, messages are listed newest first by seq"`
+}
+
+type listChatMessagesOutput struct {
+	Body struct {
+		Items      []Message `json:"items"`
+		NextCursor *string   `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get the next page; null on the last page"`
+	}
+}
+
+var listChatMessagesOperation = auth.Authenticated(huma.Operation{
+	OperationID: "listChatMessages",
+	Method:      http.MethodGet,
+	Path:        "/chat/conversations/{id}/messages",
+	Summary:     "List messages of a conversation, or the ones that changed",
+	Description: "History mode lists newest first by seq. Catch-up mode (changedAfter) lists what was created or changed after a changeSeq, oldest change first, including deleted messages. Messages from students blocked either way or banned are left out.",
+	Tags:        []string{"chat"},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+})
+
+func (h *messageHandler) listMessages(ctx context.Context, in *listChatMessagesInput) (*listChatMessagesOutput, error) {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	items, next, err := h.chat.listMessages(ctx, messageQuery{
+		ViewerID:       viewerID,
+		ConversationID: in.ID,
+		Cursor:         in.Cursor,
+		ChangedAfter:   in.ChangedAfter,
+		Limit:          in.Limit,
+	})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+
+	out := &listChatMessagesOutput{}
+	out.Body.Items = items
+	out.Body.NextCursor = next
+	return out, nil
+}
+
+type sendChatMessageInput struct {
+	ID             uuid.UUID `path:"id" format:"uuid"`
+	IdempotencyKey string    `header:"Idempotency-Key" required:"true" minLength:"36" maxLength:"36" doc:"A UUID, stored as the message's clientId. Repeating the request with the same key and body returns the stored message"`
+	Body           struct {
+		Body          string      `json:"body,omitempty" maxLength:"16000" doc:"Up to 4000 characters after HTML is stripped; may be empty only with attachments"`
+		AttachmentIDs []uuid.UUID `json:"attachmentIds,omitempty" maxItems:"5" uniqueItems:"true" doc:"Uploads of kind chat, shown in this order; images only"`
+	}
+}
+
+type sendChatMessageOutput struct {
+	Replayed string `header:"Idempotent-Replayed" doc:"true when the message was stored by an earlier request with the same key"`
+	Body     Message
+}
+
+var sendChatMessageOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "sendChatMessage",
+	Method:        http.MethodPost,
+	Path:          "/chat/conversations/{id}/messages",
+	Summary:       "Send a message with up to 5 images",
+	Description:   "Same key and body: 201 with the stored message. Same key, other body: 422. Same key after the message was deleted: 410. At most 30 messages per minute.",
+	Tags:          []string{"chat"},
+	DefaultStatus: http.StatusCreated,
+	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusGone, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
+})
+
+func (h *messageHandler) sendMessage(ctx context.Context, in *sendChatMessageInput) (*sendChatMessageOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	message, replayed, err := h.chat.sendMessage(ctx, userID, sendChange{
+		ConversationID: in.ID,
+		Body:           in.Body.Body,
+		AttachmentIDs:  in.Body.AttachmentIDs,
+		Key:            in.IdempotencyKey,
+	})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+
+	out := &sendChatMessageOutput{Body: *message}
+	if replayed {
+		out.Replayed = "true"
+	}
+	return out, nil
+}
+
+type getChatMessageInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+type getChatMessageOutput struct {
+	Body Message
+}
+
+var getChatMessageOperation = auth.Authenticated(huma.Operation{
+	OperationID: "getChatMessage",
+	Method:      http.MethodGet,
+	Path:        "/chat/messages/{id}",
+	Summary:     "Get one message with fresh attachment URLs",
+	Tags:        []string{"chat"},
+	Errors:      []int{http.StatusNotFound},
+})
+
+func (h *messageHandler) getMessage(ctx context.Context, in *getChatMessageInput) (*getChatMessageOutput, error) {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	message, err := h.chat.getMessage(ctx, viewerID, in.ID)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &getChatMessageOutput{Body: *message}, nil
+}
+
+type deleteChatMessageInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+var deleteChatMessageOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "deleteChatMessage",
+	Method:        http.MethodDelete,
+	Path:          "/chat/messages/{id}",
+	Summary:       "Delete one of the caller's messages for everyone",
+	Description:   "The message stays as an empty tombstone so positions do not change; its text and images are removed. Deleting a deleted message succeeds.",
+	Tags:          []string{"chat"},
+	DefaultStatus: http.StatusNoContent,
+	Errors:        []int{http.StatusForbidden, http.StatusNotFound},
+})
+
+func (h *messageHandler) deleteMessage(ctx context.Context, in *deleteChatMessageInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.chat.deleteMessage(ctx, userID, in.ID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}

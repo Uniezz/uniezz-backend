@@ -1,4 +1,4 @@
-// Package moderation takes reports about posts, comments and students. Each
+// Package moderation takes reports about posts, comments, students and chat messages. Each
 // report keeps a copy of the reported content, so review in a later sprint
 // does not depend on the content still existing.
 package moderation
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/chat"
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
@@ -33,6 +34,7 @@ var (
 	_ profileTargets   = profile.Module{}
 	_ candidateTargets = connections.Module{}
 	_ studyTargets     = study.Module{}
+	_ chatTargets      = chat.Module{}
 	_ staffService     = auth.Module{}
 )
 
@@ -57,6 +59,10 @@ type studyTargets interface {
 	RemoveCourse(ctx context.Context, id uuid.UUID) error
 }
 
+type chatTargets interface {
+	ReportTarget(ctx context.Context, reporterID, messageID uuid.UUID) (uuid.UUID, map[string]any, error)
+}
+
 type staffService interface {
 	GrantRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
 	RevokeRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
@@ -77,13 +83,14 @@ type Module struct {
 	profiles   profileTargets
 	candidates candidateTargets
 	study      studyTargets
+	chat       chatTargets
 	staff      staffService
 	moderators *moderatorRepository
 	actions    *actionRepository
 	limiter    limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, staff staffService, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, chatModule chatTargets, staff staffService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -93,6 +100,7 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		profiles:   profileModule,
 		candidates: candidates,
 		study:      studyModule,
+		chat:       chatModule,
 		staff:      staff,
 		moderators: newModeratorRepository(db),
 		actions:    newActionRepository(db),
