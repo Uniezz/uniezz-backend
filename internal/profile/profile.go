@@ -4,12 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
-func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error) {
+func (m Module) profile(ctx context.Context, userID uuid.UUID, roles []auth.Role) (*Profile, error) {
 	p, err := m.profiles.get(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -54,6 +55,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID) (*Profile, error)
 		Interests:    text.NonNil(p.Interests),
 		Privacy:      p.Privacy.withDefaults(),
 		Coins:        coins,
+		Roles:        text.NonNil(roles),
 		CreatedAt:    p.CreatedAt,
 	}
 	for _, row := range programmes {

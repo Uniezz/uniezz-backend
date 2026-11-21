@@ -128,6 +128,7 @@ Every finished attempt also sends two Sentry metrics tagged with `kind`: `jobs.f
 | `media.cleanup.v1` (hourly) | media | Marks uploads still `pending` after an hour as `deleting`, then deletes the object and row of every `deleting` media. Failures stay `deleting` for the next run. |
 | `feed.prune-request-keys.v1` (daily) | feed | Deletes idempotency keys older than 24 hours, so a key is honoured for 24 to 48 hours. |
 | `jobs.prune.v1` (daily) | jobs | Deletes `succeeded` jobs older than 7 days and `failed` jobs older than 30 days. |
+| `moderation.prune-actions.v1` (daily) | moderation | Deletes moderation log entries older than 365 days. |
 
 ## Operations
 

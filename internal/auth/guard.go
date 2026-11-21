@@ -34,6 +34,11 @@ func SignedInAt(ctx context.Context) (time.Time, bool) {
 	return p.signedInAt, ok
 }
 
+func RolesFrom(ctx context.Context) ([]Role, bool) {
+	p, ok := ctx.Value(principalKey{}).(principal)
+	return p.roles, ok
+}
+
 type guard struct {
 	sessions   sessionStore
 	sessionTTL time.Duration

@@ -53,3 +53,63 @@ func (h *queueHandler) listQueue(ctx context.Context, in *listQueueInput) (*list
 	out.Body.NextCursor = next
 	return out, nil
 }
+
+type getReportInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+type getReportOutput struct {
+	Body QueuedReport
+}
+
+var getReportOperation = auth.Authorized(huma.Operation{
+	OperationID: "getReport",
+	Method:      http.MethodGet,
+	Path:        "/moderation/reports/{id}",
+	Summary:     "Get a report about a post, comment, student, exam file or course",
+	Description: "Any status, with the copy of the reported content. Moderators and admins only.",
+	Tags:        []string{"moderation"},
+	Errors:      []int{http.StatusNotFound},
+}, auth.RoleModerator, auth.RoleAdmin)
+
+func (h *queueHandler) getReport(ctx context.Context, in *getReportInput) (*getReportOutput, error) {
+	report, err := h.moderation.report(ctx, in.ID)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &getReportOutput{Body: *report}, nil
+}
+
+type updateReportInput struct {
+	ID   uuid.UUID `path:"id" format:"uuid"`
+	Body struct {
+		Status ReportStatus `json:"status" enum:"reviewed,dismissed"`
+	}
+}
+
+type updateReportOutput struct {
+	Body Report
+}
+
+var updateReportOperation = auth.Authorized(huma.Operation{
+	OperationID: "updateReport",
+	Method:      http.MethodPatch,
+	Path:        "/moderation/reports/{id}",
+	Summary:     "Resolve a report about a post, comment, student, exam file or course",
+	Description: "Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Sending the current status again changes nothing. Moderators and admins only.",
+	Tags:        []string{"moderation"},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+}, auth.RoleModerator, auth.RoleAdmin)
+
+func (h *queueHandler) updateReport(ctx context.Context, in *updateReportInput) (*updateReportOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	report, err := h.moderation.updateReport(ctx, userID, in.ID, reportChange{Status: in.Body.Status})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &updateReportOutput{Body: *report}, nil
+}

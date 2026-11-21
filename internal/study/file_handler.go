@@ -214,7 +214,7 @@ func (h *fileHandler) deleteFile(ctx context.Context, in *deleteFileInput) (*str
 		return nil, httpapi.Unauthorized()
 	}
 
-	if err := h.study.deleteFile(ctx, userID, in.ID); err != nil {
+	if err := h.study.deleteFile(ctx, userID, in.ID, false); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil

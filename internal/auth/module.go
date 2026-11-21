@@ -18,6 +18,8 @@ type Module struct {
 	usos   *usosLogin
 	otp    *otpLogin
 	guard  *guard
+	roles  *roleRepository
+	bans   *banRepository
 
 	webRedirectURL    string
 	mobileRedirectURL string
@@ -46,6 +48,8 @@ func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles Prof
 			cfg.OTPTestEmails,
 		),
 		guard:             &guard{sessions: sessions, sessionTTL: defaultSessionTTL, now: time.Now},
+		roles:             newRoleRepository(db),
+		bans:              newBanRepository(db),
 		webRedirectURL:    cfg.AppWebURL + "/auth/done",
 		mobileRedirectURL: cfg.AppMobileScheme,
 	}, nil

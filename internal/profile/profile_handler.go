@@ -35,6 +35,7 @@ type Profile struct {
 	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
 	Privacy      Privacy     `json:"privacy"`
 	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
+	Roles        []auth.Role `json:"roles" doc:"Staff roles of the student; empty for students without one"`
 	CreatedAt    time.Time   `json:"createdAt"`
 }
 
@@ -70,7 +71,9 @@ func (h *profileHandler) getMe(ctx context.Context, _ *struct{}) (*getMeOutput, 
 		return nil, httpapi.Unauthorized()
 	}
 
-	p, err := h.profile.profile(ctx, userID)
+	roles, _ := auth.RolesFrom(ctx)
+
+	p, err := h.profile.profile(ctx, userID, roles)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
@@ -160,7 +163,8 @@ func (h *profileHandler) updateMe(ctx context.Context, in *updateMeInput) (*upda
 		return nil, errorResponses.Error(err)
 	}
 
-	p, err := h.profile.profile(ctx, userID)
+	roles, _ := auth.RolesFrom(ctx)
+	p, err := h.profile.profile(ctx, userID, roles)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

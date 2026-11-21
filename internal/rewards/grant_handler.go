@@ -19,12 +19,12 @@ func (Reason) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema
 	if schema.Extensions == nil {
 		schema.Extensions = map[string]any{}
 	}
-	schema.Extensions["x-extensible-enum"] = []any{"welcome", "like_given", "like_received", "comment", "profile_complete", "birth_date", "referral", "referral_joined", "daily_quests", "faq_approved"}
+	schema.Extensions["x-extensible-enum"] = []any{"welcome", "like_given", "like_received", "comment", "profile_complete", "birth_date", "referral", "referral_joined", "daily_quests", "faq_approved", "challenge"}
 	return schema
 }
 
 type CoinGrant struct {
-	Reason    Reason    `json:"reason" doc:"What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: inviting another student who signs up. referral_joined: signing up with an invitation code. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. More values may be added; show a generic label for unknown ones."`
+	Reason    Reason    `json:"reason" doc:"What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: inviting another student who signs up. referral_joined: signing up with an invitation code. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. challenge: finishing a challenge. More values may be added; show a generic label for unknown ones."`
 	Amount    int       `json:"amount" minimum:"1" example:"10"`
 	CreatedAt time.Time `json:"createdAt"`
 }

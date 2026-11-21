@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/google/uuid"
 )
 
 type queueQuery struct {
@@ -35,14 +36,44 @@ func (m Module) listQueue(ctx context.Context, q queueQuery) ([]QueuedReport, *s
 
 	items := make([]QueuedReport, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, QueuedReport{
-			Report: Report{
-				ID: row.ID, TargetType: reportTargetType(row.TargetType), TargetID: row.TargetID,
-				Reason: row.Reason, Details: row.Details, Status: row.Status, CreatedAt: row.CreatedAt,
-			},
-			TargetAuthorID: row.TargetAuthorID,
-			Snapshot:       row.Snapshot,
-		})
+		items = append(items, toQueuedReport(row))
 	}
 	return items, next, nil
+}
+
+type reportChange struct {
+	Status ReportStatus
+}
+
+func (m Module) updateReport(ctx context.Context, actorID, id uuid.UUID, change reportChange) (*Report, error) {
+	action := ActionReviewReport
+	switch change.Status {
+	case ReportReviewed:
+	case ReportDismissed:
+		action = ActionDismissReport
+	default:
+		return nil, ErrInvalidInput
+	}
+	row, err := m.queue.resolve(ctx, id, change.Status)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.actions.create(ctx, actorID, action, id); err != nil {
+		return nil, err
+	}
+	report := toReport(*row)
+	return &report, nil
+}
+
+func (m Module) report(ctx context.Context, id uuid.UUID) (*QueuedReport, error) {
+	row, err := m.queue.get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	report := toQueuedReport(*row)
+	return &report, nil
+}
+
+func toQueuedReport(row queueRow) QueuedReport {
+	return QueuedReport{Report: toReport(row.reportRow), TargetAuthorID: row.TargetAuthorID, Snapshot: row.Snapshot}
 }

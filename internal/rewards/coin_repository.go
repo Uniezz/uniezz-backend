@@ -44,6 +44,25 @@ func (r *coinRepository) addGrant(ctx context.Context, userID uuid.UUID, reason 
 	return result.RowsAffected() == 1, nil
 }
 
+func (r *coinRepository) addGrants(ctx context.Context, userID uuid.UUID, reason Reason, refIDs []uuid.UUID, amounts []int) (int, error) {
+	const query = `
+		WITH added AS (
+			INSERT INTO coin_grants (user_id, reason, ref_id, amount)
+			SELECT $1, $2, grant_ref, grant_amount
+			FROM unnest($3::uuid[], $4::int[]) AS g(grant_ref, grant_amount)
+			WHERE grant_amount > 0
+			ON CONFLICT DO NOTHING
+			RETURNING amount
+		)
+		SELECT COALESCE(SUM(amount), 0)::int FROM added`
+
+	var total int
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, userID, reason, refIDs, amounts).Scan(&total); err != nil {
+		return 0, fmt.Errorf("add coin grants: %w", err)
+	}
+	return total, nil
+}
+
 func (r *coinRepository) addToBalance(ctx context.Context, userID uuid.UUID, amount int) error {
 	const query = `
 		INSERT INTO coin_balances (user_id, coins)

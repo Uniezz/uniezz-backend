@@ -15,6 +15,8 @@ import (
 )
 
 const (
+	targetPost       = "post"
+	targetComment    = "comment"
 	targetUser       = "user"
 	targetCandidate  = "candidate"
 	targetFile       = "file"
@@ -75,7 +77,12 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 	if err != nil {
 		return nil, err
 	}
-	return &Report{
+	report := toReport(*row)
+	return &report, nil
+}
+
+func toReport(row reportRow) Report {
+	return Report{
 		ID:         row.ID,
 		TargetType: reportTargetType(row.TargetType),
 		TargetID:   row.TargetID,
@@ -83,7 +90,7 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 		Details:    row.Details,
 		Status:     row.Status,
 		CreatedAt:  row.CreatedAt,
-	}, nil
+	}
 }
 
 func (m Module) target(ctx context.Context, reporterID uuid.UUID, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error) {

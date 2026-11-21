@@ -17,7 +17,7 @@ func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 	for _, id := range fileIDs {
-		if err := m.deleteFile(ctx, userID, id); err != nil {
+		if err := m.deleteFile(ctx, userID, id, false); err != nil {
 			return err
 		}
 	}

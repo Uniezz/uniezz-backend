@@ -33,6 +33,7 @@ var _ rewardService = rewards.Module{}
 
 type rewardService interface {
 	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
+	Track(ctx context.Context, userID uuid.UUID, action rewards.Action) (int, error)
 }
 
 var _ limiter = (*ratelimit.Limiter)(nil)

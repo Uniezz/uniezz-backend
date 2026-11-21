@@ -32,7 +32,8 @@ func NewSessionRepository(db database.DB) *SessionRepository {
 func (r *SessionRepository) CreateSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*Session, error) {
 	const query = `
 		INSERT INTO sessions (user_id, token_hash, expires_at)
-		VALUES ($1, $2, $3)
+		SELECT $1, $2, $3
+		WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = $1 AND banned_at IS NOT NULL)
 		RETURNING id, user_id, token_hash, expires_at, created_at;
 		`
 
@@ -44,6 +45,9 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID uuid.UUID,
 		&s.ExpiresAt,
 		&s.CreatedAt,
 	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrBanned
+	}
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -64,7 +68,7 @@ func (r *SessionRepository) GetActiveSessionByHash(
 			ARRAY(SELECT r.role FROM user_roles r WHERE r.user_id = s.user_id ORDER BY r.role)
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
-		WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.deleted_at IS NULL;
+		WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.deleted_at IS NULL AND u.banned_at IS NULL;
 	`
 
 	var s Session

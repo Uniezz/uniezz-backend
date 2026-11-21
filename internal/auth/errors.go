@@ -28,6 +28,10 @@ var (
 	ErrSessionNotFound = errors.New("session not found")
 
 	ErrForbidden = errors.New("role required")
+
+	ErrUserNotFound = errors.New("user not found")
+	ErrStaff        = errors.New("user has a staff role")
+	ErrBanned       = errors.New("account banned")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -45,6 +49,7 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrSessionNotFound, Status: http.StatusUnauthorized, Code: "unauthorized"},
 	{Err: ErrNotStudent, Status: http.StatusForbidden, Code: "not_student"},
 	{Err: ErrForbidden, Status: http.StatusForbidden, Code: "forbidden"},
+	{Err: ErrBanned, Status: http.StatusForbidden, Code: "banned"},
 	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 	{Err: ErrUpstream, Status: http.StatusBadGateway, Code: "provider_unavailable"},
 }

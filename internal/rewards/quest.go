@@ -38,6 +38,13 @@ func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) (in
 
 	paid := 0
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if action, ok := questActions[quest]; ok {
+			bonus, err := m.Track(ctx, userID, action)
+			if err != nil {
+				return err
+			}
+			paid += bonus
+		}
 		day, err := m.quests.record(ctx, userID, questZone, step)
 		if err != nil {
 			return err
@@ -49,7 +56,8 @@ func (m Module) Progress(ctx context.Context, userID uuid.UUID, quest Quest) (in
 		if err != nil || !completed {
 			return err
 		}
-		paid, err = m.Grant(ctx, userID, ReasonDailyQuests, &day.ID, nil)
+		daily, err := m.Grant(ctx, userID, ReasonDailyQuests, &day.ID, nil)
+		paid += daily
 		return err
 	})
 	return paid, err

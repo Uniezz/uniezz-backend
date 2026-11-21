@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
@@ -24,6 +25,7 @@ const (
 	reportLimit           = 5
 	reportWindow          = time.Hour
 	anonymiseReportsEvery = 24 * time.Hour
+	pruneActionsEvery     = 24 * time.Hour
 )
 
 var (
@@ -31,10 +33,13 @@ var (
 	_ profileTargets   = profile.Module{}
 	_ candidateTargets = connections.Module{}
 	_ studyTargets     = study.Module{}
+	_ staffService     = auth.Module{}
 )
 
 type feedTargets interface {
 	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
+	RemovePost(ctx context.Context, postID uuid.UUID) error
+	RemoveComment(ctx context.Context, commentID uuid.UUID) error
 }
 
 type profileTargets interface {
@@ -48,6 +53,16 @@ type candidateTargets interface {
 
 type studyTargets interface {
 	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
+	RemoveFile(ctx context.Context, id uuid.UUID) error
+	RemoveCourse(ctx context.Context, id uuid.UUID) error
+}
+
+type staffService interface {
+	GrantRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
+	RevokeRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
+	Ban(ctx context.Context, userID uuid.UUID) error
+	Unban(ctx context.Context, userID uuid.UUID) error
+	BannedAt(ctx context.Context, userID uuid.UUID) (*time.Time, error)
 }
 
 type limiter interface {
@@ -62,10 +77,13 @@ type Module struct {
 	profiles   profileTargets
 	candidates candidateTargets
 	study      studyTargets
+	staff      staffService
+	moderators *moderatorRepository
+	actions    *actionRepository
 	limiter    limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, staff staffService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -75,6 +93,9 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		profiles:   profileModule,
 		candidates: candidates,
 		study:      studyModule,
+		staff:      staff,
+		moderators: newModeratorRepository(db),
+		actions:    newActionRepository(db),
 		limiter:    ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
 
@@ -82,6 +103,12 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		return Module{}, fmt.Errorf("moderation: %w", err)
 	}
 	if err := jobs.Schedule(runner, "moderation-anonymise-reports", AnonymiseReportsArgs{}, anonymiseReportsEvery); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	if err := jobs.Register(runner, m.pruneActions, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	if err := jobs.Schedule(runner, "moderation-prune-actions", PruneActionsArgs{}, pruneActionsEvery); err != nil {
 		return Module{}, fmt.Errorf("moderation: %w", err)
 	}
 	return m, nil
@@ -93,4 +120,25 @@ func (m Module) Register(api huma.API) {
 
 	queue := &queueHandler{moderation: m}
 	huma.Register(api, listQueueOperation, queue.listQueue)
+	huma.Register(api, getReportOperation, queue.getReport)
+	huma.Register(api, updateReportOperation, queue.updateReport)
+
+	removals := &removalHandler{moderation: m}
+	huma.Register(api, removePostOperation, removals.removePost)
+	huma.Register(api, removeCommentOperation, removals.removeComment)
+	huma.Register(api, removeFileOperation, removals.removeFile)
+	huma.Register(api, removeCourseOperation, removals.removeCourse)
+
+	moderators := &moderatorHandler{moderation: m}
+	huma.Register(api, listModeratorsOperation, moderators.listModerators)
+	huma.Register(api, grantModeratorOperation, moderators.grantModerator)
+	huma.Register(api, revokeModeratorOperation, moderators.revokeModerator)
+
+	bans := &banHandler{moderation: m}
+	huma.Register(api, getBanOperation, bans.getBan)
+	huma.Register(api, banUserOperation, bans.banUser)
+	huma.Register(api, unbanUserOperation, bans.unbanUser)
+
+	actions := &actionHandler{moderation: m}
+	huma.Register(api, listActionsOperation, actions.listActions)
 }

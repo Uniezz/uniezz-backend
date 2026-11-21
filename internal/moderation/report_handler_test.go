@@ -47,6 +47,27 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 // given author.
 type fakeTargets struct {
 	authors map[uuid.UUID]uuid.UUID
+	removed map[uuid.UUID]string
+}
+
+func (f fakeTargets) RemovePost(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "post"
+	return nil
+}
+
+func (f fakeTargets) RemoveComment(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "comment"
+	return nil
+}
+
+func (f fakeTargets) RemoveFile(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "file"
+	return nil
+}
+
+func (f fakeTargets) RemoveCourse(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "course"
+	return nil
 }
 
 func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
@@ -101,15 +122,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	pool := setupTestDB(t)
 	e := &testEnv{
 		pool:       pool,
-		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}},
+		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}, removed: map[uuid.UUID]string{}},
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
 	}
-	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, jobs.NewRunner(pool, 1, time.Minute))
-	if err != nil {
-		t.Fatalf("New failed: %v", err)
-	}
-
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
 		if u.AuthType == auth.AuthTypeUSOS {
@@ -119,6 +135,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
+	}
+
+	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, authModule, jobs.NewRunner(pool, 1, time.Minute))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
 	}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
@@ -146,6 +167,7 @@ func (e *testEnv) user(t *testing.T) testUser {
 	}
 	t.Cleanup(func() {
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM reports WHERE reporter_id = $1 OR target_author_id = $1", id)
+		_, _ = e.pool.Exec(context.Background(), "DELETE FROM moderation_actions WHERE actor_id = $1 OR target_id = $1", id)
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM rate_limits WHERE key = $1", "report:"+id.String())
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id)
 	})
@@ -157,6 +179,15 @@ func (e *testEnv) user(t *testing.T) testUser {
 		t.Fatalf("create session: %v", err)
 	}
 	return testUser{id: id, bearer: "Authorization: Bearer " + token.String()}
+}
+
+func (e *testEnv) staff(t *testing.T, role auth.Role) testUser {
+	t.Helper()
+	u := e.user(t)
+	if _, err := e.pool.Exec(context.Background(), "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", u.id, role); err != nil {
+		t.Fatalf("grant %s: %v", role, err)
+	}
+	return u
 }
 
 func (e *testEnv) contentBy(author testUser) uuid.UUID {

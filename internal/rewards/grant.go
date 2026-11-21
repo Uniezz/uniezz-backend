@@ -20,6 +20,7 @@ const (
 	ReasonReferralJoined  Reason = "referral_joined"
 	ReasonDailyQuests     Reason = "daily_quests"
 	ReasonFAQApproved     Reason = "faq_approved"
+	ReasonChallenge       Reason = "challenge"
 )
 
 var amounts = map[Reason]int{
@@ -35,9 +36,10 @@ var amounts = map[Reason]int{
 	ReasonFAQApproved:     5,
 }
 
-// Grant pays userID for one action, at most once per (reason, refID, actorID), and returns the coins
-// it paid: 0 when the action was already paid. Call it inside the transaction of the write that earns
-// the coins, so a rolled-back write pays nothing.
+// Grant pays userID for one action, at most once per (reason, refID, actorID), counts a paid action
+// towards the student's challenges, and returns the coins it paid, challenge rewards included: 0 when
+// the action was already paid. Call it inside the transaction of the write that earns the coins, so a
+// rolled-back write pays nothing.
 func (m Module) Grant(ctx context.Context, userID uuid.UUID, reason Reason, refID, actorID *uuid.UUID) (int, error) {
 	amount, ok := amounts[reason]
 	if !ok {
@@ -51,7 +53,16 @@ func (m Module) Grant(ctx context.Context, userID uuid.UUID, reason Reason, refI
 			return err
 		}
 		paid = amount
-		return m.coins.addToBalance(ctx, userID, amount)
+		if err := m.coins.addToBalance(ctx, userID, amount); err != nil {
+			return err
+		}
+		action, ok := grantActions[reason]
+		if !ok {
+			return nil
+		}
+		bonus, err := m.Track(ctx, userID, action)
+		paid += bonus
+		return err
 	})
 	return paid, err
 }

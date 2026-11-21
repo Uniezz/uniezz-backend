@@ -8,6 +8,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -120,7 +121,10 @@ func (m Module) addFile(ctx context.Context, userID uuid.UUID, change fileChange
 		if err := m.media.MarkReady(ctx, fields.MediaID, userID, media.KindExam); err != nil {
 			return mediaError(err)
 		}
-		id, err = m.files.create(ctx, userID, fields)
+		if id, err = m.files.create(ctx, userID, fields); err != nil {
+			return err
+		}
+		_, err = m.rewards.Track(ctx, userID, rewards.ActionFileUploaded)
 		return err
 	})
 	if err != nil {
@@ -174,12 +178,12 @@ func (m Module) searchFiles(ctx context.Context, q fileQuery) ([]CourseFile, *st
 	return files, next, nil
 }
 
-func (m Module) deleteFile(ctx context.Context, userID, id uuid.UUID) error {
+func (m Module) deleteFile(ctx context.Context, userID, id uuid.UUID, anyAuthor bool) error {
 	var mediaID uuid.UUID
 	var found bool
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		var err error
-		mediaID, found, err = m.files.delete(ctx, id, userID)
+		mediaID, found, err = m.files.delete(ctx, id, userID, anyAuthor)
 		if err != nil || !found {
 			return err
 		}
