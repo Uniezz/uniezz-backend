@@ -25,23 +25,18 @@ type listPendingProposalsOutput struct {
 	}
 }
 
-var listPendingProposalsOperation = auth.Authenticated(huma.Operation{
+var listPendingProposalsOperation = auth.Authorized(huma.Operation{
 	OperationID: "listPendingFaqProposals",
 	Method:      http.MethodGet,
 	Path:        "/faq/proposals/pending",
 	Summary:     "List FAQ proposals waiting for a moderator",
-	Description: "Every student's proposals that are not published yet, newest first. Only an FAQ publisher may call this; everyone else gets 403.",
+	Description: "Every student's proposals that are not published yet, newest first. Moderators and admins only; everyone else gets 403.",
 	Tags:        []string{"faq"},
-	Errors:      []int{http.StatusBadRequest, http.StatusForbidden},
-})
+	Errors:      []int{http.StatusBadRequest},
+}, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *approvalHandler) listPendingProposals(ctx context.Context, in *listPendingProposalsInput) (*listPendingProposalsOutput, error) {
-	userID, ok := auth.UserIDFrom(ctx)
-	if !ok {
-		return nil, httpapi.Unauthorized()
-	}
-
-	items, next, err := h.faq.listPending(ctx, userID, in.Cursor, in.Limit)
+	items, next, err := h.faq.listPending(ctx, in.Cursor, in.Limit)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
@@ -59,15 +54,15 @@ type approveProposalOutput struct {
 	Body Entry
 }
 
-var approveProposalOperation = auth.Authenticated(huma.Operation{
+var approveProposalOperation = auth.Authorized(huma.Operation{
 	OperationID: "approveFaqProposal",
 	Method:      http.MethodPut,
 	Path:        "/faq/proposals/{id}/approval",
 	Summary:     "Approve an FAQ proposal and publish it",
-	Description: "Only an FAQ publisher may call this. Approving pays the author 5 Uniezz coins once, unless the publisher approves their own proposal; approving an entry that is already published changes nothing. A rejected or unknown entry is 404.",
+	Description: "Moderators and admins only. Approving pays the author 5 Uniezz coins once, unless the moderator approves their own proposal; approving an entry that is already published changes nothing. A rejected or unknown entry is 404.",
 	Tags:        []string{"faq"},
-	Errors:      []int{http.StatusForbidden, http.StatusNotFound},
-})
+	Errors:      []int{http.StatusNotFound},
+}, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *approvalHandler) approveProposal(ctx context.Context, in *approveProposalInput) (*approveProposalOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
