@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
@@ -31,6 +32,7 @@ var (
 	_ profileTargets   = profile.Module{}
 	_ candidateTargets = connections.Module{}
 	_ studyTargets     = study.Module{}
+	_ staffService     = auth.Module{}
 )
 
 type feedTargets interface {
@@ -54,6 +56,11 @@ type studyTargets interface {
 	RemoveCourse(ctx context.Context, id uuid.UUID) error
 }
 
+type staffService interface {
+	GrantRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
+	RevokeRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
+}
+
 type limiter interface {
 	Allow(ctx context.Context, key string) error
 }
@@ -66,10 +73,12 @@ type Module struct {
 	profiles   profileTargets
 	candidates candidateTargets
 	study      studyTargets
+	staff      staffService
+	moderators *moderatorRepository
 	limiter    limiter
 }
 
-func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTargets, candidates candidateTargets, studyModule studyTargets, staff staffService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -79,6 +88,8 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		profiles:   profileModule,
 		candidates: candidates,
 		study:      studyModule,
+		staff:      staff,
+		moderators: newModeratorRepository(db),
 		limiter:    ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
 
@@ -105,4 +116,9 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, removeCommentOperation, removals.removeComment)
 	huma.Register(api, removeFileOperation, removals.removeFile)
 	huma.Register(api, removeCourseOperation, removals.removeCourse)
+
+	moderators := &moderatorHandler{moderation: m}
+	huma.Register(api, listModeratorsOperation, moderators.listModerators)
+	huma.Register(api, grantModeratorOperation, moderators.grantModerator)
+	huma.Register(api, revokeModeratorOperation, moderators.revokeModerator)
 }

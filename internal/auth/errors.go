@@ -28,6 +28,8 @@ var (
 	ErrSessionNotFound = errors.New("session not found")
 
 	ErrForbidden = errors.New("role required")
+
+	ErrUserNotFound = errors.New("user not found")
 )
 
 var errorResponses = httpapi.ErrorResponses{

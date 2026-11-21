@@ -126,11 +126,6 @@ func newTestEnv(t *testing.T) *testEnv {
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
 	}
-	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, jobs.NewRunner(pool, 1, time.Minute))
-	if err != nil {
-		t.Fatalf("New failed: %v", err)
-	}
-
 	usos := map[string]config.UsosCredentials{}
 	for _, u := range auth.GetUniversities() {
 		if u.AuthType == auth.AuthTypeUSOS {
@@ -140,6 +135,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
+	}
+
+	m, err := New(pool, e.targets, e.users, e.candidates, e.targets, authModule, jobs.NewRunner(pool, 1, time.Minute))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
 	}
 
 	_, api := humatest.New(t, httpapi.NewConfig(&config.Config{}))
