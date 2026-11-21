@@ -246,3 +246,20 @@ func TestSessionRepository_ExtendSession(t *testing.T) {
 		t.Errorf("expected expiry %v, got %v (an earlier time must never shorten a session)", later, got.ExpiresAt)
 	}
 }
+
+func TestRolesFrom(t *testing.T) {
+	t.Run("the roles of the session are in the context", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), principalKey{}, principal{roles: []Role{RoleAdmin, RoleModerator}})
+
+		roles, ok := RolesFrom(ctx)
+		if !ok || !slices.Equal(roles, []Role{RoleAdmin, RoleModerator}) {
+			t.Errorf("RolesFrom = %v, %v", roles, ok)
+		}
+	})
+
+	t.Run("a context without a session has no roles", func(t *testing.T) {
+		if roles, ok := RolesFrom(context.Background()); ok || roles != nil {
+			t.Errorf("RolesFrom = %v, %v", roles, ok)
+		}
+	})
+}

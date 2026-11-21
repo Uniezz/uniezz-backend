@@ -27,7 +27,7 @@ func TestGetMe(t *testing.T) {
 		}
 		slices.Sort(keys)
 
-		want := []string{"avatarUrl", "bannerUrl", "bio", "birthDate", "coins", "createdAt", "email", "firstName", "gender", "id", "intent", "interests", "language", "lastName", "openTo", "privacy", "programmes", "songUrl", "universityId"}
+		want := []string{"avatarUrl", "bannerUrl", "bio", "birthDate", "coins", "createdAt", "email", "firstName", "gender", "id", "intent", "interests", "language", "lastName", "openTo", "privacy", "programmes", "roles", "songUrl", "universityId"}
 
 		if !slices.Equal(keys, want) {
 			t.Errorf("expected keys %v, got %v", want, keys)
@@ -54,6 +54,21 @@ func TestGetMe(t *testing.T) {
 		openTo, ok := body["openTo"].([]any)
 		if !ok || len(openTo) != 0 {
 			t.Errorf("expected openTo [], got %v", body["openTo"])
+		}
+		if roles, ok := body["roles"].([]any); !ok || len(roles) != 0 {
+			t.Errorf("expected roles [], got %v", body["roles"])
+		}
+	})
+
+	t.Run("a role granted after sign-in shows on the next read", func(t *testing.T) {
+		u := e.otpUser(t)
+		if _, err := e.pool.Exec(context.Background(), "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", u.id, auth.RoleModerator); err != nil {
+			t.Fatalf("grant role: %v", err)
+		}
+
+		got := decode[Profile](t, e.api.Get("/profile/me", u.bearer), http.StatusOK)
+		if !slices.Equal(got.Roles, []auth.Role{auth.RoleModerator}) {
+			t.Errorf("roles = %v, want [moderator]", got.Roles)
 		}
 	})
 

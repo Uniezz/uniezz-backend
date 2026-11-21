@@ -1593,6 +1593,16 @@ components:
           type:
             - array
             - "null"
+        roles:
+          description: Staff roles of the student; empty for students without one
+          items:
+            type: string
+            x-extensible-enum:
+              - moderator
+              - admin
+          type:
+            - array
+            - "null"
         songUrl:
           description: Link to the song the student associates with themselves. Null when unset.
           examples:
@@ -1623,6 +1633,7 @@ components:
         - interests
         - privacy
         - coins
+        - roles
         - createdAt
       type: object
     ProfilePhoto:
@@ -2548,6 +2559,16 @@ components:
           type:
             - array
             - "null"
+        roles:
+          description: Staff roles of the student; empty for students without one
+          items:
+            type: string
+            x-extensible-enum:
+              - moderator
+              - admin
+          type:
+            - array
+            - "null"
         songUrl:
           description: Link to the song the student associates with themselves. Null when unset.
           examples:
@@ -2579,6 +2600,7 @@ components:
         - interests
         - privacy
         - coins
+        - roles
         - createdAt
       type: object
     UpdatePostInputBody:

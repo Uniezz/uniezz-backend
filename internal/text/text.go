@@ -70,9 +70,9 @@ func Tags(tags []string, maxTags, maxLength int) ([]string, error) {
 }
 
 // NonNil returns an empty slice for nil, so JSON shows [] instead of null.
-func NonNil(s []string) []string {
+func NonNil[T any](s []T) []T {
 	if s == nil {
-		return []string{}
+		return []T{}
 	}
 	return s
 }

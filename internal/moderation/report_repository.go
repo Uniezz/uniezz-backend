@@ -17,7 +17,7 @@ type reportRow struct {
 	TargetID   uuid.UUID
 	Reason     string
 	Details    *string
-	Status     string
+	Status     ReportStatus
 	CreatedAt  time.Time
 }
 

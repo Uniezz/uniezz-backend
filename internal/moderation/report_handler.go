@@ -30,13 +30,21 @@ func (reportTargetType) TransformSchema(_ huma.Registry, schema *huma.Schema) *h
 	return schema
 }
 
+type ReportStatus string
+
+const (
+	ReportPending   ReportStatus = "pending"
+	ReportReviewed  ReportStatus = "reviewed"
+	ReportDismissed ReportStatus = "dismissed"
+)
+
 type Report struct {
 	ID         uuid.UUID        `json:"id" format:"uuid"`
 	TargetType reportTargetType `json:"targetType"`
 	TargetID   uuid.UUID        `json:"targetId" format:"uuid"`
 	Reason     string           `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
 	Details    *string          `json:"details" nullable:"true"`
-	Status     string           `json:"status" enum:"pending,reviewed,dismissed"`
+	Status     ReportStatus     `json:"status" enum:"pending,reviewed,dismissed"`
 	CreatedAt  time.Time        `json:"createdAt"`
 }
 
