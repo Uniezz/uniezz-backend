@@ -7,18 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) listPending(ctx context.Context, moderatorID uuid.UUID, cursor string, limit int) ([]Entry, *string, error) {
-	if err := m.checkPublisher(ctx, moderatorID); err != nil {
-		return nil, nil, err
-	}
+func (m Module) listPending(ctx context.Context, cursor string, limit int) ([]Entry, *string, error) {
 	return m.list(ctx, listQuery{Status: statusProposed, Cursor: cursor, Limit: limit})
 }
 
 func (m Module) approve(ctx context.Context, moderatorID, entryID uuid.UUID) (*Entry, error) {
-	if err := m.checkPublisher(ctx, moderatorID); err != nil {
-		return nil, err
-	}
-
 	var entry Entry
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		row, authorID, err := m.entries.publishProposal(ctx, entryID)

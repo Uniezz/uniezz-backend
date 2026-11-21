@@ -3,7 +3,6 @@ package faq
 import (
 	"context"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 
@@ -30,12 +29,15 @@ func (e *testEnv) propose(t *testing.T, u testUser) Entry {
 
 func TestApproveProposal(t *testing.T) {
 	e := newTestEnv(t)
-	staff := e.userEmail(t, strings.ToLower(e.publisher))
+	staff := e.user(t)
+	if _, err := e.pool.Exec(context.Background(), "INSERT INTO user_roles (user_id, role) VALUES ($1, 'moderator')", staff.id); err != nil {
+		t.Fatalf("grant moderator: %v", err)
+	}
 	approve := func(id uuid.UUID) string {
 		return "/faq/proposals/" + id.String() + "/approval"
 	}
 
-	t.Run("a publisher sees every student's pending proposals", func(t *testing.T) {
+	t.Run("a moderator sees every student's pending proposals", func(t *testing.T) {
 		author := e.user(t)
 		proposal := e.propose(t, author)
 		found := false
@@ -98,11 +100,11 @@ func TestApproveProposal(t *testing.T) {
 		}
 	})
 
-	t.Run("a publisher approving their own proposal earns nothing", func(t *testing.T) {
+	t.Run("a moderator approving their own proposal earns nothing", func(t *testing.T) {
 		proposal := e.propose(t, staff)
 		decode[Entry](t, e.api.Put(approve(proposal.ID), staff.bearer), http.StatusOK)
 		if c := e.coins(t, staff); c != 0 {
-			t.Errorf("publisher coins = %d, want 0", c)
+			t.Errorf("moderator coins = %d, want 0", c)
 		}
 	})
 
