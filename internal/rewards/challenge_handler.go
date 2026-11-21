@@ -15,12 +15,6 @@ type challengeHandler struct {
 	rewards Module
 }
 
-const actionDoc = "like_given: liking another student's post. like_received: another student liked your post. " +
-	"comment_posted: the first comment on another student's post. reply_posted: replying to another student's comment. " +
-	"post_created: creating a post. file_uploaded: adding an exam file. course_rated, professor_rated: rating one. " +
-	"connection_made: a new connection. profile_completed: filling every profile field. friend_invited: an invited student signs up. " +
-	"faq_approved: a moderator approves your FAQ proposal."
-
 func (Action) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema {
 	schema.Enum = nil
 	if schema.Extensions == nil {

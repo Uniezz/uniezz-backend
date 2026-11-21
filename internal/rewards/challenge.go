@@ -177,8 +177,5 @@ func challengePage(q challengeQuery) (challengeFilter, error) {
 }
 
 func toChallenge(row challengeRow) Challenge {
-	return Challenge{
-		ID: row.ID, Action: row.Action, Target: row.Target, Period: row.Period, Reward: row.Reward,
-		Texts: row.Texts, StartsAt: row.StartsAt, EndsAt: row.EndsAt, ArchivedAt: row.ArchivedAt, CreatedAt: row.CreatedAt,
-	}
+	return Challenge(row)
 }

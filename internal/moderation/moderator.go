@@ -56,7 +56,7 @@ func (m Module) listModerators(ctx context.Context, q moderatorQuery) ([]Moderat
 
 	items := make([]Moderator, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, Moderator{UserID: row.UserID, FirstName: row.FirstName, LastName: row.LastName, GrantedAt: row.GrantedAt})
+		items = append(items, Moderator(row))
 	}
 	return items, next, nil
 }

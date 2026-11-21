@@ -50,7 +50,7 @@ func (m Module) listActions(ctx context.Context, q actionQuery) ([]Action, *stri
 
 	items := make([]Action, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, Action{ID: row.ID, ActorID: row.ActorID, Type: row.Type, TargetID: row.TargetID, CreatedAt: row.CreatedAt})
+		items = append(items, Action(row))
 	}
 	return items, next, nil
 }
