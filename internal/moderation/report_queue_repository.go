@@ -129,3 +129,13 @@ func (r *queueRepository) resolveTarget(ctx context.Context, targetType string, 
 	}
 	return nil
 }
+
+func (r *queueRepository) resolveUser(ctx context.Context, userID uuid.UUID, status ReportStatus) error {
+	const query = `
+		UPDATE reports SET status = $2
+		WHERE target_type = ANY($4) AND (target_id = $1 OR target_author_id = $1) AND status = $3`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID, status, ReportPending, []string{targetUser, targetCandidate}); err != nil {
+		return fmt.Errorf("resolve reports on user: %w", err)
+	}
+	return nil
+}

@@ -26,8 +26,9 @@ var exchangeOperation = huma.Operation{
 	Method:      http.MethodPost,
 	Path:        "/auth/exchange",
 	Summary:     "Exchange a one-time login code for a session",
+	Description: "A banned student gets 403 banned.",
 	Tags:        []string{"auth"},
-	Errors:      []int{http.StatusBadRequest, http.StatusUnauthorized},
+	Errors:      []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden},
 }
 
 func (h *sessionHandler) exchange(ctx context.Context, in *exchangeInput) (*exchangeOutput, error) {

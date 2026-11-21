@@ -18,7 +18,7 @@ func newRoleRepository(db database.DB) *roleRepository {
 
 func (r *roleRepository) grant(ctx context.Context, userID uuid.UUID, role Role) (bool, error) {
 	const query = `
-		WITH target AS (SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL),
+		WITH target AS (SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL AND banned_at IS NULL),
 		granted AS (
 			INSERT INTO user_roles (user_id, role) SELECT id, $2 FROM target
 			ON CONFLICT (user_id, role) DO NOTHING

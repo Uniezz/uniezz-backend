@@ -55,9 +55,9 @@ var otpVerifyOperation = huma.Operation{
 	Method:      http.MethodPost,
 	Path:        "/auth/otp/verify",
 	Summary:     "Log in with an emailed code",
-	Description: "Returns a session. A referralCode is applied only when this login creates a new account. A code allows 5 attempts; after that, or after it expires, request a new one.",
+	Description: "Returns a session. A referralCode is applied only when this login creates a new account. A code allows 5 attempts; after that, or after it expires, request a new one. A banned student gets 403 banned.",
 	Tags:        []string{"auth"},
-	Errors:      []int{http.StatusBadRequest, http.StatusUnauthorized},
+	Errors:      []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden},
 }
 
 func (h *otpHandler) verify(ctx context.Context, in *otpVerifyInput) (*otpVerifyOutput, error) {

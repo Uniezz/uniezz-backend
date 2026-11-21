@@ -110,6 +110,22 @@ components:
         - universityId
         - avatarUrl
       type: object
+    Ban:
+      additionalProperties: false
+      properties:
+        bannedAt:
+          description: Null when the student is not banned
+          format: date-time
+          type:
+            - string
+            - "null"
+        userId:
+          format: uuid
+          type: string
+      required:
+        - userId
+        - bannedAt
+      type: object
     Card:
       additionalProperties: false
       properties:
@@ -2716,6 +2732,7 @@ openapi: 3.1.0
 paths:
   /auth/exchange:
     post:
+      description: A banned student gets 403 banned.
       operationId: exchangeLoginCode
       requestBody:
         content:
@@ -2742,6 +2759,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
         "422":
           content:
             application/json:
@@ -2891,7 +2914,7 @@ paths:
         - auth
   /auth/otp/verify:
     post:
-      description: Returns a session. A referralCode is applied only when this login creates a new account. A code allows 5 attempts; after that, or after it expires, request a new one.
+      description: Returns a session. A referralCode is applied only when this login creates a new account. A code allows 5 attempts; after that, or after it expires, request a new one. A banned student gets 403 banned.
       operationId: verifyOtpCode
       requestBody:
         content:
@@ -2918,6 +2941,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
         "422":
           content:
             application/json:
@@ -5628,6 +5657,161 @@ paths:
             - moderator
             - admin
       summary: Resolve a report about a post, comment, student, exam file or course
+      tags:
+        - moderation
+  /moderation/users/{id}/ban:
+    delete:
+      description: The student can sign in again, and sessions from before the ban work again until they expire. Unbanning a student who is not banned succeeds.
+      operationId: unbanUser
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Lift a student's ban
+      tags:
+        - moderation
+    get:
+      description: Moderators and admins only.
+      operationId: getBan
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ban"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Get whether a student is banned
+      tags:
+        - moderation
+    put:
+      description: "Ends every session of the student at once, refuses new sign-ins with 403 banned, and marks pending reports about the student reviewed. Banning again changes nothing. Moderators and admins cannot be banned: an admin revokes the role first."
+      operationId: banUser
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Ban a student
       tags:
         - moderation
   /profile/avatar:

@@ -59,6 +59,9 @@ type studyTargets interface {
 type staffService interface {
 	GrantRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
 	RevokeRole(ctx context.Context, userID uuid.UUID, role auth.Role) error
+	Ban(ctx context.Context, userID uuid.UUID) error
+	Unban(ctx context.Context, userID uuid.UUID) error
+	BannedAt(ctx context.Context, userID uuid.UUID) (*time.Time, error)
 }
 
 type limiter interface {
@@ -121,4 +124,9 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, listModeratorsOperation, moderators.listModerators)
 	huma.Register(api, grantModeratorOperation, moderators.grantModerator)
 	huma.Register(api, revokeModeratorOperation, moderators.revokeModerator)
+
+	bans := &banHandler{moderation: m}
+	huma.Register(api, getBanOperation, bans.getBan)
+	huma.Register(api, banUserOperation, bans.banUser)
+	huma.Register(api, unbanUserOperation, bans.unbanUser)
 }
