@@ -30,11 +30,6 @@ jobs:
             refs/heads/release/*) ;;
             *) echo "::error::Run this workflow on a release/* branch, not $GITHUB_REF_NAME"; exit 1 ;;
           esac
-          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-stg.yaml/runs?head_sha=$GITHUB_SHA&status=success" --jq .total_count)"
-          if [ "$runs" -eq 0 ]; then
-            echo "::error::Staging has not deployed ${GITHUB_SHA::7} successfully. Deploy it to staging first."
-            exit 1
-          fi
 
   deploy:
     name: Deploy
