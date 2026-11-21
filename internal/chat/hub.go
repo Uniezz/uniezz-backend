@@ -35,6 +35,7 @@ type hub struct {
 	mu          sync.Mutex
 	users       map[uuid.UUID][]*subscriber
 	total       int
+	draining    bool
 	perUser     int
 	maxTotal    int
 	queueSize   int
@@ -59,6 +60,9 @@ func (h *hub) subscribe(userID, sessionID uuid.UUID) (*subscriber, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.draining {
+		return nil, ErrDraining
+	}
 	if h.total >= h.maxTotal {
 		return nil, ErrTooManyStreams
 	}
@@ -130,6 +134,7 @@ func (h *hub) drain(reconnectFrame func(after time.Duration) []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	h.draining = true
 	var drained int64
 	for _, open := range h.users {
 		for _, s := range open {

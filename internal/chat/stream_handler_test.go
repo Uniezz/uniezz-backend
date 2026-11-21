@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -396,5 +398,56 @@ func drainFrames(s *subscriber) []string {
 		default:
 			return frames
 		}
+	}
+}
+
+func TestDrainDoesNotWaitForAReaderThatStoppedReading(t *testing.T) {
+	e := newTestEnv(t)
+	srv := e.streamServer(t, 0, func(m *Module) { m.closeWait = 300 * time.Millisecond })
+	a := e.user(t)
+
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	if _, err := fmt.Fprintf(conn, "GET /chat/stream HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer %s\r\n\r\n", a.token); err != nil {
+		t.Fatal(err)
+	}
+	for e.module.hub.open() == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	frame := make([]byte, 256<<10)
+	for range streamQueueSize - 1 {
+		e.module.hub.publish([]uuid.UUID{a.id}, frame)
+	}
+	time.Sleep(500 * time.Millisecond)
+	e.module.Drain()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for e.module.hub.open() > 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := e.module.hub.open(); got != 0 {
+		t.Errorf("open streams = %d five seconds after Drain, a blocked write must not hold the stream", got)
+	}
+}
+
+func TestStreamIsRefusedWhileDraining(t *testing.T) {
+	e := newTestEnv(t)
+	srv := e.streamServer(t, 0, nil)
+	a := e.user(t)
+	e.module.Drain()
+
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/chat/stream", nil)
+	req.Header.Set("Authorization", "Bearer "+a.token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429 so a deploy does not raise server error alerts", resp.StatusCode)
 	}
 }

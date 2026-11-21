@@ -144,3 +144,12 @@ func TestHubReconnectDelayStaysWithinFiveSeconds(t *testing.T) {
 		}
 	}
 }
+
+func TestHubRefusesStreamsOnceDraining(t *testing.T) {
+	h := newHub()
+	h.drain(reconnectFrame)
+
+	if _, err := h.subscribe(uuid.New(), uuid.New()); !errors.Is(err, ErrDraining) {
+		t.Errorf("err = %v, want ErrDraining so reconnecting clients cannot hold the shutdown open", err)
+	}
+}

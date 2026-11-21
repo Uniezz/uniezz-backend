@@ -18,6 +18,7 @@ var (
 	ErrResourceDeleted = errors.New("the message created with this idempotency key was deleted")
 	ErrRateLimited     = errors.New("too many requests")
 	ErrTooManyStreams  = errors.New("too many open streams")
+	ErrDraining        = errors.New("the server is shutting down")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -31,5 +32,6 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrResourceDeleted, Status: http.StatusGone, Code: "resource_deleted"},
 	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 	{Err: ErrTooManyStreams, Status: http.StatusServiceUnavailable, Code: "too_many_streams"},
+	{Err: ErrDraining, Status: http.StatusTooManyRequests, Code: "shutting_down"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

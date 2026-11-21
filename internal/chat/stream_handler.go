@@ -41,7 +41,7 @@ var openChatStreamOperation = auth.Authenticated(huma.Operation{
 			},
 		},
 	},
-	Errors: []int{http.StatusServiceUnavailable},
+	Errors: []int{http.StatusTooManyRequests, http.StatusServiceUnavailable},
 })
 
 func (h *streamHandler) openStream(ctx context.Context, _ *struct{}) (*huma.StreamResponse, error) {
@@ -72,8 +72,18 @@ func (m Module) serveStream(hctx huma.Context, sub *subscriber) {
 
 	_, w := humachi.Unwrap(hctx)
 	rc := http.NewResponseController(w)
+	go func() {
+		<-sub.done
+		_ = rc.SetWriteDeadline(time.Now().Add(m.closeWait))
+	}()
 	write := func(frame []byte) bool {
-		_ = rc.SetWriteDeadline(time.Now().Add(writeDeadline))
+		deadline := writeDeadline
+		select {
+		case <-sub.done:
+			deadline = m.closeWait
+		default:
+		}
+		_ = rc.SetWriteDeadline(time.Now().Add(deadline))
 		if _, err := w.Write(frame); err != nil {
 			return false
 		}

@@ -23,6 +23,7 @@ const (
 	groupWindow       = time.Hour
 	heartbeatInterval = 20 * time.Second
 	writeDeadline     = 30 * time.Second
+	closeGrace        = 2 * time.Second
 	sessionCheckEvery = 5 * time.Minute
 	publishTimeout    = 10 * time.Second
 )
@@ -56,6 +57,7 @@ type Module struct {
 	hub           *hub
 	heartbeat     time.Duration
 	sessionCheck  time.Duration
+	closeWait     time.Duration
 	now           func() time.Time
 }
 
@@ -74,6 +76,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService) Module {
 		hub:           newHub(),
 		heartbeat:     heartbeatInterval,
 		sessionCheck:  sessionCheckEvery,
+		closeWait:     closeGrace,
 		now:           time.Now,
 	}
 }
