@@ -192,7 +192,7 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 			" AND (u.created_at, u.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")))")
 	}
 
-	where = append(where, "u.deleted_at IS NULL")
+	where = append(where, "u.deleted_at IS NULL", "u.banned_at IS NULL")
 
 	query := "SELECT " + profileColumns + ", " + rank + " AS search_rank" + profileFrom
 	query += " WHERE " + strings.Join(where, " AND ")
@@ -250,12 +250,13 @@ func (r *profileRepository) update(ctx context.Context, userID uuid.UUID, f prof
 	return nil
 }
 
-func (r *profileRepository) blocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
+func (r *profileRepository) hidden(ctx context.Context, viewerID, userID uuid.UUID) (bool, error) {
 	var found bool
 	err := r.db.Conn(ctx).QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM blocked_pairs WHERE user_id = $1 AND other_id = $2)`, a, b).Scan(&found)
+		SELECT EXISTS (SELECT 1 FROM blocked_pairs WHERE user_id = $1 AND other_id = $2)
+		    OR EXISTS (SELECT 1 FROM users WHERE id = $2 AND banned_at IS NOT NULL)`, viewerID, userID).Scan(&found)
 	if err != nil {
-		return false, fmt.Errorf("check block: %w", err)
+		return false, fmt.Errorf("check hidden profile: %w", err)
 	}
 	return found, nil
 }

@@ -9,11 +9,11 @@ import (
 )
 
 func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (*PublicProfile, error) {
-	blocked, err := m.profiles.blocked(ctx, viewerID, userID)
+	hidden, err := m.profiles.hidden(ctx, viewerID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if blocked {
+	if hidden {
 		return nil, ErrNotFound
 	}
 	p, err := m.profiles.get(ctx, userID)

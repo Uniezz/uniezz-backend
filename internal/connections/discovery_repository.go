@@ -55,6 +55,7 @@ func canMeet(arg func(any) string, mode Mode) string {
 		t.user_id <> v.user_id
 		AND v.open_to @> ` + modes + ` AND t.open_to @> ` + modes + `
 		AND NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = v.user_id AND b.other_id = t.user_id)
+		AND NOT EXISTS (SELECT 1 FROM banned_users x WHERE x.id = t.user_id)
 		AND NOT EXISTS (
 			SELECT 1 FROM connections c
 			WHERE c.user_low = LEAST(v.user_id, t.user_id) AND c.user_high = GREATEST(v.user_id, t.user_id))`

@@ -68,8 +68,9 @@ func scanFile(row pgx.Row) (*fileRow, error) {
 	return &f, nil
 }
 
-func notBlocked(viewer, author string) string {
-	return "NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = " + viewer + " AND b.other_id = " + author + ")"
+func notHidden(viewer, author string) string {
+	return "(NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = " + viewer + " AND b.other_id = " + author + ")" +
+		" AND NOT EXISTS (SELECT 1 FROM banned_users x WHERE x.id = " + author + "))"
 }
 
 func (r *fileRepository) create(ctx context.Context, authorID uuid.UUID, f fileFields) (uuid.UUID, error) {
@@ -94,7 +95,7 @@ func (r *fileRepository) get(ctx context.Context, viewerID, id uuid.UUID) (*file
 		SELECT ` + fileColumns + `
 		FROM course_files f
 		JOIN ready_media m ON m.id = f.media_id
-		WHERE f.id = $1 AND ` + notBlocked("$2", "f.author_id")
+		WHERE f.id = $1 AND ` + notHidden("$2", "f.author_id")
 	row, err := scanFile(r.db.Conn(ctx).QueryRow(ctx, query, id, viewerID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -109,7 +110,7 @@ func (r *fileRepository) list(ctx context.Context, f fileFilter) ([]fileRow, err
 	var args database.Args
 	arg := args.Add
 
-	where := []string{notBlocked(arg(f.ViewerID), "f.author_id")}
+	where := []string{notHidden(arg(f.ViewerID), "f.author_id")}
 	if f.CourseID != uuid.Nil {
 		where = append(where, "f.course_id = "+arg(f.CourseID))
 	}

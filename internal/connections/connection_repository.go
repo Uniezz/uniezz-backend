@@ -55,7 +55,8 @@ func (r *connectionRepository) list(ctx context.Context, userID uuid.UUID, after
 		FROM connections c
 		CROSS JOIN LATERAL (SELECT CASE WHEN c.user_low = $1 THEN c.user_high ELSE c.user_low END AS id) other
 		WHERE (c.user_low = $1 OR c.user_high = $1)
-		  AND NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = $1 AND b.other_id = other.id)` + where + `
+		  AND NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = $1 AND b.other_id = other.id)
+		  AND NOT EXISTS (SELECT 1 FROM banned_users x WHERE x.id = other.id)` + where + `
 		ORDER BY c.created_at DESC, c.id DESC
 		LIMIT ` + arg(limit)
 

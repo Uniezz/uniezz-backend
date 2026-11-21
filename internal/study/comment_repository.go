@@ -68,7 +68,7 @@ func (r *commentRepository) list(ctx context.Context, f commentFilter) ([]commen
 	arg := args.Add
 
 	query := `SELECT ` + commentColumns + ` FROM course_comments c
-		WHERE c.course_id = ` + arg(f.CourseID) + ` AND ` + notBlocked(arg(f.ViewerID), "c.author_id")
+		WHERE c.course_id = ` + arg(f.CourseID) + ` AND ` + notHidden(arg(f.ViewerID), "c.author_id")
 	if f.After != nil {
 		query += " AND (c.created_at, c.id) > (" + arg(f.After.CreatedAt) + ", " + arg(f.After.ID) + ")"
 	}
