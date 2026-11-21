@@ -45,12 +45,20 @@ type reportChange struct {
 	Status ReportStatus
 }
 
-func (m Module) updateReport(ctx context.Context, id uuid.UUID, change reportChange) (*Report, error) {
-	if change.Status != ReportReviewed && change.Status != ReportDismissed {
+func (m Module) updateReport(ctx context.Context, actorID, id uuid.UUID, change reportChange) (*Report, error) {
+	action := ActionReviewReport
+	switch change.Status {
+	case ReportReviewed:
+	case ReportDismissed:
+		action = ActionDismissReport
+	default:
 		return nil, ErrInvalidInput
 	}
 	row, err := m.queue.resolve(ctx, id, change.Status)
 	if err != nil {
+		return nil, err
+	}
+	if err := m.actions.create(ctx, actorID, action, id); err != nil {
 		return nil, err
 	}
 	report := toReport(*row)

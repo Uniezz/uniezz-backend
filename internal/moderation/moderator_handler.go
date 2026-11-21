@@ -70,7 +70,12 @@ var grantModeratorOperation = auth.Authorized(huma.Operation{
 }, auth.RoleAdmin)
 
 func (h *moderatorHandler) grantModerator(ctx context.Context, in *moderatorInput) (*struct{}, error) {
-	if err := h.moderation.grantModerator(ctx, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.grantModerator(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -87,7 +92,12 @@ var revokeModeratorOperation = auth.Authorized(huma.Operation{
 }, auth.RoleAdmin)
 
 func (h *moderatorHandler) revokeModerator(ctx context.Context, in *moderatorInput) (*struct{}, error) {
-	if err := h.moderation.revokeModerator(ctx, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.revokeModerator(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil

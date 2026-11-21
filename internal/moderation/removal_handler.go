@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -28,7 +29,12 @@ var removePostOperation = auth.Authorized(huma.Operation{
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *removalHandler) removePost(ctx context.Context, in *removeContentInput) (*struct{}, error) {
-	if err := h.moderation.removeContent(ctx, targetPost, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.removeContent(ctx, userID, targetPost, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -45,7 +51,12 @@ var removeCommentOperation = auth.Authorized(huma.Operation{
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *removalHandler) removeComment(ctx context.Context, in *removeContentInput) (*struct{}, error) {
-	if err := h.moderation.removeContent(ctx, targetComment, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.removeContent(ctx, userID, targetComment, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -62,7 +73,12 @@ var removeFileOperation = auth.Authorized(huma.Operation{
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *removalHandler) removeFile(ctx context.Context, in *removeContentInput) (*struct{}, error) {
-	if err := h.moderation.removeContent(ctx, targetFile, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.removeContent(ctx, userID, targetFile, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -79,7 +95,12 @@ var removeCourseOperation = auth.Authorized(huma.Operation{
 }, auth.RoleAdmin)
 
 func (h *removalHandler) removeCourse(ctx context.Context, in *removeContentInput) (*struct{}, error) {
-	if err := h.moderation.removeContent(ctx, targetCourse, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.removeContent(ctx, userID, targetCourse, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil

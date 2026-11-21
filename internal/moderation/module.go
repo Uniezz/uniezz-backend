@@ -25,6 +25,7 @@ const (
 	reportLimit           = 5
 	reportWindow          = time.Hour
 	anonymiseReportsEvery = 24 * time.Hour
+	pruneActionsEvery     = 24 * time.Hour
 )
 
 var (
@@ -78,6 +79,7 @@ type Module struct {
 	study      studyTargets
 	staff      staffService
 	moderators *moderatorRepository
+	actions    *actionRepository
 	limiter    limiter
 }
 
@@ -93,6 +95,7 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		study:      studyModule,
 		staff:      staff,
 		moderators: newModeratorRepository(db),
+		actions:    newActionRepository(db),
 		limiter:    ratelimit.New(pool, "report", reportLimit, reportWindow),
 	}
 
@@ -100,6 +103,12 @@ func New(pool *pgxpool.Pool, feedModule feedTargets, profileModule profileTarget
 		return Module{}, fmt.Errorf("moderation: %w", err)
 	}
 	if err := jobs.Schedule(runner, "moderation-anonymise-reports", AnonymiseReportsArgs{}, anonymiseReportsEvery); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	if err := jobs.Register(runner, m.pruneActions, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("moderation: %w", err)
+	}
+	if err := jobs.Schedule(runner, "moderation-prune-actions", PruneActionsArgs{}, pruneActionsEvery); err != nil {
 		return Module{}, fmt.Errorf("moderation: %w", err)
 	}
 	return m, nil
@@ -129,4 +138,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, getBanOperation, bans.getBan)
 	huma.Register(api, banUserOperation, bans.banUser)
 	huma.Register(api, unbanUserOperation, bans.unbanUser)
+
+	actions := &actionHandler{moderation: m}
+	huma.Register(api, listActionsOperation, actions.listActions)
 }

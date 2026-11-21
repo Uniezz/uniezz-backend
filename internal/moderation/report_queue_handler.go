@@ -102,7 +102,12 @@ var updateReportOperation = auth.Authorized(huma.Operation{
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *queueHandler) updateReport(ctx context.Context, in *updateReportInput) (*updateReportOutput, error) {
-	report, err := h.moderation.updateReport(ctx, in.ID, reportChange{Status: in.Body.Status})
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	report, err := h.moderation.updateReport(ctx, userID, in.ID, reportChange{Status: in.Body.Status})
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

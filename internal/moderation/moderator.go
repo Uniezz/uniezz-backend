@@ -14,16 +14,22 @@ type moderatorQuery struct {
 	Limit  int
 }
 
-func (m Module) grantModerator(ctx context.Context, userID uuid.UUID) error {
+func (m Module) grantModerator(ctx context.Context, actorID, userID uuid.UUID) error {
 	err := m.staff.GrantRole(ctx, userID, auth.RoleModerator)
 	if errors.Is(err, auth.ErrUserNotFound) {
 		return ErrNotFound
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return m.actions.create(ctx, actorID, ActionGrantModerator, userID)
 }
 
-func (m Module) revokeModerator(ctx context.Context, userID uuid.UUID) error {
-	return m.staff.RevokeRole(ctx, userID, auth.RoleModerator)
+func (m Module) revokeModerator(ctx context.Context, actorID, userID uuid.UUID) error {
+	if err := m.staff.RevokeRole(ctx, userID, auth.RoleModerator); err != nil {
+		return err
+	}
+	return m.actions.create(ctx, actorID, ActionRevokeModerator, userID)
 }
 
 func (m Module) listModerators(ctx context.Context, q moderatorQuery) ([]Moderator, *string, error) {

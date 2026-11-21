@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) banUser(ctx context.Context, userID uuid.UUID) error {
+func (m Module) banUser(ctx context.Context, actorID, userID uuid.UUID) error {
 	err := m.staff.Ban(ctx, userID)
 	if errors.Is(err, auth.ErrUserNotFound) {
 		return ErrNotFound
@@ -19,11 +19,17 @@ func (m Module) banUser(ctx context.Context, userID uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	return m.queue.resolveUser(ctx, userID, ReportReviewed)
+	if err := m.queue.resolveUser(ctx, userID, ReportReviewed); err != nil {
+		return err
+	}
+	return m.actions.create(ctx, actorID, ActionBan, userID)
 }
 
-func (m Module) unbanUser(ctx context.Context, userID uuid.UUID) error {
-	return m.staff.Unban(ctx, userID)
+func (m Module) unbanUser(ctx context.Context, actorID, userID uuid.UUID) error {
+	if err := m.staff.Unban(ctx, userID); err != nil {
+		return err
+	}
+	return m.actions.create(ctx, actorID, ActionUnban, userID)
 }
 
 func (m Module) ban(ctx context.Context, userID uuid.UUID) (*Ban, error) {

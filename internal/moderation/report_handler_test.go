@@ -167,6 +167,7 @@ func (e *testEnv) user(t *testing.T) testUser {
 	}
 	t.Cleanup(func() {
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM reports WHERE reporter_id = $1 OR target_author_id = $1", id)
+		_, _ = e.pool.Exec(context.Background(), "DELETE FROM moderation_actions WHERE actor_id = $1 OR target_id = $1", id)
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM rate_limits WHERE key = $1", "report:"+id.String())
 		_, _ = e.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id)
 	})

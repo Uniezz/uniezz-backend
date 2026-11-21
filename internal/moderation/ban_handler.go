@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -57,7 +58,12 @@ var banUserOperation = auth.Authorized(huma.Operation{
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *banHandler) banUser(ctx context.Context, in *banInput) (*struct{}, error) {
-	if err := h.moderation.banUser(ctx, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.banUser(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -74,7 +80,12 @@ var unbanUserOperation = auth.Authorized(huma.Operation{
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *banHandler) unbanUser(ctx context.Context, in *banInput) (*struct{}, error) {
-	if err := h.moderation.unbanUser(ctx, in.ID); err != nil {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.unbanUser(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
