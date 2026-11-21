@@ -199,3 +199,50 @@ func TestUpdateReportHandler(t *testing.T) {
 		}
 	})
 }
+
+func TestGetReportHandler(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+
+	insert := func(t *testing.T, author testUser, status ReportStatus) uuid.UUID {
+		t.Helper()
+		reporter := e.user(t)
+		var id uuid.UUID
+		err := e.pool.QueryRow(ctx, `
+			INSERT INTO reports (reporter_id, target_type, target_id, target_author_id, reason, snapshot, status)
+			VALUES ($1, 'comment', $2, $3, 'harassment', '{"content": "rude"}', $4) RETURNING id`,
+			reporter.id, uuid.New(), author.id, status).Scan(&id)
+		if err != nil {
+			t.Fatalf("insert report: %v", err)
+		}
+		t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM reports WHERE id = $1", id) })
+		return id
+	}
+	path := func(id uuid.UUID) string { return "/moderation/reports/" + id.String() }
+
+	t.Run("a resolved report is still readable with its snapshot and author", func(t *testing.T) {
+		author, moderator := e.user(t), e.staff(t, auth.RoleModerator)
+		id := insert(t, author, ReportDismissed)
+
+		got := decode[QueuedReport](t, e.api.Get(path(id), moderator.bearer), http.StatusOK)
+		if got.ID != id || got.Status != ReportDismissed || got.TargetAuthorID == nil || *got.TargetAuthorID != author.id || got.Snapshot["content"] != "rude" {
+			t.Errorf("report = %+v", got)
+		}
+	})
+
+	t.Run("an unknown report is not found", func(t *testing.T) {
+		expectError(t, e.api.Get(path(uuid.New()), e.staff(t, auth.RoleAdmin).bearer), http.StatusNotFound, "not_found")
+	})
+
+	t.Run("students get 403", func(t *testing.T) {
+		id := insert(t, e.user(t), ReportPending)
+
+		expectError(t, e.api.Get(path(id), e.user(t).bearer), http.StatusForbidden, "forbidden")
+	})
+
+	t.Run("needs a session", func(t *testing.T) {
+		if rec := e.api.Get(path(uuid.New())); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+	})
+}

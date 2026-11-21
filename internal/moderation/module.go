@@ -93,5 +93,6 @@ func (m Module) Register(api huma.API) {
 
 	queue := &queueHandler{moderation: m}
 	huma.Register(api, listQueueOperation, queue.listQueue)
+	huma.Register(api, getReportOperation, queue.getReport)
 	huma.Register(api, updateReportOperation, queue.updateReport)
 }

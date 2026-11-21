@@ -36,6 +36,32 @@ func newQueueRepository(db database.DB) *queueRepository {
 	return &queueRepository{db: db}
 }
 
+func queueColumns(nilAuthor string) string {
+	return `id, target_type, target_id, NULLIF(target_author_id, ` + nilAuthor + `), reason, details, snapshot, status, created_at`
+}
+
+func scanQueued(row pgx.Row) (queueRow, error) {
+	var q queueRow
+	err := row.Scan(&q.ID, &q.TargetType, &q.TargetID, &q.TargetAuthorID, &q.Reason,
+		&q.Details, &q.Snapshot, &q.Status, &q.CreatedAt)
+	return q, err
+}
+
+func (r *queueRepository) get(ctx context.Context, id uuid.UUID) (*queueRow, error) {
+	var args database.Args
+	arg := args.Add
+	query := `SELECT ` + queueColumns(arg(uuid.Nil)) + ` FROM reports WHERE id = ` + arg(id)
+
+	q, err := scanQueued(r.db.Conn(ctx).QueryRow(ctx, query, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get report: %w", err)
+	}
+	return &q, nil
+}
+
 func (r *queueRepository) list(ctx context.Context, f queueFilter) ([]queueRow, error) {
 	var args database.Args
 	arg := args.Add
@@ -47,8 +73,7 @@ func (r *queueRepository) list(ctx context.Context, f queueFilter) ([]queueRow, 
 		where = append(where, "(created_at, id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
 
-	query := `
-		SELECT id, target_type, target_id, NULLIF(target_author_id, ` + arg(uuid.Nil) + `), reason, details, snapshot, status, created_at
+	query := `SELECT ` + queueColumns(arg(uuid.Nil)) + `
 		FROM reports
 		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY created_at DESC, id DESC
@@ -62,9 +87,8 @@ func (r *queueRepository) list(ctx context.Context, f queueFilter) ([]queueRow, 
 
 	var reports []queueRow
 	for rows.Next() {
-		var q queueRow
-		if err := rows.Scan(&q.ID, &q.TargetType, &q.TargetID, &q.TargetAuthorID, &q.Reason,
-			&q.Details, &q.Snapshot, &q.Status, &q.CreatedAt); err != nil {
+		q, err := scanQueued(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan pending report: %w", err)
 		}
 		reports = append(reports, q)

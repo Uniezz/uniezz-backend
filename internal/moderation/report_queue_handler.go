@@ -54,6 +54,32 @@ func (h *queueHandler) listQueue(ctx context.Context, in *listQueueInput) (*list
 	return out, nil
 }
 
+type getReportInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+}
+
+type getReportOutput struct {
+	Body QueuedReport
+}
+
+var getReportOperation = auth.Authorized(huma.Operation{
+	OperationID: "getReport",
+	Method:      http.MethodGet,
+	Path:        "/moderation/reports/{id}",
+	Summary:     "Get a report about a post, comment, student, exam file or course",
+	Description: "Any status, with the copy of the reported content. Moderators and admins only.",
+	Tags:        []string{"moderation"},
+	Errors:      []int{http.StatusNotFound},
+}, auth.RoleModerator, auth.RoleAdmin)
+
+func (h *queueHandler) getReport(ctx context.Context, in *getReportInput) (*getReportOutput, error) {
+	report, err := h.moderation.report(ctx, in.ID)
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &getReportOutput{Body: *report}, nil
+}
+
 type updateReportInput struct {
 	ID   uuid.UUID `path:"id" format:"uuid"`
 	Body struct {

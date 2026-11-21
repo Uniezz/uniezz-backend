@@ -36,11 +36,7 @@ func (m Module) listQueue(ctx context.Context, q queueQuery) ([]QueuedReport, *s
 
 	items := make([]QueuedReport, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, QueuedReport{
-			Report:         toReport(row.reportRow),
-			TargetAuthorID: row.TargetAuthorID,
-			Snapshot:       row.Snapshot,
-		})
+		items = append(items, toQueuedReport(row))
 	}
 	return items, next, nil
 }
@@ -59,4 +55,17 @@ func (m Module) updateReport(ctx context.Context, id uuid.UUID, change reportCha
 	}
 	report := toReport(*row)
 	return &report, nil
+}
+
+func (m Module) report(ctx context.Context, id uuid.UUID) (*QueuedReport, error) {
+	row, err := m.queue.get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	report := toQueuedReport(*row)
+	return &report, nil
+}
+
+func toQueuedReport(row queueRow) QueuedReport {
+	return QueuedReport{Report: toReport(row.reportRow), TargetAuthorID: row.TargetAuthorID, Snapshot: row.Snapshot}
 }
