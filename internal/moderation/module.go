@@ -35,6 +35,8 @@ var (
 
 type feedTargets interface {
 	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
+	RemovePost(ctx context.Context, postID uuid.UUID) error
+	RemoveComment(ctx context.Context, commentID uuid.UUID) error
 }
 
 type profileTargets interface {
@@ -48,6 +50,8 @@ type candidateTargets interface {
 
 type studyTargets interface {
 	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
+	RemoveFile(ctx context.Context, id uuid.UUID) error
+	RemoveCourse(ctx context.Context, id uuid.UUID) error
 }
 
 type limiter interface {
@@ -95,4 +99,10 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, listQueueOperation, queue.listQueue)
 	huma.Register(api, getReportOperation, queue.getReport)
 	huma.Register(api, updateReportOperation, queue.updateReport)
+
+	removals := &removalHandler{moderation: m}
+	huma.Register(api, removePostOperation, removals.removePost)
+	huma.Register(api, removeCommentOperation, removals.removeComment)
+	huma.Register(api, removeFileOperation, removals.removeFile)
+	huma.Register(api, removeCourseOperation, removals.removeCourse)
 }

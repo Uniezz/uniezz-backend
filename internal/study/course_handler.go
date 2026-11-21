@@ -219,7 +219,7 @@ func (h *courseHandler) deleteCourse(ctx context.Context, in *deleteCourseInput)
 		return nil, httpapi.Unauthorized()
 	}
 
-	if err := h.study.deleteCourse(ctx, userID, in.ID); err != nil {
+	if err := h.study.deleteCourse(ctx, userID, in.ID, false); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil

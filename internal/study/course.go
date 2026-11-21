@@ -197,9 +197,9 @@ func (m Module) updateCourse(ctx context.Context, userID, id uuid.UUID, change c
 	return &course, nil
 }
 
-func (m Module) deleteCourse(ctx context.Context, userID, id uuid.UUID) error {
+func (m Module) deleteCourse(ctx context.Context, userID, id uuid.UUID, anyAuthor bool) error {
 	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		found, err := m.courses.lockOwned(ctx, id, userID)
+		found, err := m.courses.lockForDelete(ctx, id, userID, anyAuthor)
 		if err != nil || !found {
 			return err
 		}

@@ -194,10 +194,10 @@ func (r *courseRepository) lock(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *courseRepository) lockOwned(ctx context.Context, id, authorID uuid.UUID) (bool, error) {
-	const query = `SELECT id FROM courses WHERE id = $1 AND author_id = $2 FOR UPDATE`
+func (r *courseRepository) lockForDelete(ctx context.Context, id, authorID uuid.UUID, anyAuthor bool) (bool, error) {
+	const query = `SELECT id FROM courses WHERE id = $1 AND ($3 OR author_id = $2) FOR UPDATE`
 	var found uuid.UUID
-	err := r.db.Conn(ctx).QueryRow(ctx, query, id, authorID).Scan(&found)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, authorID, anyAuthor).Scan(&found)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

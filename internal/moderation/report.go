@@ -15,6 +15,8 @@ import (
 )
 
 const (
+	targetPost       = "post"
+	targetComment    = "comment"
 	targetUser       = "user"
 	targetCandidate  = "candidate"
 	targetFile       = "file"

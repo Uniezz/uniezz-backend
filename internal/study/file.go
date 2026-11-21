@@ -174,12 +174,12 @@ func (m Module) searchFiles(ctx context.Context, q fileQuery) ([]CourseFile, *st
 	return files, next, nil
 }
 
-func (m Module) deleteFile(ctx context.Context, userID, id uuid.UUID) error {
+func (m Module) deleteFile(ctx context.Context, userID, id uuid.UUID, anyAuthor bool) error {
 	var mediaID uuid.UUID
 	var found bool
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
 		var err error
-		mediaID, found, err = m.files.delete(ctx, id, userID)
+		mediaID, found, err = m.files.delete(ctx, id, userID, anyAuthor)
 		if err != nil || !found {
 			return err
 		}

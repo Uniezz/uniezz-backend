@@ -47,6 +47,27 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 // given author.
 type fakeTargets struct {
 	authors map[uuid.UUID]uuid.UUID
+	removed map[uuid.UUID]string
+}
+
+func (f fakeTargets) RemovePost(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "post"
+	return nil
+}
+
+func (f fakeTargets) RemoveComment(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "comment"
+	return nil
+}
+
+func (f fakeTargets) RemoveFile(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "file"
+	return nil
+}
+
+func (f fakeTargets) RemoveCourse(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "course"
+	return nil
 }
 
 func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
@@ -101,7 +122,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	pool := setupTestDB(t)
 	e := &testEnv{
 		pool:       pool,
-		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}},
+		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}, removed: map[uuid.UUID]string{}},
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
 	}

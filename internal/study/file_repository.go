@@ -170,10 +170,10 @@ func (r *fileRepository) list(ctx context.Context, f fileFilter) ([]fileRow, err
 	return files, nil
 }
 
-func (r *fileRepository) delete(ctx context.Context, id, authorID uuid.UUID) (uuid.UUID, bool, error) {
-	const query = `DELETE FROM course_files WHERE id = $1 AND author_id = $2 RETURNING media_id`
+func (r *fileRepository) delete(ctx context.Context, id, authorID uuid.UUID, anyAuthor bool) (uuid.UUID, bool, error) {
+	const query = `DELETE FROM course_files WHERE id = $1 AND ($3 OR author_id = $2) RETURNING media_id`
 	var mediaID uuid.UUID
-	err := r.db.Conn(ctx).QueryRow(ctx, query, id, authorID).Scan(&mediaID)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, authorID, anyAuthor).Scan(&mediaID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, false, nil
 	}

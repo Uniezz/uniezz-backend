@@ -121,3 +121,11 @@ func (r *queueRepository) resolve(ctx context.Context, id uuid.UUID, status Repo
 	}
 	return &row, nil
 }
+
+func (r *queueRepository) resolveTarget(ctx context.Context, targetType string, targetID uuid.UUID, status ReportStatus) error {
+	const query = `UPDATE reports SET status = $3 WHERE target_type = $1 AND target_id = $2 AND status = $4`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, targetType, targetID, status, ReportPending); err != nil {
+		return fmt.Errorf("resolve reports on target: %w", err)
+	}
+	return nil
+}

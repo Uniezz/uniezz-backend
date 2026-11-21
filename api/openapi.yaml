@@ -5055,6 +5055,185 @@ paths:
       summary: Start a media upload
       tags:
         - media
+  /moderation/comments/{id}:
+    delete:
+      description: Deletes the comment, or leaves an anonymous placeholder when it still has replies, and marks its pending reports reviewed. Removing a comment that is already gone succeeds. Moderators and admins only.
+      operationId: removeComment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Remove any student's comment
+      tags:
+        - moderation
+  /moderation/courses/{id}:
+    delete:
+      description: Deletes the course with every student's files and comments on it, and marks its pending reports reviewed. Removing a course that is already gone succeeds. Admins only.
+      operationId: removeCourse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Remove any course
+      tags:
+        - moderation
+  /moderation/files/{id}:
+    delete:
+      description: Deletes the file and marks its pending reports reviewed. Removing a file that is already gone succeeds. Moderators and admins only.
+      operationId: removeCourseFile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Remove any student's exam file
+      tags:
+        - moderation
+  /moderation/posts/{id}:
+    delete:
+      description: Deletes the post with its comments, likes and media, and marks its pending reports reviewed. Removing a post that is already gone succeeds. Moderators and admins only.
+      operationId: removePost
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Remove any student's post
+      tags:
+        - moderation
   /moderation/reports:
     get:
       description: Pending reports about posts, comments, students, exam files and courses, newest first. Moderators and admins only; everyone else gets 403.
