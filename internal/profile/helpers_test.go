@@ -248,6 +248,7 @@ type testEnv struct {
 	media  *fakeMedia
 	feed   *fakeForgetter
 	study  *fakeForgetter
+	chat   *fakeForgetter
 	module Module
 }
 
@@ -258,12 +259,13 @@ func newTestEnv(t *testing.T) *testEnv {
 	fm := &fakeMedia{pool: pool}
 	feed := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	study := &fakeForgetter{failFor: map[uuid.UUID]error{}}
+	chat := &fakeForgetter{failFor: map[uuid.UUID]error{}}
 	runner := jobs.NewRunner(pool, 1, 0)
 	rewardsModule, err := rewards.New(pool, runner)
 	if err != nil {
 		t.Fatalf("rewards.New failed: %v", err)
 	}
-	m, err := New(pool, fm, feed, study, rewardsModule, runner)
+	m, err := New(pool, fm, feed, study, chat, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
@@ -288,7 +290,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	api.UseMiddleware(authModule.Guard(api))
 	m.Register(api)
 
-	return &testEnv{pool: pool, api: api, media: fm, feed: feed, study: study, module: m}
+	return &testEnv{pool: pool, api: api, media: fm, feed: feed, study: study, chat: chat, module: m}
 }
 
 type testUser struct {

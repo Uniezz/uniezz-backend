@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const privateURLTTL = 10 * time.Minute
+const PrivateURLTTL = 10 * time.Minute
 
 type Ref struct {
 	Kind      Kind

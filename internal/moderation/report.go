@@ -5,6 +5,7 @@ import (
 	"errors"
 	"unicode/utf8"
 
+	"github.com/Uniezz/uniezz-backend/internal/chat"
 	"github.com/Uniezz/uniezz-backend/internal/connections"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
@@ -21,6 +22,7 @@ const (
 	targetCandidate  = "candidate"
 	targetFile       = "file"
 	targetCourse     = "course"
+	targetMessage    = "message"
 	maxDetailsLength = 1000
 )
 
@@ -107,6 +109,13 @@ func (m Module) target(ctx context.Context, reporterID uuid.UUID, targetType str
 			return uuid.Nil, nil, ErrNotFound
 		}
 		return id, snapshot, err
+	}
+	if targetType == targetMessage {
+		authorID, snapshot, err := m.chat.ReportTarget(ctx, reporterID, id)
+		if errors.Is(err, chat.ErrNotFound) {
+			return uuid.Nil, nil, ErrNotFound
+		}
+		return authorID, snapshot, err
 	}
 	if targetType == targetFile || targetType == targetCourse {
 		authorID, snapshot, err := m.study.ReportTarget(ctx, targetType, id)

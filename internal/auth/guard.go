@@ -29,6 +29,11 @@ func UserIDFrom(ctx context.Context) (uuid.UUID, bool) {
 	return p.userID, ok
 }
 
+func SessionIDFrom(ctx context.Context) (uuid.UUID, bool) {
+	p, ok := ctx.Value(principalKey{}).(principal)
+	return p.sessionID, ok
+}
+
 func SignedInAt(ctx context.Context) (time.Time, bool) {
 	p, ok := ctx.Value(principalKey{}).(principal)
 	return p.signedInAt, ok
