@@ -159,6 +159,15 @@ func (e *testEnv) user(t *testing.T) testUser {
 	return testUser{id: id, bearer: "Authorization: Bearer " + token.String()}
 }
 
+func (e *testEnv) staff(t *testing.T, role auth.Role) testUser {
+	t.Helper()
+	u := e.user(t)
+	if _, err := e.pool.Exec(context.Background(), "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", u.id, role); err != nil {
+		t.Fatalf("grant %s: %v", role, err)
+	}
+	return u
+}
+
 func (e *testEnv) contentBy(author testUser) uuid.UUID {
 	id := uuid.New()
 	e.targets.authors[id] = author.id

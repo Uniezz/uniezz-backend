@@ -2,12 +2,14 @@ package moderation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type queueRow struct {
@@ -71,4 +73,27 @@ func (r *queueRepository) list(ctx context.Context, f queueFilter) ([]queueRow, 
 		return nil, fmt.Errorf("list pending reports: %w", err)
 	}
 	return reports, nil
+}
+
+func (r *queueRepository) resolve(ctx context.Context, id uuid.UUID, status ReportStatus) (*reportRow, error) {
+	const query = `
+		WITH closed AS (
+			UPDATE reports r SET status = $2
+			FROM reports t
+			WHERE t.id = $1 AND r.target_type = t.target_type AND r.target_id = t.target_id
+			  AND (r.id = $1 OR r.status = $3)
+			RETURNING r.id, r.target_type, r.target_id, r.reason, r.details, r.status, r.created_at
+		)
+		SELECT id, target_type, target_id, reason, details, status, created_at FROM closed WHERE id = $1`
+
+	var row reportRow
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, status, ReportPending).Scan(
+		&row.ID, &row.TargetType, &row.TargetID, &row.Reason, &row.Details, &row.Status, &row.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve report: %w", err)
+	}
+	return &row, nil
 }

@@ -2622,6 +2622,17 @@ components:
           maxLength: 600
           type: string
       type: object
+    UpdateReportInputBody:
+      additionalProperties: false
+      properties:
+        status:
+          enum:
+            - reviewed
+            - dismissed
+          type: string
+      required:
+        - status
+      type: object
     Upload:
       additionalProperties: false
       properties:
@@ -5110,6 +5121,73 @@ paths:
             - moderator
             - admin
       summary: List pending reports for moderators
+      tags:
+        - moderation
+  /moderation/reports/{id}:
+    patch:
+      description: Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Sending the current status again changes nothing. Moderators and admins only.
+      operationId: updateReport
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReportInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Resolve a report about a post, comment, student, exam file or course
       tags:
         - moderation
   /profile/avatar:

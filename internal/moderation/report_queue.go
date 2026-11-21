@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/google/uuid"
 )
 
 type queueQuery struct {
@@ -36,13 +37,26 @@ func (m Module) listQueue(ctx context.Context, q queueQuery) ([]QueuedReport, *s
 	items := make([]QueuedReport, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, QueuedReport{
-			Report: Report{
-				ID: row.ID, TargetType: reportTargetType(row.TargetType), TargetID: row.TargetID,
-				Reason: row.Reason, Details: row.Details, Status: row.Status, CreatedAt: row.CreatedAt,
-			},
+			Report:         toReport(row.reportRow),
 			TargetAuthorID: row.TargetAuthorID,
 			Snapshot:       row.Snapshot,
 		})
 	}
 	return items, next, nil
+}
+
+type reportChange struct {
+	Status ReportStatus
+}
+
+func (m Module) updateReport(ctx context.Context, id uuid.UUID, change reportChange) (*Report, error) {
+	if change.Status != ReportReviewed && change.Status != ReportDismissed {
+		return nil, ErrInvalidInput
+	}
+	row, err := m.queue.resolve(ctx, id, change.Status)
+	if err != nil {
+		return nil, err
+	}
+	report := toReport(*row)
+	return &report, nil
 }

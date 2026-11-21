@@ -53,3 +53,32 @@ func (h *queueHandler) listQueue(ctx context.Context, in *listQueueInput) (*list
 	out.Body.NextCursor = next
 	return out, nil
 }
+
+type updateReportInput struct {
+	ID   uuid.UUID `path:"id" format:"uuid"`
+	Body struct {
+		Status ReportStatus `json:"status" enum:"reviewed,dismissed"`
+	}
+}
+
+type updateReportOutput struct {
+	Body Report
+}
+
+var updateReportOperation = auth.Authorized(huma.Operation{
+	OperationID: "updateReport",
+	Method:      http.MethodPatch,
+	Path:        "/moderation/reports/{id}",
+	Summary:     "Resolve a report about a post, comment, student, exam file or course",
+	Description: "Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Sending the current status again changes nothing. Moderators and admins only.",
+	Tags:        []string{"moderation"},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+}, auth.RoleModerator, auth.RoleAdmin)
+
+func (h *queueHandler) updateReport(ctx context.Context, in *updateReportInput) (*updateReportOutput, error) {
+	report, err := h.moderation.updateReport(ctx, in.ID, reportChange{Status: in.Body.Status})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return &updateReportOutput{Body: *report}, nil
+}
