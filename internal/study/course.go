@@ -5,6 +5,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -233,11 +234,14 @@ func (m Module) rateCourse(ctx context.Context, userID, id uuid.UUID, rating int
 		if err := m.courses.saveRating(ctx, id, userID, rating); err != nil {
 			return err
 		}
-		added := 0
-		if !found {
-			added = 1
+		if found {
+			return m.courses.addToRating(ctx, id, 0, rating-old)
 		}
-		return m.courses.addToRating(ctx, id, added, rating-old)
+		if err := m.courses.addToRating(ctx, id, 1, rating); err != nil {
+			return err
+		}
+		_, err = m.rewards.Track(ctx, userID, rewards.ActionCourseRated)
+		return err
 	})
 	if err != nil {
 		return nil, err

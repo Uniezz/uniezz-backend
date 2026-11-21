@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -128,8 +129,15 @@ func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode M
 		if err != nil || !reciprocal {
 			return err
 		}
-		match, err = m.connections.create(ctx, viewerID, targetID, mode)
-		return err
+		if match, err = m.connections.create(ctx, viewerID, targetID, mode); err != nil {
+			return err
+		}
+		for _, id := range []uuid.UUID{viewerID, targetID} {
+			if _, err := m.rewards.Track(ctx, id, rewards.ActionConnectionMade); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

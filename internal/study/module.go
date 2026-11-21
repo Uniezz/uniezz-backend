@@ -12,6 +12,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,12 @@ type mediaService interface {
 	URLOf(ctx context.Context, ref media.Ref) (string, error)
 }
 
+var _ rewardService = rewards.Module{}
+
+type rewardService interface {
+	Track(ctx context.Context, userID uuid.UUID, action rewards.Action) (int, error)
+}
+
 var _ limiter = (*ratelimit.Limiter)(nil)
 
 type limiter interface {
@@ -46,11 +53,12 @@ type Module struct {
 	comments   *commentRepository
 	professors *professorRepository
 	media      mediaService
+	rewards    rewardService
 	limiter    limiter
 	radon      *radonClient
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -59,6 +67,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, runner *jobs.Runner) (Mod
 		comments:   newCommentRepository(db),
 		professors: newProfessorRepository(db),
 		media:      mediaModule,
+		rewards:    rewardsModule,
 		limiter:    ratelimit.New(pool, "study-create", createLimit, createWindow),
 		radon:      newRadonClient(radonEmployeesURL),
 	}

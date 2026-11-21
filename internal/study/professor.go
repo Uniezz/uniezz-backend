@@ -5,6 +5,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -81,11 +82,14 @@ func (m Module) rateProfessor(ctx context.Context, userID, id uuid.UUID, rating 
 		if err := m.professors.saveRating(ctx, id, userID, rating); err != nil {
 			return err
 		}
-		added := 0
-		if !found {
-			added = 1
+		if found {
+			return m.professors.addToRating(ctx, id, 0, rating-old)
 		}
-		return m.professors.addToRating(ctx, id, added, rating-old)
+		if err := m.professors.addToRating(ctx, id, 1, rating); err != nil {
+			return err
+		}
+		_, err = m.rewards.Track(ctx, userID, rewards.ActionProfessorRated)
+		return err
 	})
 	if err != nil {
 		return nil, err

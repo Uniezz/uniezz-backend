@@ -51,7 +51,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 	if err != nil {
 		return Modules{}, err
 	}
-	studyModule, err := study.New(db, mediaModule, runner)
+	studyModule, err := study.New(db, mediaModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}

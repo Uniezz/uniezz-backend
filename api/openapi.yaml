@@ -226,6 +226,104 @@ components:
         - level
         - age
       type: object
+    Challenge:
+      additionalProperties: false
+      properties:
+        action:
+          description: What counts. More values may be added.
+          type: string
+          x-extensible-enum:
+            - like_given
+            - like_received
+            - comment_posted
+            - reply_posted
+            - post_created
+            - file_uploaded
+            - course_rated
+            - professor_rated
+            - connection_made
+            - profile_completed
+            - friend_invited
+            - faq_approved
+        archivedAt:
+          description: Null while the challenge is not archived
+          format: date-time
+          type:
+            - string
+            - "null"
+        createdAt:
+          format: date-time
+          type: string
+        endsAt:
+          description: Null when the challenge runs until it is archived
+          format: date-time
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        period:
+          description: day and week start over at midnight and on Monday, Europe/Warsaw; once never starts over
+          enum:
+            - day
+            - week
+            - once
+          type: string
+        reward:
+          description: Coins paid when the target is reached in a period
+          examples:
+            - 20
+          format: int64
+          minimum: 0
+          type: integer
+        startsAt:
+          description: Null when the challenge has no start date
+          format: date-time
+          type:
+            - string
+            - "null"
+        target:
+          examples:
+            - 5
+          format: int64
+          minimum: 1
+          type: integer
+        texts:
+          additionalProperties:
+            $ref: "#/components/schemas/ChallengeText"
+          description: By two-letter language code; pl is always there
+          type: object
+      required:
+        - id
+        - action
+        - target
+        - period
+        - reward
+        - texts
+        - startsAt
+        - endsAt
+        - archivedAt
+        - createdAt
+      type: object
+    ChallengeText:
+      additionalProperties: false
+      properties:
+        description:
+          description: Up to 300 characters after HTML is stripped; left out when empty
+          examples:
+            - Show other students some love this week.
+          maxLength: 2000
+          type: string
+        title:
+          description: Up to 80 characters after HTML is stripped
+          examples:
+            - Like 5 posts
+          maxLength: 400
+          type: string
+      required:
+        - title
+      type: object
     CoinGrant:
       additionalProperties: false
       properties:
@@ -239,7 +337,7 @@ components:
           format: date-time
           type: string
         reason:
-          description: "What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: inviting another student who signs up. referral_joined: signing up with an invitation code. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. More values may be added; show a generic label for unknown ones."
+          description: "What earned the coins. welcome: the new account. like_given: liking another student's post. like_received: another student liked your post. comment: the first comment or reply on another student's post. profile_complete: filling every profile field. birth_date: the first birth date saved in connections. referral: inviting another student who signs up. referral_joined: signing up with an invitation code. daily_quests: finishing every daily quest. faq_approved: a moderator approved your FAQ proposal. challenge: finishing a challenge. More values may be added; show a generic label for unknown ones."
           type: string
           x-extensible-enum:
             - welcome
@@ -252,6 +350,7 @@ components:
             - referral_joined
             - daily_quests
             - faq_approved
+            - challenge
       required:
         - reason
         - amount
@@ -480,6 +579,66 @@ components:
         - type
         - url
         - createdAt
+      type: object
+    CreateChallengeInputBody:
+      additionalProperties: false
+      properties:
+        action:
+          description: What counts. Set once.
+          enum:
+            - like_given
+            - like_received
+            - comment_posted
+            - reply_posted
+            - post_created
+            - file_uploaded
+            - course_rated
+            - professor_rated
+            - connection_made
+            - profile_completed
+            - friend_invited
+            - faq_approved
+          type: string
+        endsAt:
+          description: Must be after startsAt
+          format: date-time
+          type: string
+        period:
+          description: Set once
+          enum:
+            - day
+            - week
+            - once
+          type: string
+        reward:
+          examples:
+            - 20
+          format: int64
+          maximum: 1000
+          minimum: 0
+          type: integer
+        startsAt:
+          format: date-time
+          type: string
+        target:
+          description: Set once
+          examples:
+            - 5
+          format: int64
+          maximum: 1000
+          minimum: 1
+          type: integer
+        texts:
+          additionalProperties:
+            $ref: "#/components/schemas/ChallengeText"
+          description: By two-letter language code, at most 10; pl is required
+          type: object
+      required:
+        - action
+        - target
+        - period
+        - reward
+        - texts
       type: object
     CreateCommentInputBody:
       additionalProperties: false
@@ -1061,6 +1220,24 @@ components:
         - items
         - nextCursor
       type: object
+    ListChallengesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Challenge"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
     ListCommentsOutputBody:
       additionalProperties: false
       properties:
@@ -1175,6 +1352,24 @@ components:
         items:
           items:
             $ref: "#/components/schemas/Moderator"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListMyChallengesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/MyChallenge"
           type:
             - array
             - "null"
@@ -1353,6 +1548,84 @@ components:
         - firstName
         - lastName
         - grantedAt
+      type: object
+    MyChallenge:
+      additionalProperties: false
+      properties:
+        action:
+          description: What counts. More values may be added.
+          type: string
+          x-extensible-enum:
+            - like_given
+            - like_received
+            - comment_posted
+            - reply_posted
+            - post_created
+            - file_uploaded
+            - course_rated
+            - professor_rated
+            - connection_made
+            - profile_completed
+            - friend_invited
+            - faq_approved
+        completed:
+          description: True once the target is reached in this period and the reward was paid
+          type: boolean
+        endsAt:
+          description: Null when the challenge has no end date
+          format: date-time
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        period:
+          enum:
+            - day
+            - week
+            - once
+          type: string
+        progress:
+          examples:
+            - 2
+          format: int64
+          minimum: 0
+          type: integer
+        resetsAt:
+          description: When progress starts over; null for a once challenge
+          format: date-time
+          type:
+            - string
+            - "null"
+        reward:
+          examples:
+            - 20
+          format: int64
+          minimum: 0
+          type: integer
+        target:
+          examples:
+            - 5
+          format: int64
+          minimum: 1
+          type: integer
+        texts:
+          additionalProperties:
+            $ref: "#/components/schemas/ChallengeText"
+          description: By two-letter language code; show the student's language, or pl when it is missing
+          type: object
+      required:
+        - id
+        - action
+        - target
+        - period
+        - reward
+        - texts
+        - endsAt
+        - progress
+        - completed
+        - resetsAt
       type: object
     OtpRequestInputBody:
       additionalProperties: false
@@ -2426,6 +2699,27 @@ components:
         - name
         - authMethod
         - faculties
+      type: object
+    UpdateChallengeInputBody:
+      additionalProperties: false
+      properties:
+        endsAt:
+          description: Must be after startsAt
+          format: date-time
+          type: string
+        reward:
+          format: int64
+          maximum: 1000
+          minimum: 0
+          type: integer
+        startsAt:
+          format: date-time
+          type: string
+        texts:
+          additionalProperties:
+            $ref: "#/components/schemas/ChallengeText"
+          description: Replaces every text; pl is required
+          type: object
       type: object
     UpdateCommentInputBody:
       additionalProperties: false
@@ -6616,6 +6910,353 @@ paths:
       summary: Report a post, comment, student, exam file or course
       tags:
         - moderation
+  /rewards/challenges:
+    get:
+      description: Newest first. Admins only.
+      operationId: listChallenges
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListChallengesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: List every challenge, archived ones included
+      tags:
+        - rewards
+    post:
+      description: Students see it while it runs. Action, target and period cannot change later; archive the challenge and create a new one instead. Admins only.
+      operationId: createChallenge
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChallengeInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Create a challenge
+      tags:
+        - rewards
+  /rewards/challenges/{id}:
+    delete:
+      description: Students stop seeing it and their actions stop counting; coins already paid stay. Archiving again succeeds. Admins only.
+      operationId: archiveChallenge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Archive a challenge
+      tags:
+        - rewards
+    get:
+      description: Archived challenges too. Admins only.
+      operationId: getChallenge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Get a challenge
+      tags:
+        - rewards
+    patch:
+      description: Changes only the fields that are present and returns the challenge. A new reward applies to periods completed after the change. Admins only.
+      operationId: updateChallenge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChallengeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Update a challenge's texts, reward or dates
+      tags:
+        - rewards
+  /rewards/me/challenges:
+    get:
+      description: Newest first. Progress counts only actions done while the challenge runs, and undoing an action does not take it back.
+      operationId: listMyChallenges
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMyChallengesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the challenges running now with the logged-in student's progress
+      tags:
+        - rewards
   /rewards/me/grants:
     get:
       description: Newest first, paginated by cursor. Coins are only earned; nothing spends them yet.

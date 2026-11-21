@@ -126,7 +126,7 @@ func TestReasonEnumListsEveryReason(t *testing.T) {
 
 	slices.Sort(listed)
 
-	var reasons []string
+	reasons := []string{string(ReasonChallenge)}
 	for r := range amounts {
 		reasons = append(reasons, string(r))
 	}
