@@ -196,6 +196,7 @@ func run(cfg *config.Config) error {
 
 	stop()
 	isShuttingDown.Store(true)
+	modules.Chat.Drain()
 	slog.Info("shutdown signal received, draining", "delay", _readinessDrainDelay.String())
 	time.Sleep(_readinessDrainDelay)
 

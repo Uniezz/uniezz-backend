@@ -27,7 +27,7 @@ func TestDeleteAccountTask(t *testing.T) {
 		}
 	}
 
-	t.Run("asks feed, study and media to forget the student, then deletes the row", func(t *testing.T) {
+	t.Run("asks feed, study, chat and media to forget the student, then deletes the row", func(t *testing.T) {
 		u := e.otpUser(t)
 		avatar := insertMedia(ctx, e.pool, u.id, "ready")
 		if _, err := e.pool.Exec(ctx, "UPDATE users SET avatar_media_id = $2 WHERE id = $1", u.id, avatar); err != nil {
@@ -39,8 +39,8 @@ func TestDeleteAccountTask(t *testing.T) {
 			t.Fatalf("deleteAccountTask failed: %v", err)
 		}
 
-		if !e.feed.forgotten(u.id) || !e.study.forgotten(u.id) {
-			t.Error("feed and study must forget the student")
+		if !e.feed.forgotten(u.id) || !e.study.forgotten(u.id) || !e.chat.forgotten(u.id) {
+			t.Error("feed, study and chat must forget the student")
 		}
 		if got := mediaStatus(t, e.pool, avatar); got != "gone" {
 			t.Errorf("avatar is %q, want gone", got)
@@ -97,7 +97,7 @@ func TestDeleteAccountTask(t *testing.T) {
 		if !userExists(t, u.id) {
 			t.Error("a student who is not deleting must stay")
 		}
-		if e.feed.forgotten(u.id) || e.study.forgotten(u.id) {
+		if e.feed.forgotten(u.id) || e.study.forgotten(u.id) || e.chat.forgotten(u.id) {
 			t.Error("feed and study must not forget a student who is not deleting")
 		}
 	})

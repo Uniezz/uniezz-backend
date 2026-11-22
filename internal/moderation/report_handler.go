@@ -26,7 +26,7 @@ func (reportTargetType) TransformSchema(_ huma.Registry, schema *huma.Schema) *h
 	}
 	// oasdiff treats this list as the enum. The enum keyword itself must stay
 	// off the response, or adding a value is a breaking change.
-	schema.Extensions["x-extensible-enum"] = []any{"post", "comment", "user", "candidate", "file", "course"}
+	schema.Extensions["x-extensible-enum"] = []any{"post", "comment", "user", "candidate", "file", "course", "message"}
 	return schema
 }
 
@@ -50,7 +50,7 @@ type Report struct {
 
 type createReportInput struct {
 	Body struct {
-		TargetType string    `json:"targetType" enum:"post,comment,user,candidate,file,course"`
+		TargetType string    `json:"targetType" enum:"post,comment,user,candidate,file,course,message"`
 		TargetID   uuid.UUID `json:"targetId" format:"uuid"`
 		Reason     string    `json:"reason" enum:"spam,harassment,inappropriate,hate_speech,other"`
 		Details    *string   `json:"details,omitempty" maxLength:"4000" doc:"Up to 1000 characters after HTML is stripped"`
@@ -65,7 +65,7 @@ var createReportOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "createReport",
 	Method:        http.MethodPost,
 	Path:          "/reports",
-	Summary:       "Report a post, comment, student, exam file or course",
+	Summary:       "Report a post, comment, student, exam file, course or chat message",
 	Description:   "One report per target and reporter; at most 5 reports per clock hour (UTC).",
 	Tags:          []string{"moderation"},
 	DefaultStatus: http.StatusCreated,

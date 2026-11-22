@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
+	"github.com/Uniezz/uniezz-backend/internal/chat"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/feed"
@@ -60,7 +61,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("rewards.New failed: %v", err)
 	}
-	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, rewardsModule, runner)
+	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, chat.Module{}, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
 	}

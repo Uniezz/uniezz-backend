@@ -48,7 +48,8 @@ func newGuardTestAPI(t *testing.T, sessions sessionStore) humatest.TestAPI {
 
 	type whoami struct {
 		Body struct {
-			UserID string `json:"userId"`
+			UserID    string `json:"userId"`
+			SessionID string `json:"sessionId"`
 		}
 	}
 	huma.Register(api, Authenticated(huma.Operation{Method: http.MethodGet, Path: "/protected"}),
@@ -59,6 +60,11 @@ func newGuardTestAPI(t *testing.T, sessions sessionStore) humatest.TestAPI {
 				return nil, errors.New("no user in context")
 			}
 			out.Body.UserID = id.String()
+			sessionID, ok := SessionIDFrom(ctx)
+			if !ok {
+				return nil, errors.New("no session in context")
+			}
+			out.Body.SessionID = sessionID.String()
 			return out, nil
 		})
 	huma.Register(api, Authorized(huma.Operation{Method: http.MethodGet, Path: "/moderation"}, RoleModerator, RoleAdmin),
@@ -84,7 +90,7 @@ func validSession(expiresIn time.Duration) (string, *Session) {
 func TestGuard(t *testing.T) {
 	token, session := validSession(20 * 24 * time.Hour)
 
-	t.Run("a valid bearer token reaches the handler with its user", func(t *testing.T) {
+	t.Run("a valid bearer token reaches the handler with its user and session", func(t *testing.T) {
 		api := newGuardTestAPI(t, &fakeSessions{session: session})
 
 		rec := api.Get("/protected", "Authorization: Bearer "+token)
@@ -92,7 +98,7 @@ func TestGuard(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
-		if want := `{"userId":"` + session.UserID.String() + `"}`; rec.Body.String() != want+"\n" && rec.Body.String() != want {
+		if want := `{"userId":"` + session.UserID.String() + `","sessionId":"` + session.ID.String() + `"}`; rec.Body.String() != want+"\n" && rec.Body.String() != want {
 			t.Errorf("expected body %s, got %s", want, rec.Body.String())
 		}
 	})
