@@ -10,7 +10,15 @@ func (m Module) block(ctx context.Context, blockerID, blockedID uuid.UUID) error
 	if blockerID == blockedID {
 		return ErrInvalidInput
 	}
-	return m.blocks.insert(ctx, blockerID, blockedID)
+	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := m.profiles.LockFollowPair(ctx, blockerID, blockedID); err != nil {
+			return err
+		}
+		if err := m.blocks.insert(ctx, blockerID, blockedID); err != nil {
+			return err
+		}
+		return m.profiles.RemoveFollowsBetween(ctx, blockerID, blockedID)
+	})
 }
 
 func (m Module) unblock(ctx context.Context, blockerID, blockedID uuid.UUID) error {

@@ -28,6 +28,14 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	followersCount, followingCount, err := m.follows.counts(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	followedByMe, err := m.follows.exists(ctx, viewerID, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	var age *int
 	if connectionPreferences.BirthDate != nil {
@@ -65,20 +73,23 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 	}
 
 	out := &PublicProfile{
-		ID:           p.ID,
-		Email:        p.Email,
-		FirstName:    p.FirstName,
-		LastName:     p.LastName,
-		Gender:       p.Gender,
-		Age:          age,
-		UniversityID: p.UniversityID,
-		AvatarURL:    avatarURL,
-		Photos:       photos,
-		BannerURL:    m.mediaURL(ctx, p.Banner),
-		Bio:          p.Bio,
-		SongURL:      p.SongURL,
-		Interests:    text.NonNil(p.Interests),
-		Programmes:   make([]PublicProgramme, 0, len(programmes)),
+		ID:             p.ID,
+		Email:          p.Email,
+		FirstName:      p.FirstName,
+		LastName:       p.LastName,
+		Gender:         p.Gender,
+		Age:            age,
+		UniversityID:   p.UniversityID,
+		AvatarURL:      avatarURL,
+		Photos:         photos,
+		BannerURL:      m.mediaURL(ctx, p.Banner),
+		Bio:            p.Bio,
+		SongURL:        p.SongURL,
+		Interests:      text.NonNil(p.Interests),
+		Programmes:     make([]PublicProgramme, 0, len(programmes)),
+		FollowersCount: followersCount,
+		FollowingCount: followingCount,
+		FollowedByMe:   followedByMe,
 	}
 
 	for _, row := range programmes {

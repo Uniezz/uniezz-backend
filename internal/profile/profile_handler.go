@@ -17,26 +17,29 @@ type profileHandler struct {
 }
 
 type Profile struct {
-	ID           uuid.UUID   `json:"id" format:"uuid" doc:"User ID"`
-	Email        *string     `json:"email" nullable:"true" doc:"University email, null when USOS did not share it" example:"jan.kowalski@umcs.pl"`
-	FirstName    *string     `json:"firstName" nullable:"true" example:"Jan"`
-	LastName     *string     `json:"lastName" nullable:"true" example:"Kowalski"`
-	Gender       *Gender     `json:"gender" nullable:"true" enum:"male,female" doc:"Set once; null until set. Visible to other students, with no privacy toggle."`
-	BirthDate    *string     `json:"birthDate" nullable:"true" format:"date" doc:"Set once; age must be 16 to 100"`
-	OpenTo       []string    `json:"openTo" enum:"friends,studyBuddy,dating" doc:"Empty until the student selects modes"`
-	Intent       *string     `json:"intent" nullable:"true" maxLength:"150" doc:"Short discovery-card line"`
-	Language     Language    `json:"language" enum:"en,pl,uk,ru,be,de,es" doc:"Interface language; defaults to pl"`
-	UniversityID string      `json:"universityId" example:"umcs"`
-	Programmes   []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
-	AvatarURL    *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
-	BannerURL    *string     `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
-	Bio          *string     `json:"bio" nullable:"true" doc:"Plain text, up to 500 characters" example:"Second-year CS student, into climbing."`
-	SongURL      *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
-	Interests    []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
-	Privacy      Privacy     `json:"privacy"`
-	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
-	Roles        []auth.Role `json:"roles" doc:"Staff roles of the student; empty for students without one"`
-	CreatedAt    time.Time   `json:"createdAt"`
+	ID             uuid.UUID   `json:"id" format:"uuid" doc:"User ID"`
+	Email          *string     `json:"email" nullable:"true" doc:"University email, null when USOS did not share it" example:"jan.kowalski@umcs.pl"`
+	FirstName      *string     `json:"firstName" nullable:"true" example:"Jan"`
+	LastName       *string     `json:"lastName" nullable:"true" example:"Kowalski"`
+	Gender         *Gender     `json:"gender" nullable:"true" enum:"male,female" doc:"Set once; null until set. Visible to other students, with no privacy toggle."`
+	BirthDate      *string     `json:"birthDate" nullable:"true" format:"date" doc:"Set once; age must be 16 to 100"`
+	OpenTo         []string    `json:"openTo" enum:"friends,studyBuddy,dating" doc:"Empty until the student selects modes"`
+	Intent         *string     `json:"intent" nullable:"true" maxLength:"150" doc:"Short discovery-card line"`
+	Language       Language    `json:"language" enum:"en,pl,uk,ru,be,de,es" doc:"Interface language; defaults to pl"`
+	UniversityID   string      `json:"universityId" example:"umcs"`
+	Programmes     []Programme `json:"programmes" doc:"Study programmes, primary first; empty when the student has none"`
+	AvatarURL      *string     `json:"avatarUrl" nullable:"true" doc:"URL of the avatar image, null when the student has none"`
+	BannerURL      *string     `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
+	Bio            *string     `json:"bio" nullable:"true" doc:"Plain text, up to 500 characters" example:"Second-year CS student, into climbing."`
+	SongURL        *string     `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset." example:"https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"`
+	Interests      []string    `json:"interests" doc:"Up to 10 tags" example:"[\"climbing\",\"go\"]"`
+	Privacy        Privacy     `json:"privacy"`
+	Coins          int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
+	Roles          []auth.Role `json:"roles" doc:"Staff roles of the student; empty for students without one"`
+	FollowersCount int64       `json:"followersCount" minimum:"0"`
+	FollowingCount int64       `json:"followingCount" minimum:"0"`
+	FollowedByMe   bool        `json:"followedByMe" doc:"False on the logged-in student's own profile because students cannot follow themselves"`
+	CreatedAt      time.Time   `json:"createdAt"`
 }
 
 type ProfilePhoto struct {

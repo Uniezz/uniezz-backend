@@ -70,6 +70,7 @@ type connectionService interface {
 type Module struct {
 	tx          database.Transactor
 	profiles    *profileRepository
+	follows     *followRepository
 	connections connectionService
 	programmes  *programmeRepository
 	media       mediaService
@@ -86,6 +87,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule, 
 	m := Module{
 		tx:         db,
 		profiles:   newProfileRepository(db),
+		follows:    newFollowRepository(db),
 		programmes: newProgrammeRepository(db),
 		media:      mediaModule,
 		feed:       feedModule,
@@ -119,6 +121,7 @@ func (m Module) Register(api huma.API) {
 	profiles := &profileHandler{profile: m}
 	programmes := &programmeHandler{programmes: m.programmes}
 	public := &publicProfileHandler{profile: m}
+	follows := &followHandler{profile: m}
 
 	huma.Register(api, getMeOperation, profiles.getMe)
 	huma.Register(api, updateMeOperation, profiles.updateMe)
@@ -135,4 +138,10 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, deleteProgrammeOperation, programmes.deleteProgramme)
 	huma.Register(api, listProfilesOperation, public.listProfiles)
 	huma.Register(api, getProfileOperation, public.getProfile)
+	huma.Register(api, followProfileOperation, follows.follow)
+	huma.Register(api, unfollowProfileOperation, follows.unfollow)
+	huma.Register(api, listMyFollowersOperation, follows.listMyFollowers)
+	huma.Register(api, listMyFollowingOperation, follows.listMyFollowing)
+	huma.Register(api, listProfileFollowersOperation, follows.listProfileFollowers)
+	huma.Register(api, listProfileFollowingOperation, follows.listProfileFollowing)
 }

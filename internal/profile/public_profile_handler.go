@@ -15,20 +15,23 @@ type publicProfileHandler struct {
 }
 
 type PublicProfile struct {
-	ID           uuid.UUID         `json:"id" format:"uuid"`
-	Email        *string           `json:"email" nullable:"true" doc:"Null unless the student shows it"`
-	FirstName    *string           `json:"firstName" nullable:"true" example:"Jan"`
-	LastName     *string           `json:"lastName" nullable:"true" example:"Kowalski"`
-	Gender       *Gender           `json:"gender" nullable:"true" enum:"male,female" doc:"Null until set; always visible to other students, with no privacy toggle"`
-	Age          *int              `json:"age" nullable:"true" doc:"Age in years; null until birth date is set"`
-	UniversityID string            `json:"universityId" example:"umcs"`
-	AvatarURL    *string           `json:"avatarUrl" nullable:"true"`
-	Photos       []string          `json:"photos" doc:"Avatar first, followed by additional photos; hidden from unconnected students"`
-	BannerURL    *string           `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
-	Bio          *string           `json:"bio" nullable:"true"`
-	SongURL      *string           `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset. Always visible, with no privacy toggle."`
-	Interests    []string          `json:"interests"`
-	Programmes   []PublicProgramme `json:"programmes" doc:"Primary first"`
+	ID             uuid.UUID         `json:"id" format:"uuid"`
+	Email          *string           `json:"email" nullable:"true" doc:"Null unless the student shows it"`
+	FirstName      *string           `json:"firstName" nullable:"true" example:"Jan"`
+	LastName       *string           `json:"lastName" nullable:"true" example:"Kowalski"`
+	Gender         *Gender           `json:"gender" nullable:"true" enum:"male,female" doc:"Null until set; always visible to other students, with no privacy toggle"`
+	Age            *int              `json:"age" nullable:"true" doc:"Age in years; null until birth date is set"`
+	UniversityID   string            `json:"universityId" example:"umcs"`
+	AvatarURL      *string           `json:"avatarUrl" nullable:"true"`
+	Photos         []string          `json:"photos" doc:"Avatar first, followed by additional photos; hidden from unconnected students"`
+	BannerURL      *string           `json:"bannerUrl" nullable:"true" doc:"URL of the banner image, null when the student has none"`
+	Bio            *string           `json:"bio" nullable:"true"`
+	SongURL        *string           `json:"songUrl" nullable:"true" doc:"Link to the song the student associates with themselves. Null when unset. Always visible, with no privacy toggle."`
+	Interests      []string          `json:"interests"`
+	Programmes     []PublicProgramme `json:"programmes" doc:"Primary first"`
+	FollowersCount int64             `json:"followersCount" minimum:"0"`
+	FollowingCount int64             `json:"followingCount" minimum:"0"`
+	FollowedByMe   bool              `json:"followedByMe" doc:"True when the signed-in viewer follows this student"`
 }
 
 type PublicProgramme struct {
