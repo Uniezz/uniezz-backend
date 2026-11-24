@@ -233,12 +233,13 @@ func (r *memberRepository) markRead(ctx context.Context, conversationID, userID 
 }
 
 func (r *memberRepository) unreadTotals(ctx context.Context, viewerID uuid.UUID) (total, conversations int, err error) {
+	args := database.Args{viewerID}
 	query := `
 		SELECT COALESCE(SUM(m.unread_count), 0), COUNT(*) FILTER (WHERE m.unread_count > 0)
 		FROM chat_members m
 		JOIN chat_conversations c ON c.id = m.conversation_id
-		WHERE m.user_id = $1 AND ` + directVisible("$1", "c.direct_user_low", "c.direct_user_high")
-	if err := r.db.Conn(ctx).QueryRow(ctx, query, viewerID).Scan(&total, &conversations); err != nil {
+		WHERE m.user_id = $1 AND ` + directVisible(args.Add, "$1", true)
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, args...).Scan(&total, &conversations); err != nil {
 		return 0, 0, fmt.Errorf("count unread conversations: %w", err)
 	}
 	return total, conversations, nil

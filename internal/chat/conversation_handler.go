@@ -29,6 +29,21 @@ const (
 	RoleMember Role = "member"
 )
 
+type Origin string
+
+const (
+	OriginMatch   Origin = "match"
+	OriginRequest Origin = "request"
+)
+
+type Status string
+
+const (
+	StatusPending  Status = "pending"
+	StatusApproved Status = "approved"
+	StatusDeclined Status = "declined"
+)
+
 type Student struct {
 	ID           *uuid.UUID `json:"id" format:"uuid" nullable:"true" doc:"Null when the student deleted their account"`
 	Deleted      bool       `json:"deleted" doc:"true when the student deleted their account"`
@@ -50,12 +65,15 @@ type Conversation struct {
 	Peer        *Student  `json:"peer,omitempty" doc:"The other student of a direct conversation; omitted for groups"`
 	MemberCount *int      `json:"memberCount" nullable:"true" doc:"Null for direct conversations"`
 	MyRole      *Role     `json:"myRole" nullable:"true" enum:"owner,member" doc:"Null for direct conversations"`
+	Origin      *Origin   `json:"origin" nullable:"true" enum:"match,request" doc:"How the direct conversation began; request stays even after the students match. Null for groups"`
+	Status      *Status   `json:"status" nullable:"true" enum:"pending,approved" doc:"pending until the recipient accepts or replies; a declined request still shows pending to its sender. Null for groups"`
+	Incoming    *bool     `json:"incoming" nullable:"true" doc:"true when the other student started the direct conversation. Null for groups"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type openDirectConversationInput struct {
 	Body struct {
-		UserID uuid.UUID `json:"userId" format:"uuid" doc:"A student the caller has a Connection with"`
+		UserID uuid.UUID `json:"userId" format:"uuid" doc:"Any student; without a Connection the conversation starts as a message request"`
 	}
 }
 
@@ -68,11 +86,11 @@ var openDirectConversationOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "openDirectConversation",
 	Method:        http.MethodPost,
 	Path:          "/chat/conversations/direct",
-	Summary:       "Open the direct conversation with a connected student",
-	Description:   "Returns 201 when the conversation was created and 200 when it already existed. Students without a Connection, blocked either way, banned or unknown answer 404.",
+	Summary:       "Open the direct conversation with a student",
+	Description:   "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404.",
 	Tags:          []string{"chat"},
 	DefaultStatus: http.StatusCreated,
-	Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
+	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusTooManyRequests},
 })
 
 func (h *conversationHandler) openDirectConversation(ctx context.Context, in *openDirectConversationInput) (*openDirectConversationOutput, error) {
@@ -157,7 +175,7 @@ var listChatConversationsOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/chat/conversations",
 	Summary:     "List the logged-in student's conversations",
-	Description: "Newest activity first, paginated by cursor. Direct conversations without a Connection, or with a block either way, are left out.",
+	Description: "Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, and direct conversations with a block either way, are left out.",
 	Tags:        []string{"chat"},
 	Errors:      []int{http.StatusBadRequest},
 })

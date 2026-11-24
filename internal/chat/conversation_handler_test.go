@@ -39,6 +39,11 @@ func TestEveryOperationRequiresASession(t *testing.T) {
 		{"mark read", func() int { return e.api.Put("/chat/conversations/"+id+"/read", map[string]any{"seq": 0}).Code }},
 		{"unread totals", func() int { return e.api.Get("/chat/unread").Code }},
 		{"open stream", func() int { return e.api.Get("/chat/stream").Code }},
+		{"list requests", func() int { return e.api.Get("/chat/requests").Code }},
+		{"accept request", func() int { return e.api.Put("/chat/requests/"+id+"/acceptance", map[string]any{}).Code }},
+		{"decline request", func() int { return e.api.Delete("/chat/requests/" + id).Code }},
+		{"get settings", func() int { return e.api.Get("/chat/settings/me").Code }},
+		{"update settings", func() int { return e.api.Patch("/chat/settings/me", map[string]any{"whoCanMessage": "matches"}).Code }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,10 +119,8 @@ func TestDirectConversation(t *testing.T) {
 		}
 	})
 
-	t.Run("students without a connection, blocked or banned are not found", func(t *testing.T) {
+	t.Run("blocked, banned or unknown students are not found", func(t *testing.T) {
 		a := e.user(t)
-		stranger := e.user(t)
-		expectError(t, e.api.Post("/chat/conversations/direct", a.bearer, map[string]any{"userId": stranger.id}), http.StatusNotFound, "not_found")
 
 		friend := e.user(t)
 		e.connect(t, a, friend)
@@ -138,28 +141,19 @@ func TestDirectConversation(t *testing.T) {
 		expectError(t, e.api.Post("/chat/conversations/direct", a.bearer, map[string]any{"userId": a.id}), http.StatusBadRequest, "invalid_input")
 	})
 
-	t.Run("unmatching hides the conversation and a new connection brings its history back", func(t *testing.T) {
+	t.Run("unmatching keeps an approved conversation", func(t *testing.T) {
 		a, b := e.friends(t)
 		conversation := e.direct(t, a, b)
-		sent := e.send(t, a, conversation.ID, "hello")
+		if conversation.Origin == nil || *conversation.Origin != OriginMatch || conversation.Status == nil || *conversation.Status != StatusApproved {
+			t.Fatalf("conversation = %+v, want an approved match", conversation)
+		}
+		e.send(t, a, conversation.ID, "hello")
 
 		e.disconnect(a, b)
-		expectError(t, e.api.Get("/chat/conversations/"+conversation.ID.String(), b.bearer), http.StatusNotFound, "not_found")
-		expectError(t, e.rawSend(a, conversation.ID, uuid.New(), map[string]any{"body": "again"}), http.StatusNotFound, "not_found")
-		expectError(t, e.api.Get("/chat/conversations/"+conversation.ID.String()+"/messages", a.bearer), http.StatusNotFound, "not_found")
-		for _, u := range []testUser{a, b} {
-			list := decode[struct{ Items []Conversation }](t, e.api.Get("/chat/conversations?limit=50", u.bearer), http.StatusOK)
-			for _, c := range list.Items {
-				if c.ID == conversation.ID {
-					t.Errorf("hidden conversation is still listed for %s", u.id)
-				}
-			}
-		}
-
-		e.connect(t, a, b)
-		page := e.history(t, b, conversation.ID, "")
-		if len(page.Items) != 1 || page.Items[0].ID != sent.ID {
-			t.Errorf("history after reconnecting = %v, want the original message", seqs(page.Items))
+		e.send(t, b, conversation.ID, "still here")
+		page := e.history(t, a, conversation.ID, "")
+		if len(page.Items) != 2 {
+			t.Errorf("history after unmatching = %v, want both messages", seqs(page.Items))
 		}
 	})
 }

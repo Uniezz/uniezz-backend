@@ -156,7 +156,7 @@ func (e *testEnv) user(t *testing.T) testUser {
 		_, _ = e.pool.Exec(ctx, "DELETE FROM chat_conversations WHERE id IN (SELECT conversation_id FROM chat_members WHERE user_id = $1)", id)
 		_, _ = e.pool.Exec(ctx, "DELETE FROM chat_messages WHERE sender_id = $1", id)
 		_, _ = e.pool.Exec(ctx, "DELETE FROM reports WHERE reporter_id = $1 OR target_author_id = $1", id)
-		_, _ = e.pool.Exec(ctx, "DELETE FROM rate_limits WHERE key = ANY($1)", []string{"chat-send:" + id.String(), "chat-group:" + id.String()})
+		_, _ = e.pool.Exec(ctx, "DELETE FROM rate_limits WHERE key = ANY($1)", []string{"chat-send:" + id.String(), "chat-group:" + id.String(), "chat-request:" + id.String()})
 		_, _ = e.pool.Exec(ctx, "DELETE FROM media WHERE owner_user_id = $1", id)
 		_, _ = e.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", id)
 	})

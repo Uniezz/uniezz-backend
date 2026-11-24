@@ -180,7 +180,8 @@ func TestGroupMembers(t *testing.T) {
 		if err := e.pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM chat_members WHERE conversation_id = $1", group.ID).Scan(&count); err != nil || count != maxGroupMembers {
 			t.Errorf("members = %d err = %v, want %d", count, err, maxGroupMembers)
 		}
-		expectError(t, e.api.Post("/chat/conversations/"+group.ID.String()+"/members", owner.bearer, map[string]any{"userIds": []uuid.UUID{extra[2].id, extra[3].id}}), http.StatusConflict, "group_full")
+		latecomer := e.befriend(t, owner)
+		expectError(t, e.api.Post("/chat/conversations/"+group.ID.String()+"/members", owner.bearer, map[string]any{"userIds": []uuid.UUID{latecomer.id}}), http.StatusConflict, "group_full")
 	})
 
 	t.Run("only the owner renames or removes", func(t *testing.T) {

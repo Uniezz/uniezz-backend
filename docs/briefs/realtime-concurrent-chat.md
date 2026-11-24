@@ -102,7 +102,7 @@ COMMIT -> respond -> hub.Publish
 
 All access rules live in one place (`access.go`), so product changes do not touch storage or delivery. Non-members always get `404 not_found`.
 
-- **Direct conversations:** only between two students with a Connection and no block in either direction; self-chat is `400`. One conversation per pair, get-or-create under concurrent requests. Without a Connection or with a block, the conversation is hidden from both lists and every access is `404`; restoring the Connection restores the history. The Connection check reads `connections` inside the send transaction without a lock: a send that races an unmatch can commit just after it, which is harmless because the conversation is hidden from then on.
+- **Direct conversations:** between any two students without a block in either direction; self-chat is `400`. One conversation per pair, get-or-create under concurrent requests. With a Connection the conversation opens directly (`origin = match`, `status = approved`). Without one it is a message request (`origin = request`, `status = pending`), allowed only when the recipient's "who can message me" setting (everyone, same university, matches only) lets the sender in and it is not an adult writing to a student under 18; an unknown age does not block. Until the recipient accepts or replies, the sender may send one text message without links or attachments. The recipient sees requests that hold a message in `GET /chat/requests`, not in the conversation list, and may accept, decline silently (the sender still sees pending), block or report. A later match approves a request and keeps its origin; connections cannot call chat, so the next open or send applies it. Unmatching no longer hides an approved conversation; a block hides it from both lists and every access is `404`. Limits: 20 new requests per sender per day, and at most 5 pending requests from accounts younger than 2 days per recipient.
 - **Groups:** any student creates one and becomes the owner. Members add their own Connections that they have not blocked; members are added directly and may leave. The owner removes members and renames the group. When the owner leaves, the longest-standing member becomes owner. When the last member leaves, the group is deleted in that transaction. At most 50 members including the owner. Group members do not need Connections with each other.
 - **Blocks inside groups:** `AGENTS.md` requires that a blocked student's content does not appear to the other. A viewer does not see messages from a student blocked in either direction, does not receive their events, does not count them as unread, and does not see them in the member list. The group itself keeps working.
 - Banned and deleted students cannot open a stream (the session check fails) and are left out of profile reads like everywhere else.
@@ -115,7 +115,7 @@ All access rules live in one place (`access.go`), so product changes do not touc
 - Bounds: 256 queued events per stream (overflow closes the stream); a write deadline of 30 seconds set before every write; 5 streams per user (a sixth closes the oldest, because a dead mobile connection may not have been noticed yet); 5,000 streams per process (`503` above).
 - The guard checks the session once at the start. Every 5 minutes the stream checks it again and sends `auth_expired` before closing when the session ended (logout, expiry, ban, deletion).
 - On shutdown, while the readiness probe already fails, every stream receives `reconnect` with a random delay of 0–5 seconds and is closed, so `server.Shutdown` is not held open and clients do not reconnect all at once.
-- Unmatch or block does not send a live event: `connections` would have to call back into chat, which depends on it. The conversation answers `404` and drops out of the next list.
+- A block does not send a live event: `connections` would have to call back into chat, which depends on it. The conversation answers `404` and drops out of the next list.
 
 ### 4.7 Attachments
 
@@ -156,7 +156,7 @@ Neon on staging stays awake while streams are open (session checks) and while th
 
 ## 6. Review of the product spec (#108)
 
-The spec's general direction matches this brief: Connections-only direct conversations, REST as the source of truth, a gapless per-conversation `seq` under the conversation lock, publishing after commit with recipients from the transaction, an in-memory hub, bounded queues, system messages with event codes instead of translated text, `404` for non-members, and viewer-agnostic events.
+The spec's general direction matches this brief (direct conversations were Connections-only until issue #122 added message requests): REST as the source of truth, a gapless per-conversation `seq` under the conversation lock, publishing after commit with recipients from the transaction, an in-memory hub, bounded queues, system messages with event codes instead of translated text, `404` for non-members, and viewer-agnostic events.
 
 Taken from the spec: SSE as a Huma operation, the cookie-proxy constraint, the `Idempotency-Key` header contract, the 20-second heartbeat and per-write deadline, the 5-minute session check, drain with `reconnect`, the 4,000-character limit, at most 5 attachments, and blocked senders hidden inside groups.
 
@@ -175,7 +175,7 @@ Deferred, because they are features on top of the core and do not change its arc
 Two of them need care when they are built:
 
 - Delivered receipts in the spec mean "written to a stream", which is not a device receipt, and they add a batched database writer to the hub.
-- Housing context cards assume that a student can write to the author of a housing post, but direct conversations require a Connection. The product has to decide that rule first.
+- Housing context cards assume that a student can write to the author of a housing post; since issue #122 that goes through a message request.
 
 ## 7. Later stages
 
