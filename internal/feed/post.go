@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
@@ -212,11 +211,6 @@ type postQuery struct {
 }
 
 func (q postQuery) filter() (postFilter, error) {
-	if q.University != "" && q.University != allUniversities {
-		if _, err := auth.GetUniversityByID(auth.UniversityID(q.University)); err != nil {
-			return postFilter{}, ErrInvalidInput
-		}
-	}
 	if q.From != nil && q.To != nil && !q.From.Before(*q.To) {
 		return postFilter{}, ErrInvalidInput
 	}

@@ -70,13 +70,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("New failed: %v", err)
 	}
 
-	usos := map[string]config.UsosCredentials{}
-	for _, u := range auth.GetUniversities() {
-		if u.AuthType == auth.AuthTypeUSOS {
-			usos[string(u.ID)] = config.UsosCredentials{BaseURL: "https://usos.test", ConsumerKey: "key", ConsumerSecret: "secret"}
-		}
-	}
-	authModule, err := auth.New(pool, &config.Config{UsosConfigs: usos}, nil, nil, nil)
+	authModule, err := auth.New(pool, &config.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
 	}

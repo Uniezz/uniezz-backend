@@ -20,17 +20,17 @@ func TestRequireUniversity(t *testing.T) {
 		method  AuthType
 		wantErr error
 	}{
-		{name: "USOS university with USOS", id: UniversityUMCS, method: AuthTypeUSOS},
-		{name: "OTP university with OTP", id: UniversityKUL, method: AuthTypeOTP},
-		{name: "USOS university with OTP", id: UniversityUMCS, method: AuthTypeOTP, wantErr: ErrWrongAuthMethod},
-		{name: "OTP university with USOS", id: UniversityKUL, method: AuthTypeUSOS, wantErr: ErrWrongAuthMethod},
+		{name: "USOS university with USOS", id: uniUMCS, method: AuthTypeUSOS},
+		{name: "OTP university with OTP", id: uniKUL, method: AuthTypeOTP},
+		{name: "USOS university with OTP", id: uniUMCS, method: AuthTypeOTP, wantErr: ErrWrongAuthMethod},
+		{name: "OTP university with USOS", id: uniKUL, method: AuthTypeUSOS, wantErr: ErrWrongAuthMethod},
 		{name: "unknown university", id: "unknown-uni", method: AuthTypeOTP, wantErr: ErrUnknownUniversity},
 		{name: "empty university", id: "", method: AuthTypeUSOS, wantErr: ErrUnknownUniversity},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			u, err := requireUniversity(tc.id, tc.method)
+			u, err := requireUniversity(context.Background(), testUniversities, tc.id, tc.method)
 
 			if tc.wantErr == nil {
 				if err != nil {
@@ -53,12 +53,12 @@ func TestLogins_Integration(t *testing.T) {
 	pool := setupTestDB(t)
 	users := NewUserRepository(database.New(pool))
 	sessions := NewSessionRepository(database.New(pool))
-	l := newLogins(database.New(pool), users, sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
+	l := newLogins(database.New(pool), users, sessions, newLoginCodeRepository(database.New(pool)), newUniversityRepository(database.New(pool)), time.Hour)
 	ctx := context.Background()
 
 	signInTestUser := func(t *testing.T) *User {
 		t.Helper()
-		u, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+		u, err := l.signIn(ctx, Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID()})
 		if err != nil {
 			t.Fatalf("signIn failed: %v", err)
 		}
@@ -144,7 +144,7 @@ func TestLogins_Integration(t *testing.T) {
 		email := testEmail()
 
 		u, err := l.signIn(ctx, Identity{
-			UniversityID: UniversityKUL,
+			UniversityID: uniKUL,
 			Email:        "  " + strings.ToUpper(email) + " ",
 			FirstName:    " Jan ",
 		})
@@ -164,7 +164,7 @@ func TestLogins_Integration(t *testing.T) {
 	t.Run("signIn rejects an invalid identity without touching the database", func(t *testing.T) {
 		email := testEmail()
 
-		_, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, Email: email})
+		_, err := l.signIn(ctx, Identity{UniversityID: uniUMCS, Email: email})
 		if !errors.Is(err, ErrInvalidIdentity) {
 			t.Fatalf("expected ErrInvalidIdentity, got: %v", err)
 		}
@@ -179,7 +179,7 @@ func TestLogins_Integration(t *testing.T) {
 	})
 
 	t.Run("issueSession returns a token that resolves to the user's session", func(t *testing.T) {
-		u, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+		u, err := l.signIn(ctx, Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID()})
 		if err != nil {
 			t.Fatalf("signIn failed: %v", err)
 		}
@@ -214,7 +214,7 @@ func TestLogins_Integration(t *testing.T) {
 	})
 
 	t.Run("issueSession gives a new token on every login", func(t *testing.T) {
-		u, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+		u, err := l.signIn(ctx, Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID()})
 		if err != nil {
 			t.Fatalf("signIn failed: %v", err)
 		}
@@ -257,13 +257,13 @@ func TestSignInAppliesReferralToNewAccount(t *testing.T) {
 	pool := setupTestDB(t)
 	ctx := context.Background()
 	users := NewUserRepository(database.New(pool))
-	inviter := upsertTestUser(t, pool, users, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+	inviter := upsertTestUser(t, pool, users, Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID()})
 	profiles := &recordingProfiles{db: database.New(pool)}
-	l := newLogins(database.New(pool), users, NewSessionRepository(database.New(pool)), newLoginCodeRepository(database.New(pool)), time.Hour)
+	l := newLogins(database.New(pool), users, NewSessionRepository(database.New(pool)), newLoginCodeRepository(database.New(pool)), newUniversityRepository(database.New(pool)), time.Hour)
 	l.profiles = profiles
 
 	newUser, err := l.signIn(ctx, Identity{
-		UniversityID: UniversityUMCS,
+		UniversityID: uniUMCS,
 		UsosUserID:   testUsosUserID(),
 		ReferralCode: inviter.InviteCode,
 	})
@@ -285,7 +285,7 @@ func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 	ctx := context.Background()
 
 	newLoginsWithProfiles := func(profiles ProfileInitializer) *logins {
-		l := newLogins(database.New(pool), NewUserRepository(database.New(pool)), NewSessionRepository(database.New(pool)), newLoginCodeRepository(database.New(pool)), time.Hour)
+		l := newLogins(database.New(pool), NewUserRepository(database.New(pool)), NewSessionRepository(database.New(pool)), newLoginCodeRepository(database.New(pool)), newUniversityRepository(database.New(pool)), time.Hour)
 		l.profiles = profiles
 		return l
 	}
@@ -293,7 +293,7 @@ func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 	t.Run("the first login initializes the profile, later logins do not", func(t *testing.T) {
 		profiles := &recordingProfiles{db: database.New(pool)}
 		l := newLoginsWithProfiles(profiles)
-		id := Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
+		id := Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
 
 		first, err := l.signIn(ctx, id)
 		if err != nil {
@@ -319,7 +319,7 @@ func TestLogins_InitializesOnlyNewAccounts(t *testing.T) {
 		l := newLoginsWithProfiles(profiles)
 		usosID := testUsosUserID()
 
-		_, err := l.signIn(ctx, Identity{UniversityID: UniversityUMCS, UsosUserID: usosID})
+		_, err := l.signIn(ctx, Identity{UniversityID: uniUMCS, UsosUserID: usosID})
 		if !errors.Is(err, boom) {
 			t.Fatalf("expected the initialization error, got %v", err)
 		}

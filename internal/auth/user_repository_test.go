@@ -57,7 +57,7 @@ func TestUserRepository_Integration(t *testing.T) {
 		usosID := testUsosUserID()
 
 		u := upsertTestUser(t, pool, repo, Identity{
-			UniversityID: UniversityUMCS,
+			UniversityID: uniUMCS,
 			UsosUserID:   usosID,
 			Email:        "jan@umcs.pl",
 			FirstName:    "Jan",
@@ -67,8 +67,8 @@ func TestUserRepository_Integration(t *testing.T) {
 		if u.ID == uuid.Nil {
 			t.Fatal("expected generated user ID")
 		}
-		if u.UniversityID != UniversityUMCS {
-			t.Errorf("expected university %q, got %q", UniversityUMCS, u.UniversityID)
+		if u.UniversityID != uniUMCS {
+			t.Errorf("expected university %q, got %q", uniUMCS, u.UniversityID)
 		}
 		if strOrNil(u.UsosUserID) != usosID {
 			t.Errorf("expected usos user id %q, got %q", usosID, strOrNil(u.UsosUserID))
@@ -88,7 +88,7 @@ func TestUserRepository_Integration(t *testing.T) {
 	})
 
 	t.Run("USOS repeated login returns the same user and bumps last_login_at", func(t *testing.T) {
-		id := Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
+		id := Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan"}
 
 		first := upsertTestUser(t, pool, repo, id)
 		second := upsertTestUser(t, pool, repo, id)
@@ -105,7 +105,7 @@ func TestUserRepository_Integration(t *testing.T) {
 	})
 
 	t.Run("Repeated login keeps values the user edited", func(t *testing.T) {
-		id := Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan", LastName: "Kowalski"}
+		id := Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID(), FirstName: "Jan", LastName: "Kowalski"}
 		first := upsertTestUser(t, pool, repo, id)
 
 		if _, err := pool.Exec(ctx, "UPDATE users SET first_name = 'Janek' WHERE id = $1", first.ID); err != nil {
@@ -124,14 +124,14 @@ func TestUserRepository_Integration(t *testing.T) {
 
 	t.Run("Repeated login fills values that were empty", func(t *testing.T) {
 		usosID := testUsosUserID()
-		first := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityUMCS, UsosUserID: usosID})
+		first := upsertTestUser(t, pool, repo, Identity{UniversityID: uniUMCS, UsosUserID: usosID})
 
 		if first.FirstName != nil || first.LastName != nil || first.Email != nil {
 			t.Fatalf("expected empty fields stored as NULL, got %+v", first)
 		}
 
 		second := upsertTestUser(t, pool, repo, Identity{
-			UniversityID: UniversityUMCS,
+			UniversityID: uniUMCS,
 			UsosUserID:   usosID,
 			Email:        "jan@umcs.pl",
 			FirstName:    "Jan",
@@ -147,8 +147,8 @@ func TestUserRepository_Integration(t *testing.T) {
 	t.Run("Same USOS id at two universities gives two users", func(t *testing.T) {
 		usosID := testUsosUserID()
 
-		umcs := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityUMCS, UsosUserID: usosID})
-		umlub := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityUMLub, UsosUserID: usosID})
+		umcs := upsertTestUser(t, pool, repo, Identity{UniversityID: uniUMCS, UsosUserID: usosID})
+		umlub := upsertTestUser(t, pool, repo, Identity{UniversityID: uniUMLub, UsosUserID: usosID})
 
 		if umcs.ID == umlub.ID {
 			t.Fatal("expected different users for different universities")
@@ -158,7 +158,7 @@ func TestUserRepository_Integration(t *testing.T) {
 	t.Run("OTP login creates user keyed by email", func(t *testing.T) {
 		email := testEmail()
 
-		u := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityKUL, Email: email})
+		u := upsertTestUser(t, pool, repo, Identity{UniversityID: uniKUL, Email: email})
 
 		if strOrNil(u.Email) != email {
 			t.Errorf("expected email %q, got %q", email, strOrNil(u.Email))
@@ -174,8 +174,8 @@ func TestUserRepository_Integration(t *testing.T) {
 	t.Run("OTP email match is case-insensitive", func(t *testing.T) {
 		email := testEmail()
 
-		first := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityKUL, Email: email})
-		second := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityKUL, Email: strings.ToUpper(email)})
+		first := upsertTestUser(t, pool, repo, Identity{UniversityID: uniKUL, Email: email})
+		second := upsertTestUser(t, pool, repo, Identity{UniversityID: uniKUL, Email: strings.ToUpper(email)})
 
 		if second.ID != first.ID {
 			t.Fatalf("expected the same user for %q and its uppercase form", email)
@@ -185,8 +185,8 @@ func TestUserRepository_Integration(t *testing.T) {
 	t.Run("Same email at two OTP universities gives two users", func(t *testing.T) {
 		email := testEmail()
 
-		kul := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityKUL, Email: email})
-		up := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityUP, Email: email})
+		kul := upsertTestUser(t, pool, repo, Identity{UniversityID: uniKUL, Email: email})
+		up := upsertTestUser(t, pool, repo, Identity{UniversityID: UniversityID("up"), Email: email})
 
 		if kul.ID == up.ID {
 			t.Fatal("expected different users for different universities")

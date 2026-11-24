@@ -37,14 +37,16 @@ type usosStateStore interface {
 }
 
 type usosLogin struct {
-	clients map[UniversityID]usosClient
-	states  usosStateStore
+	clients      map[UniversityID]usosClient
+	states       usosStateStore
+	universities universityLookup
 }
 
-func newUsosLogin(clients map[UniversityID]usosClient, states usosStateStore) *usosLogin {
+func newUsosLogin(clients map[UniversityID]usosClient, states usosStateStore, universities universityLookup) *usosLogin {
 	return &usosLogin{
-		clients: clients,
-		states:  states,
+		clients:      clients,
+		states:       states,
+		universities: universities,
 	}
 }
 
@@ -53,7 +55,7 @@ func (l *usosLogin) start(ctx context.Context, universityID UniversityID, platfo
 	if referralCode != "" && !validInviteCode(referralCode) {
 		return "", ErrInvalidReferralCode
 	}
-	un, err := requireUniversity(universityID, AuthTypeUSOS)
+	un, err := requireUniversity(ctx, l.universities, universityID, AuthTypeUSOS)
 	if err != nil {
 		return "", err
 	}

@@ -6,67 +6,70 @@ import (
 	"testing"
 )
 
-func TestGetUniversities(t *testing.T) {
-	list := GetUniversities()
-
-	expectedCount := 7
-	if len(list) != expectedCount {
-		t.Fatalf("expected %d universities, got %d", expectedCount, len(list))
-	}
-
-	if list[0].ID != UniversityUMCS || list[1].ID != UniversityUMLub {
-		t.Errorf("unexpected ordering of universities: first is %s, second is %s", list[0].ID, list[1].ID)
+func validUniversityChange() universityChange {
+	return universityChange{
+		ID:        "wsei",
+		Name:      " Wyższa Szkoła Ekonomii i Innowacji ",
+		AuthType:  AuthTypeOTP,
+		Position:  7,
+		Domains:   []string{" StudentWSEI.pl ", "wsei.lublin.pl", "studentwsei.pl"},
+		Faculties: []facultyChange{{Name: "Wydział Nauk o Zdrowiu", Address: "ul. Projektowa 4", Latitude: 51.24552, Longitude: 22.61056}},
 	}
 }
 
-func TestUniversityAuthTypesMapping(t *testing.T) {
-	tests := []struct {
-		name         string
-		id           UniversityID
-		expectedAuth AuthType
+func TestUniversityChange_Fields(t *testing.T) {
+	t.Run("cleans the name and lowercases, sorts and dedupes the domains", func(t *testing.T) {
+		f, err := validUniversityChange().fields()
+		if err != nil {
+			t.Fatalf("fields: %v", err)
+		}
+		if f.Name != "Wyższa Szkoła Ekonomii i Innowacji" {
+			t.Errorf("name = %q", f.Name)
+		}
+		if strings.Join(f.Domains, ",") != "studentwsei.pl,wsei.lublin.pl" {
+			t.Errorf("domains = %v", f.Domains)
+		}
+		if len(f.Faculties) != 1 || f.Faculties[0].Latitude != 51.24552 {
+			t.Errorf("faculties = %+v", f.Faculties)
+		}
+	})
+
+	t.Run("a USOS university needs no domains", func(t *testing.T) {
+		c := validUniversityChange()
+		c.AuthType, c.Domains = AuthTypeUSOS, nil
+		if _, err := c.fields(); err != nil {
+			t.Errorf("fields: %v", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		change func(*universityChange)
 	}{
-		{name: "UMCS uses USOS", id: UniversityUMCS, expectedAuth: AuthTypeUSOS},
-		{name: "UMLub uses USOS", id: UniversityUMLub, expectedAuth: AuthTypeUSOS},
-		{name: "KUL uses OTP", id: UniversityKUL, expectedAuth: AuthTypeOTP},
-		{name: "UP uses OTP", id: UniversityUP, expectedAuth: AuthTypeOTP},
-		{name: "PolLub uses OTP", id: UniversityPolLub, expectedAuth: AuthTypeOTP},
-		{name: "WSPA uses OTP", id: UniversityWSPA, expectedAuth: AuthTypeOTP},
-		{name: "WSEI uses OTP", id: UniversityWSEI, expectedAuth: AuthTypeOTP},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uni, err := GetUniversityByID(tt.id)
-			if err != nil {
-				t.Fatalf("unexpected error fetching %s: %v", tt.id, err)
-			}
-
-			if uni.AuthType != tt.expectedAuth {
-				t.Errorf("university %s: expected AuthType %q, got %q", tt.id, tt.expectedAuth, uni.AuthType)
+		{"an uppercase id", func(c *universityChange) { c.ID = "WSEI" }},
+		{"an empty id", func(c *universityChange) { c.ID = "" }},
+		{"an id with a space", func(c *universityChange) { c.ID = "ws ei" }},
+		{"a short name", func(c *universityChange) { c.Name = "ab" }},
+		{"an unknown login method", func(c *universityChange) { c.AuthType = "SAML" }},
+		{"a negative position", func(c *universityChange) { c.Position = -1 }},
+		{"an OTP university without domains", func(c *universityChange) { c.Domains = nil }},
+		{"a domain without a dot", func(c *universityChange) { c.Domains = []string{"localhost"} }},
+		{"a domain with an at sign", func(c *universityChange) { c.Domains = []string{"jan@wsei.pl"} }},
+		{"a faculty without an address", func(c *universityChange) { c.Faculties[0].Address = " " }},
+		{"a faculty outside the globe", func(c *universityChange) { c.Faculties[0].Latitude = 91 }},
+	} {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			c := validUniversityChange()
+			tc.change(&c)
+			if _, err := c.fields(); !errors.Is(err, ErrInvalidInput) {
+				t.Errorf("fields = %v, want ErrInvalidInput", err)
 			}
 		})
 	}
 }
 
-func TestGetUniversityByID_NotFound(t *testing.T) {
-	invalidID := UniversityID("unknown-uni")
-
-	_, err := GetUniversityByID(invalidID)
-	if err == nil {
-		t.Fatal("expected error for non-existent university ID, got nil")
-	}
-
-	if !errors.Is(err, ErrUnknownUniversity) {
-		t.Errorf("expected error to be ErrUnknownUniversity, got %v", err)
-	}
-}
-
-func TestUniversity_AcceptsEmail(t *testing.T) {
-	kul, err := GetUniversityByID(UniversityKUL)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+func TestUniversityRow_AcceptsEmail(t *testing.T) {
+	kul := testUniversities[uniKUL]
 	for _, tc := range []struct {
 		email string
 		want  bool
@@ -86,58 +89,8 @@ func TestUniversity_AcceptsEmail(t *testing.T) {
 			t.Errorf("acceptsEmail(%q) = %v, want %v", tc.email, got, tc.want)
 		}
 	}
-}
 
-func TestUniversity_USOSAcceptsNoEmail(t *testing.T) {
-	umcs, err := GetUniversityByID(UniversityUMCS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if umcs.acceptsEmail("jan@umcs.pl") {
+	if testUniversities[uniUMCS].acceptsEmail("jan@umcs.pl") {
 		t.Error("expected a USOS university without domains to accept no email")
-	}
-}
-
-func TestUniversities_FacultiesAreComplete(t *testing.T) {
-	for _, u := range GetUniversities() {
-		if len(u.Faculties) == 0 {
-			t.Errorf("%s has no faculties", u.ID)
-		}
-		for _, f := range u.Faculties {
-			if strings.TrimSpace(f.Name) == "" || strings.TrimSpace(f.Address) == "" {
-				t.Errorf("%s: faculty %+v must have a name and an address", u.ID, f)
-			}
-		}
-	}
-}
-
-func TestUniversities_FacultiesLocatedInLublin(t *testing.T) {
-	const (
-		minLat, maxLat = 51.1, 51.35
-		minLng, maxLng = 22.4, 22.7
-	)
-	for _, u := range GetUniversities() {
-		for _, f := range u.Faculties {
-			lat, lng := f.Location.Latitude, f.Location.Longitude
-			if lat < minLat || lat > maxLat || lng < minLng || lng > maxLng {
-				t.Errorf("%s: %q at (%v, %v) is outside Lublin; latitude and longitude may be swapped", u.ID, f.Name, lat, lng)
-			}
-		}
-	}
-}
-
-func TestUniversities_OTPHaveLowercaseDomains(t *testing.T) {
-	for _, u := range GetUniversities() {
-		if u.AuthType != AuthTypeOTP {
-			continue
-		}
-		if len(u.Domains) == 0 {
-			t.Errorf("%s uses OTP but has no domains", u.ID)
-		}
-		for _, d := range u.Domains {
-			if d != strings.ToLower(strings.TrimSpace(d)) {
-				t.Errorf("%s: domain %q must be lowercase and trimmed to match normalized emails", u.ID, d)
-			}
-		}
 	}
 }

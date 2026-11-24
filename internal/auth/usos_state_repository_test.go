@@ -27,7 +27,7 @@ func newTestUsosState(t *testing.T, pool *pgxpool.Pool, platform Platform) usosS
 
 	return usosState{
 		RequestToken: usos.RequestToken{Token: token, Secret: "secret-" + uuid.NewString()},
-		UniversityID: UniversityUMCS,
+		UniversityID: uniUMCS,
 		Platform:     platform,
 	}
 }

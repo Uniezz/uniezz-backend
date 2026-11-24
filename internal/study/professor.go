@@ -3,7 +3,6 @@ package study
 import (
 	"context"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -19,11 +18,6 @@ type professorQuery struct {
 }
 
 func (q professorQuery) filter() (professorFilter, error) {
-	if q.UniversityID != "" {
-		if _, err := auth.GetUniversityByID(auth.UniversityID(q.UniversityID)); err != nil {
-			return professorFilter{}, ErrInvalidInput
-		}
-	}
 	words, err := text.SearchWords(q.Search)
 	if err != nil {
 		return professorFilter{}, ErrInvalidInput

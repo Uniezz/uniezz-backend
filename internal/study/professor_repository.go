@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -245,4 +246,44 @@ func (r *professorRepository) retire(ctx context.Context, universityID string, k
 		return 0, fmt.Errorf("retire professors: %w", err)
 	}
 	return tag.RowsAffected(), nil
+}
+
+func (r *professorRepository) radonInstitutions(ctx context.Context) ([]radonInstitution, error) {
+	const query = `
+		SELECT id, radon_institution_id FROM supported_universities
+		WHERE radon_institution_id IS NOT NULL
+		ORDER BY id`
+	rows, err := r.db.Conn(ctx).Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list radon institutions: %w", err)
+	}
+	defer rows.Close()
+
+	var items []radonInstitution
+	for rows.Next() {
+		var i radonInstitution
+		if err := rows.Scan(&i.university, &i.id); err != nil {
+			return nil, fmt.Errorf("scan radon institution: %w", err)
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list radon institutions: %w", err)
+	}
+	return items, nil
+}
+
+func (r *professorRepository) radonInstitution(ctx context.Context, university auth.UniversityID) (radonInstitution, error) {
+	const query = `
+		SELECT id, radon_institution_id FROM supported_universities
+		WHERE id = $1 AND radon_institution_id IS NOT NULL`
+	var i radonInstitution
+	err := r.db.Conn(ctx).QueryRow(ctx, query, university).Scan(&i.university, &i.id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return radonInstitution{}, ErrNotFound
+	}
+	if err != nil {
+		return radonInstitution{}, fmt.Errorf("get radon institution: %w", err)
+	}
+	return i, nil
 }

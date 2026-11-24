@@ -43,10 +43,11 @@ func newOTPTestServer(t *testing.T) *otpTestServer {
 
 	sender := &fakeOTPSender{}
 	sessions := NewSessionRepository(database.New(pool))
-	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
+	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), newUniversityRepository(database.New(pool)), time.Hour)
 	m := Module{
 		otp: newOTPLogin(
 			newOTPRequestRepository(database.New(pool)),
+			newUniversityRepository(database.New(pool)),
 			sender,
 			ratelimit.New(pool, "otp-send-test", otpSendLimit, otpSendWindow),
 			newOTPHasher([]byte("test-key")),

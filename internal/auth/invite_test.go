@@ -28,7 +28,7 @@ func newInviteTestModule(pool *pgxpool.Pool) (Module, *UserRepository, *recordin
 	db := database.New(pool)
 	users := NewUserRepository(db)
 	referrals := &recordingReferrals{}
-	l := newLogins(db, users, NewSessionRepository(db), newLoginCodeRepository(db), time.Hour)
+	l := newLogins(db, users, NewSessionRepository(db), newLoginCodeRepository(db), newUniversityRepository(db), time.Hour)
 	l.referrals = referrals
 	return Module{logins: l}, users, referrals
 }
@@ -46,7 +46,7 @@ func TestRedeemInvite(t *testing.T) {
 	pool := setupTestDB(t)
 	ctx := context.Background()
 	newUser := func(t *testing.T, users *UserRepository) *User {
-		return upsertTestUser(t, pool, users, Identity{UniversityID: UniversityUMCS, UsosUserID: testUsosUserID()})
+		return upsertTestUser(t, pool, users, Identity{UniversityID: uniUMCS, UsosUserID: testUsosUserID()})
 	}
 
 	t.Run("a new account without an inviter gets one and both are rewarded", func(t *testing.T) {

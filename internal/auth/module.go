@@ -14,12 +14,14 @@ import (
 )
 
 type Module struct {
-	logins *logins
-	usos   *usosLogin
-	otp    *otpLogin
-	guard  *guard
-	roles  *roleRepository
-	bans   *banRepository
+	tx           database.Transactor
+	universities *universityRepository
+	logins       *logins
+	usos         *usosLogin
+	otp          *otpLogin
+	guard        *guard
+	roles        *roleRepository
+	bans         *banRepository
 
 	webRedirectURL    string
 	mobileRedirectURL string
@@ -32,16 +34,20 @@ func New(pool *pgxpool.Pool, cfg *config.Config, sender otpSender, profiles Prof
 	}
 
 	db := database.New(pool)
+	universities := newUniversityRepository(db)
 	sessions := NewSessionRepository(db)
-	logins := newLogins(db, NewUserRepository(db), sessions, newLoginCodeRepository(db), defaultSessionTTL)
+	logins := newLogins(db, NewUserRepository(db), sessions, newLoginCodeRepository(db), universities, defaultSessionTTL)
 	logins.profiles = profiles
 	logins.referrals = referrals
 
 	return Module{
-		logins: logins,
-		usos:   newUsosLogin(clients, newUsosStateRepository(db)),
+		tx:           db,
+		universities: universities,
+		logins:       logins,
+		usos:         newUsosLogin(clients, newUsosStateRepository(db), universities),
 		otp: newOTPLogin(
 			newOTPRequestRepository(db),
+			universities,
 			sender,
 			ratelimit.New(pool, "otp-send", otpSendLimit, otpSendWindow),
 			newOTPHasher([]byte(cfg.OTPHashKey)),
@@ -63,14 +69,17 @@ func (m Module) Register(api huma.API) {
 		mobileRedirectURL: m.mobileRedirectURL,
 	}
 	sessions := &sessionHandler{logins: m.logins}
-	universities := &universitiesHandler{}
+	universities := &universitiesHandler{auth: m}
 	otp := &otpHandler{otp: m.otp, logins: m.logins}
 	invites := &inviteCodeHandler{auth: m}
 
 	huma.Register(api, usosStartOperation, usos.start)
 	huma.Register(api, usosCallbackOperation, usos.callback)
 	huma.Register(api, exchangeOperation, sessions.exchange)
-	huma.Register(api, universitiesOperation, universities.list)
+	huma.Register(api, universitiesOperation, universities.getUniversities)
+	huma.Register(api, getUniversityOperation, universities.getUniversity)
+	huma.Register(api, createUniversityOperation, universities.createUniversity)
+	huma.Register(api, replaceUniversityOperation, universities.replaceUniversity)
 	huma.Register(api, otpRequestOperation, otp.request)
 	huma.Register(api, otpVerifyOperation, otp.verify)
 	huma.Register(api, getMyInviteCodeOperation, invites.getMyInviteCode)
@@ -81,17 +90,11 @@ func newUsosClients(cfg *config.Config) (map[UniversityID]usosClient, error) {
 	callbackURL := cfg.BackendPublicURL + "/auth/usos/callback"
 	clients := make(map[UniversityID]usosClient)
 
-	for _, u := range GetUniversities() {
-		if u.AuthType != AuthTypeUSOS {
-			continue
+	for id, creds := range cfg.UsosConfigs {
+		if creds.ConsumerKey == "" || creds.ConsumerSecret == "" {
+			return nil, fmt.Errorf("auth: missing USOS credentials for %s", id)
 		}
-
-		creds, ok := cfg.UsosConfigs[string(u.ID)]
-		if !ok || creds.ConsumerKey == "" || creds.ConsumerSecret == "" {
-			return nil, fmt.Errorf("auth: missing USOS credentials for %s", u.ID)
-		}
-
-		clients[u.ID] = usos.NewClient(creds.BaseURL, creds.ConsumerKey, creds.ConsumerSecret, callbackURL)
+		clients[UniversityID(id)] = usos.NewClient(creds.BaseURL, creds.ConsumerKey, creds.ConsumerSecret, callbackURL)
 	}
 
 	return clients, nil

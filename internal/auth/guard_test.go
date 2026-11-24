@@ -227,7 +227,7 @@ func TestSessionRepository_ExtendSession(t *testing.T) {
 	pool := setupTestDB(t)
 	ctx := context.Background()
 	repo := NewSessionRepository(database.New(pool))
-	user := upsertTestUser(t, pool, NewUserRepository(database.New(pool)), Identity{UniversityID: UniversityKUL, Email: testEmail()})
+	user := upsertTestUser(t, pool, NewUserRepository(database.New(pool)), Identity{UniversityID: uniKUL, Email: testEmail()})
 
 	token := GenerateSessionToken()
 	hash := token.Hash()

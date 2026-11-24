@@ -54,7 +54,7 @@ func createTestUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		VALUES ($1, $2)
 		RETURNING id;
 	`
-	err := pool.QueryRow(ctx, query, string(UniversityPolLub), testEmail).Scan(&userID)
+	err := pool.QueryRow(ctx, query, string(uniPolLub), testEmail).Scan(&userID)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}

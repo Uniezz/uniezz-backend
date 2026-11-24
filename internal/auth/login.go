@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,13 +13,14 @@ import (
 const defaultSessionTTL = 30 * 24 * time.Hour
 
 type logins struct {
-	tx         database.Transactor
-	users      *UserRepository
-	sessions   *SessionRepository
-	loginCodes *loginCodeRepository
-	sessionTTL time.Duration
-	profiles   ProfileInitializer
-	referrals  ReferralRewarder
+	tx           database.Transactor
+	users        *UserRepository
+	sessions     *SessionRepository
+	loginCodes   *loginCodeRepository
+	universities universityLookup
+	sessionTTL   time.Duration
+	profiles     ProfileInitializer
+	referrals    ReferralRewarder
 }
 
 type ProfileInitializer interface {
@@ -30,13 +32,14 @@ type ReferralRewarder interface {
 	RewardReferral(ctx context.Context, userID, inviterID uuid.UUID) (int, error)
 }
 
-func newLogins(tx database.Transactor, users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, sessionTTL time.Duration) *logins {
+func newLogins(tx database.Transactor, users *UserRepository, sessions *SessionRepository, loginCodes *loginCodeRepository, universities universityLookup, sessionTTL time.Duration) *logins {
 	return &logins{
-		tx:         tx,
-		users:      users,
-		sessions:   sessions,
-		loginCodes: loginCodes,
-		sessionTTL: sessionTTL,
+		tx:           tx,
+		users:        users,
+		sessions:     sessions,
+		loginCodes:   loginCodes,
+		universities: universities,
+		sessionTTL:   sessionTTL,
 	}
 }
 
@@ -63,25 +66,49 @@ func (l *logins) exchange(ctx context.Context, code string) (IssuedSession, erro
 	return l.issueSession(ctx, userID)
 }
 
-func requireUniversity(id UniversityID, method AuthType) (University, error) {
-	u, err := GetUniversityByID(id)
+var _ universityLookup = (*universityRepository)(nil)
+
+type universityLookup interface {
+	get(ctx context.Context, id UniversityID) (universityRow, error)
+}
+
+func lookupUniversity(ctx context.Context, universities universityLookup, id UniversityID) (universityRow, error) {
+	u, err := universities.get(ctx, id)
+	if errors.Is(err, ErrUniversityNotFound) {
+		return universityRow{}, fmt.Errorf("%w: %q", ErrUnknownUniversity, id)
+	}
+	return u, err
+}
+
+func requireUniversity(ctx context.Context, universities universityLookup, id UniversityID, method AuthType) (universityRow, error) {
+	u, err := lookupUniversity(ctx, universities, id)
 	if err != nil {
-		return University{}, err
+		return universityRow{}, err
 	}
 	if u.AuthType != method {
-		return University{}, fmt.Errorf("%w: %s uses %s", ErrWrongAuthMethod, u.ID, u.AuthType)
+		return universityRow{}, fmt.Errorf("%w: %s uses %s", ErrWrongAuthMethod, u.ID, u.AuthType)
 	}
 	return u, nil
 }
 
 func (l *logins) signIn(ctx context.Context, id Identity) (*User, error) {
 	id = id.normalized()
-	if err := id.validate(); err != nil {
+	if err := id.validateReferral(); err != nil {
+		return nil, err
+	}
+	u, err := lookupUniversity(ctx, l.universities, id.UniversityID)
+	if errors.Is(err, ErrUnknownUniversity) {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidIdentity, err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := id.validate(u); err != nil {
 		return nil, err
 	}
 	var user *User
 	var afterCommit func()
-	err := l.tx.WithTx(ctx, func(ctx context.Context) error {
+	err = l.tx.WithTx(ctx, func(ctx context.Context) error {
 		u, created, err := l.users.upsert(ctx, id)
 		if err != nil {
 			return err

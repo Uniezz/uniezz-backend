@@ -37,19 +37,20 @@ type sendLimiter interface {
 }
 
 type otpLogin struct {
-	store      otpStore
-	sender     otpSender
-	limiter    sendLimiter
-	hasher     otpHasher
-	testEmails []string
+	store        otpStore
+	universities universityLookup
+	sender       otpSender
+	limiter      sendLimiter
+	hasher       otpHasher
+	testEmails   []string
 }
 
-func newOTPLogin(store otpStore, sender otpSender, limiter sendLimiter, hasher otpHasher, testEmails []string) *otpLogin {
-	return &otpLogin{store: store, sender: sender, limiter: limiter, hasher: hasher, testEmails: testEmails}
+func newOTPLogin(store otpStore, universities universityLookup, sender otpSender, limiter sendLimiter, hasher otpHasher, testEmails []string) *otpLogin {
+	return &otpLogin{store: store, universities: universities, sender: sender, limiter: limiter, hasher: hasher, testEmails: testEmails}
 }
 
 func (l *otpLogin) request(ctx context.Context, universityID UniversityID, email string) error {
-	un, err := requireUniversity(universityID, AuthTypeOTP)
+	un, err := requireUniversity(ctx, l.universities, universityID, AuthTypeOTP)
 	if err != nil {
 		return err
 	}
@@ -79,7 +80,7 @@ func (l *otpLogin) request(ctx context.Context, universityID UniversityID, email
 }
 
 func (l *otpLogin) verify(ctx context.Context, universityID UniversityID, email, code string) (Identity, error) {
-	un, err := requireUniversity(universityID, AuthTypeOTP)
+	un, err := requireUniversity(ctx, l.universities, universityID, AuthTypeOTP)
 	if err != nil {
 		return Identity{}, err
 	}
