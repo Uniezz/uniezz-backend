@@ -263,6 +263,11 @@ func TestCreateReport(t *testing.T) {
 	expectError(t, e.api.Post("/reports", reporter.bearer, report("user", uuid.New())), 404, "not_found")
 	expectError(t, e.api.Post("/reports", reporter.bearer, map[string]any{"targetType": "post", "targetId": post, "reason": "boring"}), 400, "invalid_input")
 	decode[Report](t, e.api.Post("/reports", reporter.bearer, report("user", author.id)), 201)
+	for _, targetType := range []string{"course_comment", "professor_review"} {
+		if got := decode[Report](t, e.api.Post("/reports", reporter.bearer, report(targetType, e.contentBy(author))), 201); string(got.TargetType) != targetType {
+			t.Errorf("targetType = %q, want %q", got.TargetType, targetType)
+		}
+	}
 	expectError(t, e.api.Post("/reports", report("user", author.id)), 401, "unauthorized")
 }
 

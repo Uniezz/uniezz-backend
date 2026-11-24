@@ -3,6 +3,7 @@ package study
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -37,7 +38,38 @@ func TestReportTarget(t *testing.T) {
 		}
 	})
 
+	t.Run("a course comment reports its author and text", func(t *testing.T) {
+		author := e.student(t)
+		course := e.course(t, author, nil)
+		comment := decode[CourseComment](t, e.api.Post("/study/courses/"+course.ID.String()+"/comments", author.bearer, map[string]any{"content": "Rude"}), http.StatusCreated)
+		authorID, snapshot, err := e.module.ReportTarget(ctx, "course_comment", comment.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if authorID != author.id || snapshot["content"] != "Rude" || snapshot["courseId"] != course.ID {
+			t.Fatalf("author %s, snapshot %#v", authorID, snapshot)
+		}
+	})
+
+	t.Run("a professor review reports its author and text", func(t *testing.T) {
+		professorID := e.professor(t)
+		author := e.student(t)
+		review := decode[ProfessorReview](t, e.api.Put("/study/professors/"+professorID.String()+"/review", author.bearer, map[string]any{"content": "Rude"}), http.StatusOK)
+		authorID, snapshot, err := e.module.ReportTarget(ctx, "professor_review", review.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if authorID != author.id || snapshot["content"] != "Rude" || snapshot["professorId"] != professorID {
+			t.Fatalf("author %s, snapshot %#v", authorID, snapshot)
+		}
+	})
+
 	t.Run("an unknown target is not found", func(t *testing.T) {
+		for _, targetType := range []string{"course_comment", "professor_review"} {
+			if _, _, err := e.module.ReportTarget(ctx, targetType, uuid.New()); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("%s: err = %v, want ErrNotFound", targetType, err)
+			}
+		}
 		if _, _, err := e.module.ReportTarget(ctx, "file", uuid.New()); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("err = %v, want ErrNotFound", err)
 		}

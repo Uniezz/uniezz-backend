@@ -65,6 +65,18 @@ func (r *professorReviewRepository) save(ctx context.Context, professorID, autho
 	return row, nil
 }
 
+func (r *professorReviewRepository) get(ctx context.Context, id uuid.UUID) (*professorReviewRow, error) {
+	const query = `SELECT ` + professorReviewColumns + ` FROM professor_reviews r WHERE r.id = $1`
+	row, err := scanProfessorReview(r.db.Conn(ctx).QueryRow(ctx, query, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get professor review: %w", err)
+	}
+	return row, nil
+}
+
 func (r *professorReviewRepository) list(ctx context.Context, f professorReviewFilter) ([]professorReviewRow, error) {
 	var args database.Args
 	arg := args.Add

@@ -16,14 +16,16 @@ import (
 )
 
 const (
-	targetPost       = "post"
-	targetComment    = "comment"
-	targetUser       = "user"
-	targetCandidate  = "candidate"
-	targetFile       = "file"
-	targetCourse     = "course"
-	targetMessage    = "message"
-	maxDetailsLength = 1000
+	targetPost            = "post"
+	targetComment         = "comment"
+	targetUser            = "user"
+	targetCandidate       = "candidate"
+	targetFile            = "file"
+	targetCourse          = "course"
+	targetMessage         = "message"
+	targetCourseComment   = "course_comment"
+	targetProfessorReview = "professor_review"
+	maxDetailsLength      = 1000
 )
 
 type reportInput struct {
@@ -117,7 +119,7 @@ func (m Module) target(ctx context.Context, reporterID uuid.UUID, targetType str
 		}
 		return authorID, snapshot, err
 	}
-	if targetType == targetFile || targetType == targetCourse {
+	if targetType == targetFile || targetType == targetCourse || targetType == targetCourseComment || targetType == targetProfessorReview {
 		authorID, snapshot, err := m.study.ReportTarget(ctx, targetType, id)
 		if errors.Is(err, study.ErrNotFound) {
 			return uuid.Nil, nil, ErrNotFound

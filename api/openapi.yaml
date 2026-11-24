@@ -1047,6 +1047,8 @@ components:
             - file
             - course
             - message
+            - course_comment
+            - professor_review
           type: string
       required:
         - targetType
@@ -2813,6 +2815,8 @@ components:
             - file
             - course
             - message
+            - course_comment
+            - professor_review
       required:
         - targetAuthorId
         - snapshot
@@ -2930,6 +2934,8 @@ components:
             - file
             - course
             - message
+            - course_comment
+            - professor_review
       required:
         - id
         - targetType
