@@ -15,4 +15,6 @@ var (
 
 var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrInvalidUpload, Status: http.StatusBadRequest, Code: "invalid_upload"},
+	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
+	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }
