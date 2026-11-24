@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/google/uuid"
 )
 
@@ -138,6 +139,15 @@ func TestMatch(t *testing.T) {
 	second := decode[ActionResult](t, e.act(a, cardOfB.CandidateID, ModeFriends, "like"), http.StatusOK)
 	if !second.Matched || second.Connection == nil || second.Connection.Profile.ID != b.id {
 		t.Fatalf("match = %+v", second)
+	}
+	matches := 0
+	for _, n := range e.push.notices() {
+		if n.Event == push.EventMatch && n.ActorID == a.id && len(n.RecipientIDs) == 1 && n.RecipientIDs[0] == b.id {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Errorf("match pushes to b = %d, want 1", matches)
 	}
 
 	expectError(t, e.act(b, cardOfB.CandidateID, ModeFriends, "like"), http.StatusNotFound, "not_found")

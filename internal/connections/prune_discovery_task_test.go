@@ -27,7 +27,7 @@ func TestPruneDiscoveryKeepsRecentRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	module, err := New(e.pool, nil, nil, newRunner(e.pool))
+	module, err := New(e.pool, nil, nil, nil, newRunner(e.pool))
 	if err != nil {
 		t.Fatal(err)
 	}

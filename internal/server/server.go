@@ -18,6 +18,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/moderation"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2"
@@ -28,6 +29,7 @@ type Modules struct {
 	Auth        auth.Module
 	Media       media.Module
 	Chat        chat.Module
+	Push        push.Module
 	Profile     profile.Module
 	Feed        feed.Module
 	FAQ         faq.Module
@@ -58,13 +60,18 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	chatModule := chat.New(db, mediaModule)
+	pushModule, err := push.New(db, cfg.ExpoAccessToken, runner)
+	if err != nil {
+		return Modules{}, err
+	}
+
+	chatModule := chat.New(db, mediaModule, pushModule)
 
 	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, chatModule, rewardsModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
-	connectionsModule, err := connections.New(db, profileModule, rewardsModule, runner)
+	connectionsModule, err := connections.New(db, profileModule, rewardsModule, pushModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}
@@ -84,7 +91,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	return Modules{Auth: authModule, Media: mediaModule, Chat: chatModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Rewards: rewardsModule, Jobs: runner}, nil
+	return Modules{Auth: authModule, Media: mediaModule, Chat: chatModule, Push: pushModule, Profile: profileModule, Feed: feedModule, FAQ: faqModule, Connections: connectionsModule, Study: studyModule, Moderation: moderationModule, Rewards: rewardsModule, Jobs: runner}, nil
 }
 
 func (m Modules) Register(api huma.API) {
@@ -96,6 +103,7 @@ func (m Modules) Register(api huma.API) {
 	m.FAQ.Register(api)
 	m.Connections.Register(api)
 	m.Chat.Register(api)
+	m.Push.Register(api)
 	m.Study.Register(api)
 	m.Moderation.Register(api)
 	m.Rewards.Register(api)

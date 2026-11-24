@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2/humatest"
@@ -49,7 +51,28 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 type testEnv struct {
 	pool *pgxpool.Pool
 	api  humatest.TestAPI
+	push *fakePush
 	tag  string
+}
+
+type fakePush struct {
+	mu   sync.Mutex
+	sent []push.SendArgs
+}
+
+func (f *fakePush) Notify(_ context.Context, args push.SendArgs) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, args)
+	return nil
+}
+
+func (f *fakePush) Wake() {}
+
+func (f *fakePush) notices() []push.SendArgs {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]push.SendArgs(nil), f.sent...)
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -65,7 +88,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
 	}
-	module, err := New(pool, profiles, rewardsModule, runner)
+	pushes := &fakePush{}
+	module, err := New(pool, profiles, rewardsModule, pushes, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
@@ -83,7 +107,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	api.UseMiddleware(authModule.Guard(api))
 	profiles.Register(api)
 	module.Register(api)
-	return &testEnv{pool: pool, api: api, tag: "test-" + uuid.NewString()}
+	return &testEnv{pool: pool, api: api, push: pushes, tag: "test-" + uuid.NewString()}
 }
 
 func newRunner(pool *pgxpool.Pool) *jobs.Runner {

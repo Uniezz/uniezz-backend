@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/google/uuid"
 )
 
@@ -81,6 +82,26 @@ func TestMessageRequests(t *testing.T) {
 		}
 		if page := e.history(t, recipient, request.ID, ""); len(page.Items) != 1 {
 			t.Errorf("recipient reads %d messages, want 1", len(page.Items))
+		}
+	})
+
+	t.Run("the first message pushes a request, a reply pushes a message", func(t *testing.T) {
+		sender, recipient := e.user(t), e.user(t)
+		request := e.request(t, sender, recipient)
+		e.send(t, sender, request.ID, "hello")
+		e.send(t, recipient, request.ID, "hi back")
+
+		var events []push.Event
+		for _, n := range e.push.notices() {
+			if n.ConversationID != nil && *n.ConversationID == request.ID {
+				events = append(events, n.Event)
+				if len(n.RecipientIDs) != 1 || n.Preview == "" {
+					t.Errorf("notice = %+v", n)
+				}
+			}
+		}
+		if len(events) != 2 || events[0] != push.EventRequest || events[1] != push.EventMessage {
+			t.Errorf("events = %v, want request then message", events)
 		}
 	})
 
