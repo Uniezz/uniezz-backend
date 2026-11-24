@@ -302,4 +302,24 @@ func TestListProfiles(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves out students without a first or last name", func(t *testing.T) {
+		nameless := tag + "x"
+		var hidden []uuid.UUID
+		for _, set := range []string{"first_name = NULL, last_name = $2", "first_name = $2, last_name = NULL"} {
+			u := e.newUser(t, "umcs", "list-"+uuid.NewString()+"@umcs.pl")
+			if _, err := e.pool.Exec(ctx, "UPDATE users SET "+set+" WHERE id = $1", u.id, nameless); err != nil {
+				t.Fatal(err)
+			}
+			hidden = append(hidden, u.id)
+		}
+		named := e.newUser(t, "umcs", "list-"+uuid.NewString()+"@umcs.pl")
+		if _, err := e.pool.Exec(ctx, "UPDATE users SET last_name = $2 WHERE id = $1", named.id, nameless); err != nil {
+			t.Fatal(err)
+		}
+
+		p := list(t, url.Values{"q": {nameless}})
+		if len(p.Items) != 1 || p.Items[0].ID != named.id {
+			t.Errorf("got %+v, want only %v (hidden: %v)", p.Items, named.id, hidden)
+		}
+	})
 }
