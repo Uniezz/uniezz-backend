@@ -36,6 +36,7 @@ type Profile struct {
 	Privacy      Privacy     `json:"privacy"`
 	Coins        int         `json:"coins" minimum:"0" doc:"Uniezz coins the student has earned. Only the student sees them, and nothing spends them yet." example:"100"`
 	Roles        []auth.Role `json:"roles" doc:"Staff roles of the student; empty for students without one"`
+	OnboardedAt  *time.Time  `json:"onboardedAt" nullable:"true" doc:"When the student finished or skipped onboarding; null until then"`
 	CreatedAt    time.Time   `json:"createdAt"`
 }
 
@@ -306,6 +307,28 @@ func (h *profileHandler) addProfilePhoto(ctx context.Context, in *addProfilePhot
 	}
 
 	if err := h.profile.addProfilePhoto(ctx, userID, in.Body.MediaID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
+var completeOnboardingOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "completeMyOnboarding",
+	Method:        http.MethodPut,
+	Path:          "/profile/onboarding",
+	Summary:       "Mark the logged-in student's onboarding as finished",
+	Description:   "Call it when the student finishes or skips onboarding; onboardedAt on the profile is set once and calling again changes nothing. Until then the student is left out of the student list.",
+	Tags:          []string{"profile"},
+	DefaultStatus: http.StatusNoContent,
+})
+
+func (h *profileHandler) completeOnboarding(ctx context.Context, _ *struct{}) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.profile.completeOnboarding(ctx, userID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil

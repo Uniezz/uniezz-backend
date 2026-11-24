@@ -123,6 +123,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, getMeOperation, profiles.getMe)
 	huma.Register(api, updateMeOperation, profiles.updateMe)
 	huma.Register(api, deleteMeOperation, profiles.deleteMe)
+	huma.Register(api, completeOnboardingOperation, profiles.completeOnboarding)
 	huma.Register(api, deleteAvatarOperation, profiles.deleteAvatar)
 	huma.Register(api, reorderProfilePhotosOperation, profiles.reorderProfilePhotos)
 	huma.Register(api, listProfilePhotosOperation, profiles.listProfilePhotos)

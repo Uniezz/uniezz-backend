@@ -31,6 +31,7 @@ type profileRow struct {
 	Interests     []string
 	Privacy       Privacy
 	CreatedAt     time.Time
+	OnboardedAt   *time.Time
 	SearchRank    int
 }
 
@@ -69,16 +70,17 @@ func newProfileRepository(db database.DB) *profileRepository {
 }
 
 func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profileRow, error) {
-	query := `SELECT ` + profileColumns + `, u.banner_media_id, banner.kind, banner.object_key` + profileFrom + `
+	query := `SELECT ` + profileColumns + `, u.banner_media_id, banner.kind, banner.object_key, u.onboarded_at` + profileFrom + `
         LEFT JOIN ready_media banner ON banner.id = u.banner_media_id
         WHERE u.id = $1 AND u.deleted_at IS NULL`
 
 	var bannerID *uuid.UUID
 	var bannerKind, bannerKey *string
+	var onboardedAt *time.Time
 
 	p, err := scanProfile(
 		r.db.Conn(ctx).QueryRow(ctx, query, userID),
-		&bannerID, &bannerKind, &bannerKey,
+		&bannerID, &bannerKind, &bannerKey, &onboardedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -89,7 +91,16 @@ func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profile
 
 	p.BannerMediaID = bannerID
 	p.Banner = media.RefOf(bannerKind, bannerKey)
+	p.OnboardedAt = onboardedAt
 	return p, nil
+}
+
+func (r *profileRepository) markOnboarded(ctx context.Context, userID uuid.UUID) error {
+	const query = `UPDATE users SET onboarded_at = NOW() WHERE id = $1 AND onboarded_at IS NULL`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID); err != nil {
+		return fmt.Errorf("mark profile onboarded: %w", err)
+	}
+	return nil
 }
 
 func (r *profileRepository) getConnectionPreferences(ctx context.Context, userID uuid.UUID) (*connectionPreferencesRow, error) {
@@ -192,7 +203,8 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 			" AND (u.created_at, u.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")))")
 	}
 
-	where = append(where, "u.deleted_at IS NULL", "u.banned_at IS NULL", "u.first_name IS NOT NULL", "u.last_name IS NOT NULL")
+	where = append(where, "u.deleted_at IS NULL", "u.banned_at IS NULL", "u.onboarded_at IS NOT NULL",
+		"u.first_name IS NOT NULL", "u.last_name IS NOT NULL")
 
 	query := "SELECT " + profileColumns + ", " + rank + " AS search_rank" + profileFrom
 	query += " WHERE " + strings.Join(where, " AND ")
