@@ -11,13 +11,16 @@ import (
 func TestForgetUser(t *testing.T) {
 	e := newTestEnv(t)
 
-	t.Run("removes files, comments and ratings so the user row can go", func(t *testing.T) {
+	t.Run("removes files, comments, reviews and ratings so the user row can go", func(t *testing.T) {
+		professorID := e.professor(t)
 		author := e.student(t)
 		leaving := e.student(t)
 		course := e.course(t, author, nil)
 		own := e.course(t, leaving, nil)
 		file := e.file(t, leaving, course.ID, "Old exam")
 		decode[CourseComment](t, e.api.Post("/study/courses/"+course.ID.String()+"/comments", leaving.bearer, map[string]any{"content": "Bye"}), http.StatusCreated)
+		reviews := "/study/professors/" + professorID.String() + "/review"
+		decode[ProfessorReview](t, e.api.Put(reviews, leaving.bearer, map[string]any{"content": "Bye"}), http.StatusOK)
 		decode[Course](t, e.api.Put("/study/courses/"+course.ID.String()+"/rating", author.bearer, map[string]any{"rating": 2}), http.StatusOK)
 		decode[Course](t, e.api.Put("/study/courses/"+course.ID.String()+"/rating", leaving.bearer, map[string]any{"rating": 4}), http.StatusOK)
 
@@ -33,6 +36,9 @@ func TestForgetUser(t *testing.T) {
 		expectError(t, e.api.Get("/study/files/"+file.ID.String(), author.bearer), http.StatusNotFound, "not_found")
 		if page := decode[itemPage[CourseComment]](t, e.api.Get("/study/courses/"+course.ID.String()+"/comments", author.bearer), http.StatusOK); len(page.Items) != 0 {
 			t.Errorf("comments after forget = %#v", page.Items)
+		}
+		if page := decode[itemPage[ProfessorReview]](t, e.api.Get(reviews+"s", author.bearer), http.StatusOK); len(page.Items) != 0 {
+			t.Errorf("reviews after forget = %#v", page.Items)
 		}
 
 		if _, err := e.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", leaving.id); err != nil {
