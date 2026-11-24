@@ -60,8 +60,6 @@ func (in postInput) clean() (postInput, error) {
 	return in, nil
 }
 
-// sortedIDs gives media row locks one order, so two requests attaching the
-// same media cannot deadlock.
 func sortedIDs(ids []uuid.UUID) []uuid.UUID {
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
@@ -79,8 +77,6 @@ func hasDuplicates(ids []uuid.UUID) bool {
 	return false
 }
 
-// createPost returns the post and whether it was created by an earlier request
-// with the same idempotency key.
 func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, int, bool, error) {
 	in, err := in.clean()
 	if err != nil {
@@ -109,6 +105,9 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 	earned := 0
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := m.claimKey(ctx, userID, opCreatePost, key, fp, postID); err != nil {
+			return err
+		}
+		if err := allow(ctx, userID, m.postBursts, m.postsHourly); err != nil {
 			return err
 		}
 		err := m.posts.insert(ctx, newPost{
@@ -166,8 +165,6 @@ func (m Module) checkUniversity(ctx context.Context, userID uuid.UUID, universit
 	return nil
 }
 
-// checkUploads asks storage about every file at once; each check is a HEAD
-// request, and a post has up to ten files.
 func (m Module) checkUploads(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for _, id := range ids {
@@ -447,11 +444,8 @@ func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit p
 	}
 
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
-		locked, err := m.posts.lock(ctx, postID, false)
+		locked, err := m.posts.lock(ctx, postID, &userID, false)
 		if err != nil {
-			return err
-		}
-		if err := onlyAuthor(userID)(locked.AuthorID); err != nil {
 			return err
 		}
 		if change.EventDate != nil && locked.Type != typeEvent {
@@ -469,29 +463,13 @@ func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit p
 }
 
 func (m Module) deletePost(ctx context.Context, userID, postID uuid.UUID) error {
-	return m.removePost(ctx, postID, onlyAuthor(userID))
+	return m.removePost(ctx, postID, &userID)
 }
 
-func onlyAuthor(userID uuid.UUID) func(authorID uuid.UUID) error {
-	return func(authorID uuid.UUID) error {
-		if authorID != userID {
-			return ErrForbidden
-		}
-		return nil
-	}
-}
-
-// removePost deletes the post with its comments and likes, and hands its media
-// to the media module: marked deleting in the same transaction, deleted from
-// storage after the commit. A failed storage delete is retried by media cleanup.
-func (m Module) removePost(ctx context.Context, postID uuid.UUID, allow func(authorID uuid.UUID) error) error {
+func (m Module) removePost(ctx context.Context, postID uuid.UUID, authorID *uuid.UUID) error {
 	var mediaIDs []uuid.UUID
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		locked, err := m.posts.lock(ctx, postID, true)
-		if err != nil {
-			return err
-		}
-		if err := allow(locked.AuthorID); err != nil {
+		if _, err := m.posts.lock(ctx, postID, authorID, true); err != nil {
 			return err
 		}
 		ids, err := m.posts.mediaIDs(ctx, postID)

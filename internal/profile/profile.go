@@ -59,10 +59,11 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID, roles []auth.Role
 		Interests:      text.NonNil(p.Interests),
 		Privacy:        p.Privacy.withDefaults(),
 		Coins:          coins,
+		Roles:          text.NonNil(roles),
 		FollowersCount: followersCount,
 		FollowingCount: followingCount,
 		FollowedByMe:   false,
-		Roles:          text.NonNil(roles),
+		OnboardedAt:    p.OnboardedAt,
 		CreatedAt:      p.CreatedAt,
 	}
 	for _, row := range programmes {

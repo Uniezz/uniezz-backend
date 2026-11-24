@@ -7,9 +7,9 @@ import (
 )
 
 func (m Module) RemovePost(ctx context.Context, postID uuid.UUID) error {
-	return ignoreGone(m.removePost(ctx, postID, allowAny))
+	return ignoreGone(m.removePost(ctx, postID, nil))
 }
 
 func (m Module) RemoveComment(ctx context.Context, commentID uuid.UUID) error {
-	return ignoreGone(m.removeComment(ctx, commentID, allowAny))
+	return ignoreGone(m.removeComment(ctx, commentID, nil))
 }

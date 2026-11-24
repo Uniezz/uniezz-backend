@@ -11,9 +11,6 @@ const (
 	TargetComment = "comment"
 )
 
-// ReportTarget returns the author of a post or live comment and a copy of its
-// text, kept with a report so moderators see what was reported even after an
-// edit or delete.
 func (m Module) ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
 	switch targetType {
 	case TargetPost:

@@ -304,7 +304,7 @@ func (e *testEnv) newUser(t *testing.T, university, email string) testUser {
 
 	var id uuid.UUID
 	err := e.pool.QueryRow(ctx,
-		"INSERT INTO users (university_id, email, first_name, last_name) VALUES ($1, $2, 'Jan', 'Kowalski') RETURNING id",
+		"INSERT INTO users (university_id, email, first_name, last_name, onboarded_at) VALUES ($1, $2, 'Jan', 'Kowalski', NOW()) RETURNING id",
 		university, email).Scan(&id)
 	if err != nil {
 		t.Fatalf("create user: %v", err)

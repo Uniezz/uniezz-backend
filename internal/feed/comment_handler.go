@@ -52,10 +52,10 @@ var createCommentOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/feed/posts/{id}/comments",
 	Summary:       "Comment on a post or reply to a comment",
-	Description:   "The first comment or reply on another student's post pays 1 Uniezz coin.",
+	Description:   "The first comment or reply on another student's post pays 1 Uniezz coin. At most 5 comments a minute and 100 per hour.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusCreated,
-	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusGone, http.StatusUnprocessableEntity},
+	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusGone, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 })
 
 func (h *commentHandler) createComment(ctx context.Context, in *createCommentInput) (*createCommentOutput, error) {
@@ -162,8 +162,9 @@ var updateCommentOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/feed/comments/{id}",
 	Summary:     "Edit your comment",
+	Description: "Only the author can edit; another student's comment is not found. Sets editedAt.",
 	Tags:        []string{"feed"},
-	Errors:      []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
 func (h *commentHandler) updateComment(ctx context.Context, in *updateCommentInput) (*commentOutput, error) {
@@ -191,7 +192,7 @@ var deleteCommentOperation = auth.Authenticated(huma.Operation{
 	Description:   "A root comment with replies stays in the thread as deleted, without content or author.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusNoContent,
-	Errors:        []int{http.StatusForbidden, http.StatusNotFound},
+	Errors:        []int{http.StatusNotFound},
 })
 
 func (h *commentHandler) deleteComment(ctx context.Context, in *commentPath) (*struct{}, error) {

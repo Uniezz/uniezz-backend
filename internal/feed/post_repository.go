@@ -134,8 +134,6 @@ func (r *postRepository) get(ctx context.Context, viewerID, postID uuid.UUID) (*
 	return p, nil
 }
 
-// pageCursor is the keyset position of the last item on a page, for posts
-// and comments alike.
 type pageCursor struct {
 	CreatedAt time.Time `json:"c"`
 	ID        uuid.UUID `json:"i"`
@@ -319,15 +317,13 @@ type lockedPost struct {
 	Type     string
 }
 
-// lock takes the post row lock that serializes every change to the post and
-// its comment tree. forDelete takes the stronger lock a DELETE needs anyway.
-func (r *postRepository) lock(ctx context.Context, postID uuid.UUID, forDelete bool) (*lockedPost, error) {
-	query := `SELECT author_id, type FROM feed_posts WHERE id = $1 FOR NO KEY UPDATE`
+func (r *postRepository) lock(ctx context.Context, postID uuid.UUID, authorID *uuid.UUID, forDelete bool) (*lockedPost, error) {
+	query := `SELECT author_id, type FROM feed_posts WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) FOR NO KEY UPDATE`
 	if forDelete {
-		query = `SELECT author_id, type FROM feed_posts WHERE id = $1 FOR UPDATE`
+		query = `SELECT author_id, type FROM feed_posts WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) FOR UPDATE`
 	}
 	var p lockedPost
-	if err := r.db.Conn(ctx).QueryRow(ctx, query, postID).Scan(&p.AuthorID, &p.Type); err != nil {
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, postID, authorID).Scan(&p.AuthorID, &p.Type); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}

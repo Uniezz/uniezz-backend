@@ -71,7 +71,7 @@ var listProfilesOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/profiles",
 	Summary:     "List students",
-	Description: "Newest accounts first, paginated by cursor. Students who have not set both a first and a last name are left out. Gender is included (null until set) and has no privacy toggle.",
+	Description: "Newest accounts first, paginated by cursor. Students who have not finished onboarding or have not set both a first and a last name are left out. Gender is included (null until set) and has no privacy toggle.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest},
 })

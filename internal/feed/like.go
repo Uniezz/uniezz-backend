@@ -12,7 +12,7 @@ func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked
 	var state *LikeState
 	earned := 0
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		post, err := m.posts.lock(ctx, postID, false)
+		post, err := m.posts.lock(ctx, postID, nil, false)
 		if err != nil {
 			return err
 		}
@@ -72,9 +72,6 @@ type likeChange struct {
 	delta   int
 }
 
-// setLike runs with the liked row already locked, so the counter changes
-// exactly when a like row was inserted or deleted. The change is nil when
-// nothing changed.
 func (m Module) setLike(ctx context.Context, t likeTarget, targetID, userID uuid.UUID, liked bool) (*LikeState, *likeChange, error) {
 	var likedAt *time.Time
 	var err error
