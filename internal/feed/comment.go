@@ -204,11 +204,7 @@ func (m Module) updateComment(ctx context.Context, userID, commentID uuid.UUID, 
 	}
 
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
-		locked, err := m.comments.lockForChange(ctx, commentID, false)
-		if err != nil {
-			return err
-		}
-		if err := onlyAuthor(userID)(locked.AuthorID); err != nil {
+		if _, err := m.comments.lockForChange(ctx, commentID, &userID, false); err != nil {
 			return err
 		}
 		return m.comments.update(ctx, commentID, content)
@@ -220,20 +216,20 @@ func (m Module) updateComment(ctx context.Context, userID, commentID uuid.UUID, 
 }
 
 func (m Module) deleteComment(ctx context.Context, userID, commentID uuid.UUID) error {
-	return m.removeComment(ctx, commentID, onlyAuthor(userID))
+	return m.removeComment(ctx, commentID, &userID)
 }
 
 // removeComment locks top-down — post, root, the comment — then deletes the
 // comment. A root that still has replies becomes a tombstone so the thread
 // survives; the post loses one live comment either way, exactly once.
-func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, allow func(authorID uuid.UUID) error) error {
+func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, authorID *uuid.UUID) error {
 	ref, err := m.comments.ref(ctx, commentID)
 	if err != nil {
 		return err
 	}
 
 	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		if _, err := m.posts.lock(ctx, ref.PostID, false); err != nil {
+		if _, err := m.posts.lock(ctx, ref.PostID, nil, false); err != nil {
 			return err
 		}
 		if ref.ParentID != nil {
@@ -241,11 +237,8 @@ func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, allow fu
 				return err
 			}
 		}
-		locked, err := m.comments.lockForChange(ctx, commentID, true)
+		locked, err := m.comments.lockForChange(ctx, commentID, authorID, true)
 		if err != nil {
-			return err
-		}
-		if err := allow(locked.AuthorID); err != nil {
 			return err
 		}
 		if _, err := m.posts.countComments(ctx, ref.PostID, -1); err != nil {

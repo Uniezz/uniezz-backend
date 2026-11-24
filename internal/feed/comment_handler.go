@@ -163,7 +163,7 @@ var updateCommentOperation = auth.Authenticated(huma.Operation{
 	Path:        "/feed/comments/{id}",
 	Summary:     "Edit your comment",
 	Tags:        []string{"feed"},
-	Errors:      []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
 func (h *commentHandler) updateComment(ctx context.Context, in *updateCommentInput) (*commentOutput, error) {
@@ -191,7 +191,7 @@ var deleteCommentOperation = auth.Authenticated(huma.Operation{
 	Description:   "A root comment with replies stays in the thread as deleted, without content or author.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusNoContent,
-	Errors:        []int{http.StatusForbidden, http.StatusNotFound},
+	Errors:        []int{http.StatusNotFound},
 })
 
 func (h *commentHandler) deleteComment(ctx context.Context, in *commentPath) (*struct{}, error) {

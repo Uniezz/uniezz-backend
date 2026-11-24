@@ -317,7 +317,7 @@ var updatePostOperation = auth.Authenticated(huma.Operation{
 	Summary:     "Edit your feed post",
 	Description: "Only fields that are sent change. Type, target university and media cannot change.",
 	Tags:        []string{"feed"},
-	Errors:      []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
 func (h *postHandler) updatePost(ctx context.Context, in *updatePostInput) (*postOutput, error) {
@@ -346,7 +346,7 @@ var deletePostOperation = auth.Authenticated(huma.Operation{
 	Description:   "Deletes the post with its comments, likes and media.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusNoContent,
-	Errors:        []int{http.StatusForbidden, http.StatusNotFound},
+	Errors:        []int{http.StatusNotFound},
 })
 
 func (h *postHandler) deletePost(ctx context.Context, in *postPath) (*struct{}, error) {

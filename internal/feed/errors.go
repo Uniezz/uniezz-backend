@@ -9,7 +9,6 @@ import (
 
 var (
 	ErrNotFound          = errors.New("not found")
-	ErrForbidden         = errors.New("only the author may change this")
 	ErrInvalidInput      = errors.New("invalid input")
 	ErrInvalidUniversity = errors.New("posts may target only the author's university or all")
 	ErrInvalidMedia      = errors.New("media is missing, not owned by the user or not uploaded")
@@ -20,7 +19,6 @@ var (
 
 var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
-	{Err: ErrForbidden, Status: http.StatusForbidden, Code: "forbidden"},
 	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
 	{Err: ErrInvalidUniversity, Status: http.StatusBadRequest, Code: "invalid_university"},
 	{Err: ErrInvalidMedia, Status: http.StatusBadRequest, Code: "invalid_media"},

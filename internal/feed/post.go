@@ -450,11 +450,8 @@ func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit p
 	}
 
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
-		locked, err := m.posts.lock(ctx, postID, false)
+		locked, err := m.posts.lock(ctx, postID, &userID, false)
 		if err != nil {
-			return err
-		}
-		if err := onlyAuthor(userID)(locked.AuthorID); err != nil {
 			return err
 		}
 		if change.EventDate != nil && locked.Type != typeEvent {
@@ -472,29 +469,16 @@ func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit p
 }
 
 func (m Module) deletePost(ctx context.Context, userID, postID uuid.UUID) error {
-	return m.removePost(ctx, postID, onlyAuthor(userID))
-}
-
-func onlyAuthor(userID uuid.UUID) func(authorID uuid.UUID) error {
-	return func(authorID uuid.UUID) error {
-		if authorID != userID {
-			return ErrForbidden
-		}
-		return nil
-	}
+	return m.removePost(ctx, postID, &userID)
 }
 
 // removePost deletes the post with its comments and likes, and hands its media
 // to the media module: marked deleting in the same transaction, deleted from
 // storage after the commit. A failed storage delete is retried by media cleanup.
-func (m Module) removePost(ctx context.Context, postID uuid.UUID, allow func(authorID uuid.UUID) error) error {
+func (m Module) removePost(ctx context.Context, postID uuid.UUID, authorID *uuid.UUID) error {
 	var mediaIDs []uuid.UUID
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		locked, err := m.posts.lock(ctx, postID, true)
-		if err != nil {
-			return err
-		}
-		if err := allow(locked.AuthorID); err != nil {
+		if _, err := m.posts.lock(ctx, postID, authorID, true); err != nil {
 			return err
 		}
 		ids, err := m.posts.mediaIDs(ctx, postID)

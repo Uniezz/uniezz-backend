@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func allowAny(uuid.UUID) error { return nil }
-
 var errStillActive = errors.New("feed content of the user keeps appearing; revoke the user's sessions first")
 
 const forgetPasses = 3
@@ -39,7 +37,7 @@ func (m Module) forgetPass(ctx context.Context, userID uuid.UUID) (bool, error) 
 		return false, err
 	}
 	for _, id := range postIDs {
-		if err := ignoreGone(m.removePost(ctx, id, allowAny)); err != nil {
+		if err := ignoreGone(m.removePost(ctx, id, nil)); err != nil {
 			return false, err
 		}
 	}
@@ -49,7 +47,7 @@ func (m Module) forgetPass(ctx context.Context, userID uuid.UUID) (bool, error) 
 		return false, err
 	}
 	for _, id := range commentIDs {
-		if err := ignoreGone(m.removeComment(ctx, id, allowAny)); err != nil {
+		if err := ignoreGone(m.removeComment(ctx, id, nil)); err != nil {
 			return false, err
 		}
 	}

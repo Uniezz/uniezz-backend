@@ -183,13 +183,13 @@ type lockedComment struct {
 	RepliesCount int
 }
 
-func (r *commentRepository) lockForChange(ctx context.Context, commentID uuid.UUID, forDelete bool) (*lockedComment, error) {
-	query := `SELECT author_id, replies_count FROM feed_comments WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`
+func (r *commentRepository) lockForChange(ctx context.Context, commentID uuid.UUID, authorID *uuid.UUID, forDelete bool) (*lockedComment, error) {
+	query := `SELECT author_id, replies_count FROM feed_comments WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) AND deleted_at IS NULL FOR NO KEY UPDATE`
 	if forDelete {
-		query = `SELECT author_id, replies_count FROM feed_comments WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
+		query = `SELECT author_id, replies_count FROM feed_comments WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) AND deleted_at IS NULL FOR UPDATE`
 	}
 	var c lockedComment
-	if err := r.db.Conn(ctx).QueryRow(ctx, query, commentID).Scan(&c.AuthorID, &c.RepliesCount); err != nil {
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, commentID, authorID).Scan(&c.AuthorID, &c.RepliesCount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}

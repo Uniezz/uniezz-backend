@@ -78,7 +78,7 @@ func TestConcurrentPostLikes(t *testing.T) {
 				checkStatus(t, e.api.Put("/feed/posts/"+post.ID.String()+"/like", liker.bearer), 200)
 			}()
 		}
-		waitForLockWait(t, 20, "FROM feed_posts WHERE id = $1 FOR NO KEY UPDATE")
+		waitForLockWait(t, 20, "FROM feed_posts WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) FOR NO KEY UPDATE")
 		release()
 		wg.Wait()
 
@@ -111,7 +111,7 @@ func TestConcurrentPostLikes(t *testing.T) {
 				}()
 			}
 		}
-		waitForLockWait(t, 20, "FROM feed_posts WHERE id = $1 FOR NO KEY UPDATE")
+		waitForLockWait(t, 20, "FROM feed_posts WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) FOR NO KEY UPDATE")
 		release()
 		wg.Wait()
 		e.assertCounters(t, post.ID)
@@ -138,7 +138,7 @@ func TestConcurrentPostLikes(t *testing.T) {
 			defer wg.Done()
 			checkStatus(t, e.api.Delete("/feed/posts/"+post.ID.String(), author.bearer), 204)
 		}()
-		waitForLockWait(t, 6, "FROM feed_posts WHERE id = $1 FOR")
+		waitForLockWait(t, 6, "FROM feed_posts WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) FOR")
 		release()
 		wg.Wait()
 

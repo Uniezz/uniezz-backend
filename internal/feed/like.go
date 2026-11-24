@@ -12,7 +12,7 @@ func (m Module) setPostLike(ctx context.Context, userID, postID uuid.UUID, liked
 	var state *LikeState
 	earned := 0
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		post, err := m.posts.lock(ctx, postID, false)
+		post, err := m.posts.lock(ctx, postID, nil, false)
 		if err != nil {
 			return err
 		}

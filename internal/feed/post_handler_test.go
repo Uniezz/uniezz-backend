@@ -636,8 +636,11 @@ func TestUpdatePost(t *testing.T) {
 		expectError(t, e.api.Patch(path, author.bearer, map[string]any{"eventDate": time.Now()}), 400, "invalid_input")
 	})
 
-	t.Run("others are forbidden", func(t *testing.T) {
-		expectError(t, e.api.Patch(path, e.user(t).bearer, map[string]any{"title": "Hijacked"}), 403, "forbidden")
+	t.Run("another student's post is not found and stays unchanged", func(t *testing.T) {
+		expectError(t, e.api.Patch(path, e.user(t).bearer, map[string]any{"title": "Hijacked"}), 404, "not_found")
+		if got := decode[Post](t, e.api.Get(path, author.bearer), 200); got.Title == "Hijacked" {
+			t.Error("another student changed the post")
+		}
 	})
 
 	t.Run("missing post", func(t *testing.T) {
@@ -652,7 +655,8 @@ func TestDeletePost(t *testing.T) {
 	post := e.createPost(t, author, map[string]any{"mediaIds": []uuid.UUID{mediaID}})
 	path := "/feed/posts/" + post.ID.String()
 
-	expectError(t, e.api.Delete(path, e.user(t).bearer), 403, "forbidden")
+	expectError(t, e.api.Delete(path, e.user(t).bearer), 404, "not_found")
+	decode[Post](t, e.api.Get(path, author.bearer), 200)
 	expectStatus(t, e.api.Delete(path, author.bearer), 204)
 	expectError(t, e.api.Delete(path, author.bearer), 404, "not_found")
 	expectError(t, e.api.Get(path, author.bearer), 404, "not_found")
