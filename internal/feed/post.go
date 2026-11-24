@@ -111,6 +111,9 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 		if err := m.claimKey(ctx, userID, opCreatePost, key, fp, postID); err != nil {
 			return err
 		}
+		if err := allow(ctx, userID, m.postBursts, m.postsHourly); err != nil {
+			return err
+		}
 		err := m.posts.insert(ctx, newPost{
 			ID: postID, AuthorID: userID, UniversityID: in.University, Type: in.Type,
 			Title: in.Title, Content: in.Content, EventDate: in.EventDate, Tags: in.Tags,

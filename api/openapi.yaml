@@ -6382,6 +6382,7 @@ paths:
       tags:
         - feed
     post:
+      description: At most 1 post every 2 minutes and 5 per hour; a retry with the same Idempotency-Key returns the first post and does not count again.
       operationId: createFeedPost
       parameters:
         - description: Repeating a request with the same key returns the resource the first one created instead of creating another. Keys are kept for at least 24 hours.
@@ -6434,6 +6435,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
         "500":
           content:
             application/json:
@@ -6824,7 +6831,7 @@ paths:
       tags:
         - feed
     post:
-      description: The first comment or reply on another student's post pays 1 Uniezz coin.
+      description: The first comment or reply on another student's post pays 1 Uniezz coin. At most 5 comments a minute and 100 per hour.
       operationId: createFeedComment
       parameters:
         - in: path
@@ -6889,6 +6896,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
         "500":
           content:
             application/json:

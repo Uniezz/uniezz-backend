@@ -141,7 +141,21 @@ type testEnv struct {
 	users  []uuid.UUID
 }
 
+type unlimited struct{}
+
+func (unlimited) Allow(context.Context, string) error { return nil }
+
 func newTestEnv(t *testing.T) *testEnv {
+	t.Helper()
+	return buildTestEnv(t, false)
+}
+
+func newRateLimitedTestEnv(t *testing.T) *testEnv {
+	t.Helper()
+	return buildTestEnv(t, true)
+}
+
+func buildTestEnv(t *testing.T, limited bool) *testEnv {
 	t.Helper()
 
 	pool := setupTestDB(t)
@@ -154,6 +168,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	m, err := New(pool, fm, rewardsModule, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
+	}
+	if !limited {
+		m.postBursts, m.postsHourly, m.commentBursts, m.commentHourly = unlimited{}, unlimited{}, unlimited{}, unlimited{}
 	}
 
 	authModule, err := auth.New(pool, &config.Config{}, nil, nil, nil)
@@ -181,6 +198,7 @@ func (e *testEnv) cleanup() {
 		"DELETE FROM feed_post_saves WHERE user_id = ANY($1)",
 		"DELETE FROM reports WHERE reporter_id = ANY($1) OR target_author_id = ANY($1)",
 		"DELETE FROM media WHERE owner_user_id = ANY($1)",
+		"DELETE FROM rate_limits WHERE split_part(key, ':', 2) IN (SELECT unnest($1::uuid[])::text)",
 		"DELETE FROM users WHERE id = ANY($1)",
 	} {
 		if _, err := e.pool.Exec(ctx, query, e.users); err != nil {

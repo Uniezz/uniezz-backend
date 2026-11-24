@@ -60,6 +60,9 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 		if err := m.claimKey(ctx, userID, opCreateComment, key, fp, commentID); err != nil {
 			return err
 		}
+		if err := allow(ctx, userID, m.commentBursts, m.commentHourly); err != nil {
+			return err
+		}
 		postAuthorID, err := m.posts.countComments(ctx, in.PostID, 1)
 		if err != nil {
 			return err

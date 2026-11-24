@@ -15,6 +15,7 @@ var (
 	ErrInvalidMedia      = errors.New("media is missing, not owned by the user or not uploaded")
 	ErrKeyReused         = errors.New("idempotency key was used with a different request")
 	ErrResourceDeleted   = errors.New("the resource created with this idempotency key was deleted")
+	ErrRateLimited       = errors.New("too many requests")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -25,5 +26,6 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrInvalidMedia, Status: http.StatusBadRequest, Code: "invalid_media"},
 	{Err: ErrKeyReused, Status: http.StatusUnprocessableEntity, Code: "idempotency_key_reused"},
 	{Err: ErrResourceDeleted, Status: http.StatusGone, Code: "resource_deleted"},
+	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

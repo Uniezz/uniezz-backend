@@ -67,9 +67,10 @@ var createPostOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/feed/posts",
 	Summary:       "Create a feed post",
+	Description:   "At most 1 post every 2 minutes and 5 per hour; a retry with the same Idempotency-Key returns the first post and does not count again.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusCreated,
-	Errors:        []int{http.StatusBadRequest, http.StatusGone, http.StatusUnprocessableEntity},
+	Errors:        []int{http.StatusBadRequest, http.StatusGone, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 })
 
 func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*createPostOutput, error) {
