@@ -6,11 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// ForgetUser removes the student's files, comments and ratings through the
-// same paths a student takes, so rating counters stay right and file uploads
-// leave storage. Courses the student created stay, without an author. It must
-// run before the user row is deleted: the foreign keys of files and comments
-// refuse the delete while anything is left.
+// ForgetUser removes the student's files, comments, reviews and ratings
+// through the same paths a student takes, so rating counters stay right and
+// file uploads leave storage. Courses the student created stay, without an
+// author. It must run before the user row is deleted: the foreign keys of
+// files, comments and reviews refuse the delete while anything is left.
 func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
 	fileIDs, err := m.files.idsByAuthor(ctx, userID)
 	if err != nil {
@@ -22,6 +22,9 @@ func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
 		}
 	}
 	if err := m.comments.deleteByAuthor(ctx, userID); err != nil {
+		return err
+	}
+	if err := m.reviews.deleteByAuthor(ctx, userID); err != nil {
 		return err
 	}
 

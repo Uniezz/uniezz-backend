@@ -88,6 +88,7 @@ func (e *testEnv) student(t *testing.T) student {
 		for _, query := range []string{
 			"DELETE FROM course_files WHERE author_id = $1",
 			"DELETE FROM course_comments WHERE author_id = $1",
+			"DELETE FROM professor_reviews WHERE author_id = $1",
 			"DELETE FROM media WHERE owner_user_id = $1",
 			"DELETE FROM users WHERE id = $1",
 		} {

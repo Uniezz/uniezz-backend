@@ -105,3 +105,47 @@ func (h *removalHandler) removeCourse(ctx context.Context, in *removeContentInpu
 	}
 	return nil, nil
 }
+
+var removeCourseCommentOperation = auth.Authorized(huma.Operation{
+	OperationID:   "removeCourseComment",
+	Method:        http.MethodDelete,
+	Path:          "/moderation/course-comments/{id}",
+	Summary:       "Remove any student's comment on a course",
+	Description:   "Deletes the comment and marks its pending reports reviewed. Removing a comment that is already gone succeeds. Moderators and admins only.",
+	Tags:          []string{"moderation"},
+	DefaultStatus: http.StatusNoContent,
+}, auth.RoleModerator, auth.RoleAdmin)
+
+func (h *removalHandler) removeCourseComment(ctx context.Context, in *removeContentInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.removeContent(ctx, userID, targetCourseComment, in.ID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}
+
+var removeProfessorReviewOperation = auth.Authorized(huma.Operation{
+	OperationID:   "removeProfessorReview",
+	Method:        http.MethodDelete,
+	Path:          "/moderation/professor-reviews/{id}",
+	Summary:       "Remove any student's review of a professor",
+	Description:   "Deletes the review and marks its pending reports reviewed. Removing a review that is already gone succeeds. Moderators and admins only.",
+	Tags:          []string{"moderation"},
+	DefaultStatus: http.StatusNoContent,
+}, auth.RoleModerator, auth.RoleAdmin)
+
+func (h *removalHandler) removeProfessorReview(ctx context.Context, in *removeContentInput) (*struct{}, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	if err := h.moderation.removeContent(ctx, userID, targetProfessorReview, in.ID); err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	return nil, nil
+}

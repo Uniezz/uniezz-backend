@@ -71,6 +71,16 @@ func (f fakeTargets) RemoveCourse(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (f fakeTargets) RemoveCourseComment(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "course_comment"
+	return nil
+}
+
+func (f fakeTargets) RemoveProfessorReview(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "professor_review"
+	return nil
+}
+
 func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
 	author, ok := f.authors[id]
 	if !ok {
@@ -257,6 +267,11 @@ func TestCreateReport(t *testing.T) {
 	expectError(t, e.api.Post("/reports", reporter.bearer, report("user", uuid.New())), 404, "not_found")
 	expectError(t, e.api.Post("/reports", reporter.bearer, map[string]any{"targetType": "post", "targetId": post, "reason": "boring"}), 400, "invalid_input")
 	decode[Report](t, e.api.Post("/reports", reporter.bearer, report("user", author.id)), 201)
+	for _, targetType := range []string{"course_comment", "professor_review"} {
+		if got := decode[Report](t, e.api.Post("/reports", reporter.bearer, report(targetType, e.contentBy(author))), 201); string(got.TargetType) != targetType {
+			t.Errorf("targetType = %q, want %q", got.TargetType, targetType)
+		}
+	}
 	expectError(t, e.api.Post("/reports", report("user", author.id)), 401, "unauthorized")
 }
 

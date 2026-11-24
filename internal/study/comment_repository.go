@@ -63,6 +63,18 @@ func (r *commentRepository) create(ctx context.Context, courseID, authorID uuid.
 	return row, nil
 }
 
+func (r *commentRepository) get(ctx context.Context, id uuid.UUID) (*commentRow, error) {
+	const query = `SELECT ` + commentColumns + ` FROM course_comments c WHERE c.id = $1`
+	row, err := scanComment(r.db.Conn(ctx).QueryRow(ctx, query, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get course comment: %w", err)
+	}
+	return row, nil
+}
+
 func (r *commentRepository) list(ctx context.Context, f commentFilter) ([]commentRow, error) {
 	var args database.Args
 	arg := args.Add
@@ -114,6 +126,14 @@ func (r *commentRepository) deleteByAuthor(ctx context.Context, authorID uuid.UU
 	const query = `DELETE FROM course_comments WHERE author_id = $1`
 	if _, err := r.db.Conn(ctx).Exec(ctx, query, authorID); err != nil {
 		return fmt.Errorf("delete course comments by author: %w", err)
+	}
+	return nil
+}
+
+func (r *commentRepository) remove(ctx context.Context, id uuid.UUID) error {
+	const query = `DELETE FROM course_comments WHERE id = $1`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id); err != nil {
+		return fmt.Errorf("remove course comment: %w", err)
 	}
 	return nil
 }

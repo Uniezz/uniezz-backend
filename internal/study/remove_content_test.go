@@ -56,4 +56,40 @@ func TestRemoveContent(t *testing.T) {
 		e.api.Delete("/study/courses/"+course.ID.String(), other.bearer)
 		decode[Course](t, e.api.Get("/study/courses/"+course.ID.String(), owner.bearer), http.StatusOK)
 	})
+
+	t.Run("removing a course comment deletes only it, and a repeat is a no-op", func(t *testing.T) {
+		owner, author := e.student(t), e.student(t)
+		course := e.course(t, owner, nil)
+		path := "/study/courses/" + course.ID.String() + "/comments"
+		removed := decode[CourseComment](t, e.api.Post(path, author.bearer, map[string]any{"content": "Rude"}), http.StatusCreated)
+		kept := decode[CourseComment](t, e.api.Post(path, owner.bearer, map[string]any{"content": "Fine"}), http.StatusCreated)
+
+		for range 2 {
+			if err := e.module.RemoveCourseComment(ctx, removed.ID); err != nil {
+				t.Fatalf("RemoveCourseComment: %v", err)
+			}
+		}
+		page := decode[itemPage[CourseComment]](t, e.api.Get(path, owner.bearer), http.StatusOK)
+		if len(page.Items) != 1 || page.Items[0].ID != kept.ID {
+			t.Fatalf("comments = %#v", page.Items)
+		}
+	})
+
+	t.Run("removing a professor review deletes only it, and a repeat is a no-op", func(t *testing.T) {
+		professorID := e.professor(t)
+		viewer, author := e.student(t), e.student(t)
+		path := "/study/professors/" + professorID.String() + "/review"
+		removed := decode[ProfessorReview](t, e.api.Put(path, author.bearer, map[string]any{"content": "Rude"}), http.StatusOK)
+		kept := decode[ProfessorReview](t, e.api.Put(path, viewer.bearer, map[string]any{"content": "Fine"}), http.StatusOK)
+
+		for range 2 {
+			if err := e.module.RemoveProfessorReview(ctx, removed.ID); err != nil {
+				t.Fatalf("RemoveProfessorReview: %v", err)
+			}
+		}
+		page := decode[itemPage[ProfessorReview]](t, e.api.Get(path+"s", viewer.bearer), http.StatusOK)
+		if len(page.Items) != 1 || page.Items[0].ID != kept.ID {
+			t.Fatalf("reviews = %#v", page.Items)
+		}
+	})
 }

@@ -9,16 +9,18 @@ import (
 type ActionType string
 
 const (
-	ActionReviewReport    ActionType = "review_report"
-	ActionDismissReport   ActionType = "dismiss_report"
-	ActionRemovePost      ActionType = "remove_post"
-	ActionRemoveComment   ActionType = "remove_comment"
-	ActionRemoveFile      ActionType = "remove_file"
-	ActionRemoveCourse    ActionType = "remove_course"
-	ActionGrantModerator  ActionType = "grant_moderator"
-	ActionRevokeModerator ActionType = "revoke_moderator"
-	ActionBan             ActionType = "ban"
-	ActionUnban           ActionType = "unban"
+	ActionReviewReport          ActionType = "review_report"
+	ActionDismissReport         ActionType = "dismiss_report"
+	ActionRemovePost            ActionType = "remove_post"
+	ActionRemoveComment         ActionType = "remove_comment"
+	ActionRemoveFile            ActionType = "remove_file"
+	ActionRemoveCourse          ActionType = "remove_course"
+	ActionRemoveCourseComment   ActionType = "remove_course_comment"
+	ActionRemoveProfessorReview ActionType = "remove_professor_review"
+	ActionGrantModerator        ActionType = "grant_moderator"
+	ActionRevokeModerator       ActionType = "revoke_moderator"
+	ActionBan                   ActionType = "ban"
+	ActionUnban                 ActionType = "unban"
 )
 
 type actionQuery struct {

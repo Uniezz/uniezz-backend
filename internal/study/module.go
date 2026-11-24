@@ -52,6 +52,7 @@ type Module struct {
 	files      *fileRepository
 	comments   *commentRepository
 	professors *professorRepository
+	reviews    *professorReviewRepository
 	media      mediaService
 	rewards    rewardService
 	limiter    limiter
@@ -67,6 +68,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardServi
 		files:      newFileRepository(db),
 		comments:   newCommentRepository(db),
 		professors: newProfessorRepository(db),
+		reviews:    newProfessorReviewRepository(db),
 		media:      mediaModule,
 		rewards:    rewardsModule,
 		limiter:    ratelimit.New(pool, "study-create", createLimit, createWindow),
@@ -91,6 +93,7 @@ func (m Module) Register(api huma.API) {
 	files := &fileHandler{study: m}
 	comments := &commentHandler{study: m}
 	professors := &professorHandler{study: m}
+	reviews := &professorReviewHandler{study: m}
 
 	huma.Register(api, createCourseOperation, courses.createCourse)
 	huma.Register(api, listCoursesOperation, courses.listCourses)
@@ -109,4 +112,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, listProfessorsOperation, professors.listProfessors)
 	huma.Register(api, getProfessorOperation, professors.getProfessor)
 	huma.Register(api, rateProfessorOperation, professors.rateProfessor)
+	huma.Register(api, reviewProfessorOperation, reviews.reviewProfessor)
+	huma.Register(api, listProfessorReviewsOperation, reviews.listProfessorReviews)
+	huma.Register(api, deleteMyProfessorReviewOperation, reviews.deleteMyProfessorReview)
 }

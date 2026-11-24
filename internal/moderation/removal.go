@@ -18,6 +18,10 @@ func (m Module) removeContent(ctx context.Context, actorID uuid.UUID, targetType
 		action, err = ActionRemoveFile, m.study.RemoveFile(ctx, id)
 	case targetCourse:
 		action, err = ActionRemoveCourse, m.study.RemoveCourse(ctx, id)
+	case targetCourseComment:
+		action, err = ActionRemoveCourseComment, m.study.RemoveCourseComment(ctx, id)
+	case targetProfessorReview:
+		action, err = ActionRemoveProfessorReview, m.study.RemoveProfessorReview(ctx, id)
 	default:
 		return ErrInvalidInput
 	}
