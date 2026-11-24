@@ -46,6 +46,8 @@ components:
             - remove_comment
             - remove_file
             - remove_course
+            - remove_course_comment
+            - remove_professor_review
             - grant_moderator
             - revoke_moderator
             - ban
@@ -6990,6 +6992,51 @@ paths:
       summary: Remove any student's comment
       tags:
         - moderation
+  /moderation/course-comments/{id}:
+    delete:
+      description: Deletes the comment and marks its pending reports reviewed. Removing a comment that is already gone succeeds. Moderators and admins only.
+      operationId: removeCourseComment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Remove any student's comment on a course
+      tags:
+        - moderation
   /moderation/courses/{id}:
     delete:
       description: Deletes the course with every student's files and comments on it, and marks its pending reports reviewed. Removing a course that is already gone succeeds. Admins only.
@@ -7282,6 +7329,51 @@ paths:
             - moderator
             - admin
       summary: Remove any student's post
+      tags:
+        - moderation
+  /moderation/professor-reviews/{id}:
+    delete:
+      description: Deletes the review and marks its pending reports reviewed. Removing a review that is already gone succeeds. Moderators and admins only.
+      operationId: removeProfessorReview
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Remove any student's review of a professor
       tags:
         - moderation
   /moderation/reports:

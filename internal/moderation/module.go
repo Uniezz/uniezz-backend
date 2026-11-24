@@ -57,6 +57,8 @@ type studyTargets interface {
 	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
 	RemoveFile(ctx context.Context, id uuid.UUID) error
 	RemoveCourse(ctx context.Context, id uuid.UUID) error
+	RemoveCourseComment(ctx context.Context, id uuid.UUID) error
+	RemoveProfessorReview(ctx context.Context, id uuid.UUID) error
 }
 
 type chatTargets interface {
@@ -136,6 +138,8 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, removeCommentOperation, removals.removeComment)
 	huma.Register(api, removeFileOperation, removals.removeFile)
 	huma.Register(api, removeCourseOperation, removals.removeCourse)
+	huma.Register(api, removeCourseCommentOperation, removals.removeCourseComment)
+	huma.Register(api, removeProfessorReviewOperation, removals.removeProfessorReview)
 
 	moderators := &moderatorHandler{moderation: m}
 	huma.Register(api, listModeratorsOperation, moderators.listModerators)

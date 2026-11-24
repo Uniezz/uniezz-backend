@@ -22,7 +22,7 @@ func (ActionType) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Sc
 	}
 	schema.Extensions["x-extensible-enum"] = []any{
 		ActionReviewReport, ActionDismissReport, ActionRemovePost, ActionRemoveComment, ActionRemoveFile,
-		ActionRemoveCourse, ActionGrantModerator, ActionRevokeModerator, ActionBan, ActionUnban,
+		ActionRemoveCourse, ActionRemoveCourseComment, ActionRemoveProfessorReview, ActionGrantModerator, ActionRevokeModerator, ActionBan, ActionUnban,
 	}
 	return schema
 }

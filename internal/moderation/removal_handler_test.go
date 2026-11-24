@@ -44,6 +44,8 @@ func TestRemovalHandlers(t *testing.T) {
 		{"a moderator removes a comment", "comment", "/moderation/comments/", auth.RoleModerator},
 		{"a moderator removes an exam file", "file", "/moderation/files/", auth.RoleModerator},
 		{"an admin removes a course", "course", "/moderation/courses/", auth.RoleAdmin},
+		{"a moderator removes a course comment", "course_comment", "/moderation/course-comments/", auth.RoleModerator},
+		{"an admin removes a professor review", "professor_review", "/moderation/professor-reviews/", auth.RoleAdmin},
 	} {
 		t.Run(tc.name+" and its pending reports become reviewed", func(t *testing.T) {
 			target := uuid.New()

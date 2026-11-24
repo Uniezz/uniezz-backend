@@ -123,3 +123,11 @@ func (r *professorReviewRepository) deleteByAuthor(ctx context.Context, authorID
 	}
 	return nil
 }
+
+func (r *professorReviewRepository) remove(ctx context.Context, id uuid.UUID) error {
+	const query = `DELETE FROM professor_reviews WHERE id = $1`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id); err != nil {
+		return fmt.Errorf("remove professor review: %w", err)
+	}
+	return nil
+}

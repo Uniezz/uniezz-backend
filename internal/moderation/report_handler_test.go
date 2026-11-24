@@ -71,6 +71,16 @@ func (f fakeTargets) RemoveCourse(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (f fakeTargets) RemoveCourseComment(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "course_comment"
+	return nil
+}
+
+func (f fakeTargets) RemoveProfessorReview(_ context.Context, id uuid.UUID) error {
+	f.removed[id] = "professor_review"
+	return nil
+}
+
 func (f fakeTargets) ReportTarget(_ context.Context, _ string, id uuid.UUID) (uuid.UUID, map[string]any, error) {
 	author, ok := f.authors[id]
 	if !ok {

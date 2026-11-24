@@ -129,3 +129,11 @@ func (r *commentRepository) deleteByAuthor(ctx context.Context, authorID uuid.UU
 	}
 	return nil
 }
+
+func (r *commentRepository) remove(ctx context.Context, id uuid.UUID) error {
+	const query = `DELETE FROM course_comments WHERE id = $1`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id); err != nil {
+		return fmt.Errorf("remove course comment: %w", err)
+	}
+	return nil
+}
