@@ -18,6 +18,8 @@ var (
 	ErrResourceDeleted = errors.New("the message created with this idempotency key was deleted")
 	ErrRateLimited     = errors.New("too many requests")
 	ErrRequestPending  = errors.New("until the recipient accepts, a message request holds one text message without links")
+	ErrRequestRequired = errors.New("a conversation with this student starts with a message request")
+	ErrDirectExists    = errors.New("a direct conversation with this student already exists")
 	ErrTooManyStreams  = errors.New("too many open streams")
 	ErrDraining        = errors.New("the server is shutting down")
 )
@@ -33,6 +35,8 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrResourceDeleted, Status: http.StatusGone, Code: "resource_deleted"},
 	{Err: ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited"},
 	{Err: ErrRequestPending, Status: http.StatusConflict, Code: "request_pending"},
+	{Err: ErrRequestRequired, Status: http.StatusConflict, Code: "request_required"},
+	{Err: ErrDirectExists, Status: http.StatusConflict, Code: "conversation_exists"},
 	{Err: ErrTooManyStreams, Status: http.StatusServiceUnavailable, Code: "too_many_streams"},
 	{Err: ErrDraining, Status: http.StatusTooManyRequests, Code: "shutting_down"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},

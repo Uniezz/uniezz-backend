@@ -15,6 +15,80 @@ const (
 	maxNewAccountRequests = 5
 )
 
+type requestChange struct {
+	RecipientID uuid.UUID
+	Body        string
+	Key         string
+}
+
+func (m Module) createRequest(ctx context.Context, senderID uuid.UUID, c requestChange) (*Conversation, bool, error) {
+	in, err := sendChange{Body: c.Body, Key: c.Key}.clean()
+	if err != nil {
+		return nil, false, err
+	}
+	if senderID == c.RecipientID {
+		return nil, false, ErrInvalidInput
+	}
+
+	conversation, err := m.replayRequest(ctx, senderID, in)
+	if !errors.Is(err, ErrNotFound) {
+		return conversation, err == nil, err
+	}
+
+	var created *messageRow
+	var notes []notification
+	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		connected, err := m.members.connected(ctx, senderID, []uuid.UUID{c.RecipientID})
+		if err != nil {
+			return err
+		}
+		if len(connected) > 0 {
+			return ErrDirectExists
+		}
+		if _, _, err := m.conversations.findDirect(ctx, senderID, c.RecipientID); err == nil {
+			return ErrDirectExists
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		in.ConversationID, _, err = m.startRequest(ctx, senderID, c.RecipientID)
+		if err != nil {
+			return err
+		}
+		created, notes, err = m.storeMessage(ctx, senderID, in)
+		return err
+	})
+	if errors.Is(err, ErrDirectExists) {
+		if conversation, replayErr := m.replayRequest(ctx, senderID, in); replayErr == nil {
+			return conversation, true, nil
+		}
+	}
+	if errors.Is(err, errReplayed) || errors.Is(err, errClientTaken) {
+		conversation, err := m.replayRequest(ctx, senderID, in)
+		return conversation, err == nil, err
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	if _, err := m.deliverMessage(ctx, created, notes); err != nil {
+		return nil, false, err
+	}
+	conversation, err = m.getConversation(ctx, senderID, in.ConversationID)
+	return conversation, false, err
+}
+
+func (m Module) replayRequest(ctx context.Context, senderID uuid.UUID, in sendInput) (*Conversation, error) {
+	row, err := m.messages.byClient(ctx, senderID, in.Key)
+	if err != nil {
+		return nil, err
+	}
+	in.ConversationID = row.ConversationID
+	if _, err := m.replayMessage(ctx, senderID, in); err != nil {
+		return nil, err
+	}
+	return m.getConversation(ctx, senderID, row.ConversationID)
+}
+
 func (m Module) startRequest(ctx context.Context, senderID, recipientID uuid.UUID) (uuid.UUID, bool, error) {
 	allowed, err := m.requests.canStart(ctx, requestFilter{
 		SenderID:    senderID,

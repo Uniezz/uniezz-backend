@@ -788,6 +788,23 @@ components:
         - reward
         - texts
       type: object
+    CreateChatRequestInputBody:
+      additionalProperties: false
+      properties:
+        body:
+          description: "The first message: 1–4000 characters after HTML is stripped, without links"
+          examples:
+            - Hej, chodzimy razem na analizę?
+          maxLength: 16000
+          type: string
+        userId:
+          description: A student who is not one of your Connections and has no conversation with you yet
+          format: uuid
+          type: string
+      required:
+        - userId
+        - body
+      type: object
     CreateCommentInputBody:
       additionalProperties: false
       properties:
@@ -4425,7 +4442,7 @@ paths:
         - auth
   /chat/conversations:
     get:
-      description: Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, the caller's own requests until they hold a message, and direct conversations with a block either way, are left out.
+      description: Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, and direct conversations with a block either way, are left out.
       operationId: listChatConversations
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -4485,7 +4502,7 @@ paths:
         - chat
   /chat/conversations/direct:
     post:
-      description: "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day, counted at their first message. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404."
+      description: "Returns 201 when the conversation was created and 200 when it already existed. A student who is not a Connection and has no conversation with the caller answers 409 request_required: send the first message with POST /chat/requests. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404."
       operationId: openDirectConversation
       requestBody:
         content:
@@ -4518,6 +4535,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
         "422":
           content:
             application/json:
@@ -5333,6 +5356,89 @@ paths:
       security:
         - bearer: []
       summary: List the message requests sent to the logged-in student
+      tags:
+        - chat
+    post:
+      description: Creates the conversation together with its first message, so nothing is created before the caller writes. At most 20 requests a day. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404; a Connection or an existing conversation answers 409 conversation_exists.
+      operationId: createChatRequest
+      parameters:
+        - description: A UUID. Repeating the request with the same key and body returns the conversation the first one created
+          in: header
+          name: Idempotency-Key
+          schema:
+            description: A UUID. Repeating the request with the same key and body returns the conversation the first one created
+            maxLength: 36
+            minLength: 36
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChatRequestInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+          description: Created
+          headers:
+            Idempotent-Replayed:
+              schema:
+                description: true when the request was created by an earlier call with the same key
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Gone
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Send a message request to a student
       tags:
         - chat
   /chat/requests/{id}:

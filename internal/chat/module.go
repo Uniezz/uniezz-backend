@@ -125,6 +125,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, deleteChatMessageOperation, messages.deleteMessage)
 	huma.Register(api, openChatStreamOperation, stream.openStream)
 	huma.Register(api, listChatRequestsOperation, requests.listRequests)
+	huma.Register(api, createChatRequestOperation, requests.createRequest)
 	huma.Register(api, acceptChatRequestOperation, requests.acceptRequest)
 	huma.Register(api, declineChatRequestOperation, requests.declineRequest)
 	huma.Register(api, getMyChatSettingsOperation, settings.getSettings)

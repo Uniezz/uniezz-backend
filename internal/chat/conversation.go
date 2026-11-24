@@ -166,8 +166,14 @@ func (m Module) openDirect(ctx context.Context, viewerID, otherID uuid.UUID) (*C
 		if !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		id, created, err = m.startRequest(ctx, viewerID, otherID)
-		return err
+		allowed, err := m.requests.canStart(ctx, requestFilter{SenderID: viewerID, RecipientID: otherID, AdultAge: adultAge})
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return ErrNotFound
+		}
+		return ErrRequestRequired
 	})
 	if err != nil {
 		return nil, false, err

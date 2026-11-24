@@ -52,6 +52,52 @@ func (h *requestHandler) listRequests(ctx context.Context, in *listChatRequestsI
 	return out, nil
 }
 
+type createChatRequestInput struct {
+	IdempotencyKey string `header:"Idempotency-Key" minLength:"36" maxLength:"36" doc:"A UUID. Repeating the request with the same key and body returns the conversation the first one created"`
+	Body           struct {
+		UserID uuid.UUID `json:"userId" format:"uuid" doc:"A student who is not one of your Connections and has no conversation with you yet"`
+		Body   string    `json:"body" maxLength:"16000" doc:"The first message: 1–4000 characters after HTML is stripped, without links" example:"Hej, chodzimy razem na analizę?"`
+	}
+}
+
+type createChatRequestOutput struct {
+	Replayed string `header:"Idempotent-Replayed" doc:"true when the request was created by an earlier call with the same key"`
+	Body     Conversation
+}
+
+var createChatRequestOperation = auth.Authenticated(huma.Operation{
+	OperationID:   "createChatRequest",
+	Method:        http.MethodPost,
+	Path:          "/chat/requests",
+	Summary:       "Send a message request to a student",
+	Description:   "Creates the conversation together with its first message, so nothing is created before the caller writes. At most 20 requests a day. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404; a Connection or an existing conversation answers 409 conversation_exists.",
+	Tags:          []string{"chat"},
+	DefaultStatus: http.StatusCreated,
+	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict, http.StatusGone, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
+})
+
+func (h *requestHandler) createRequest(ctx context.Context, in *createChatRequestInput) (*createChatRequestOutput, error) {
+	userID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	conversation, replayed, err := h.chat.createRequest(ctx, userID, requestChange{
+		RecipientID: in.Body.UserID,
+		Body:        in.Body.Body,
+		Key:         in.IdempotencyKey,
+	})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+
+	out := &createChatRequestOutput{Body: *conversation}
+	if replayed {
+		out.Replayed = "true"
+	}
+	return out, nil
+}
+
 type acceptChatRequestInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }

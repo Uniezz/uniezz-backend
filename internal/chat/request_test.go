@@ -2,6 +2,7 @@ package chat
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -15,9 +16,25 @@ type conversationPage struct {
 	NextCursor *string
 }
 
+func (e *testEnv) rawRequest(sender testUser, recipient testUser, key uuid.UUID, body string) *httptest.ResponseRecorder {
+	return e.api.Post("/chat/requests", sender.bearer, keyHeader(key), map[string]any{"userId": recipient.id, "body": body})
+}
+
 func (e *testEnv) request(t *testing.T, sender, recipient testUser) Conversation {
 	t.Helper()
-	return decode[Conversation](t, e.api.Post("/chat/conversations/direct", sender.bearer, map[string]any{"userId": recipient.id}), http.StatusCreated)
+	return decode[Conversation](t, e.rawRequest(sender, recipient, uuid.New(), "hello"), http.StatusCreated)
+}
+
+func (e *testEnv) conversationRows(t *testing.T, a, b testUser) int {
+	t.Helper()
+	var rows int
+	err := e.pool.QueryRow(t.Context(), `
+		SELECT COUNT(*) FROM chat_conversations
+		WHERE direct_user_low = LEAST($1::uuid, $2::uuid) AND direct_user_high = GREATEST($1::uuid, $2::uuid)`, a.id, b.id).Scan(&rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
 }
 
 func (e *testEnv) setBirthDate(t *testing.T, u testUser, birthDate time.Time) {
@@ -56,25 +73,22 @@ func (e *testEnv) inbox(t *testing.T, u testUser) conversationPage {
 func TestMessageRequests(t *testing.T) {
 	e := newTestEnv(t)
 
-	t.Run("a stranger's request reaches the recipient only once it holds a message", func(t *testing.T) {
+	t.Run("opening a chat with a stranger creates nothing and asks for a request", func(t *testing.T) {
+		sender, recipient := e.user(t), e.user(t)
+		expectError(t, e.api.Post("/chat/conversations/direct", sender.bearer, map[string]any{"userId": recipient.id}), http.StatusConflict, "request_required")
+		if rows := e.conversationRows(t, sender, recipient); rows != 0 {
+			t.Errorf("conversations = %d, want 0", rows)
+		}
+	})
+
+	t.Run("a request starts the conversation with its first message", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
-		if request.Origin == nil || *request.Origin != OriginRequest || *request.Status != StatusPending || *request.Incoming {
-			t.Fatalf("request = %+v, want an outgoing pending request", request)
+		if request.Origin == nil || *request.Origin != OriginRequest || *request.Status != StatusPending || *request.Incoming || request.LastSeq != 1 {
+			t.Fatalf("request = %+v, want an outgoing pending request holding one message", request)
 		}
-		if listed(e.requests(t, recipient), request.ID) {
-			t.Errorf("empty request listed for the recipient")
-		}
-		if listed(e.inbox(t, sender), request.ID) {
-			t.Errorf("empty request listed in the sender's conversations")
-		}
-		if opened := e.conversation(t, sender, request.ID); opened.ID != request.ID {
-			t.Errorf("sender cannot open the empty request")
-		}
-
-		e.send(t, sender, request.ID, "hi, we share a class")
 		if !listed(e.requests(t, recipient), request.ID) {
-			t.Errorf("request with a message not listed for the recipient")
+			t.Errorf("request not listed for the recipient")
 		}
 		if listed(e.inbox(t, recipient), request.ID) {
 			t.Errorf("pending request listed in the recipient's conversations")
@@ -89,12 +103,74 @@ func TestMessageRequests(t *testing.T) {
 		if page := e.history(t, recipient, request.ID, ""); len(page.Items) != 1 {
 			t.Errorf("recipient reads %d messages, want 1", len(page.Items))
 		}
+		if again := decode[Conversation](t, e.api.Post("/chat/conversations/direct", sender.bearer, map[string]any{"userId": recipient.id}), http.StatusOK); again.ID != request.ID {
+			t.Errorf("reopening gave %s, want %s", again.ID, request.ID)
+		}
+	})
+
+	t.Run("without a session it answers 401", func(t *testing.T) {
+		recipient := e.user(t)
+		rec := e.api.Post("/chat/requests", keyHeader(uuid.New()), map[string]any{"userId": recipient.id, "body": "hello"})
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401", rec.Code)
+		}
+	})
+
+	t.Run("a request to a connection or into an existing conversation is refused", func(t *testing.T) {
+		sender, recipient, friend := e.user(t), e.user(t), e.user(t)
+		e.request(t, sender, recipient)
+		expectError(t, e.rawRequest(sender, recipient, uuid.New(), "again"), http.StatusConflict, "conversation_exists")
+		expectError(t, e.rawRequest(recipient, sender, uuid.New(), "hi"), http.StatusConflict, "conversation_exists")
+		e.connect(t, sender, friend)
+		expectError(t, e.rawRequest(sender, friend, uuid.New(), "hi"), http.StatusConflict, "conversation_exists")
+		expectError(t, e.rawRequest(sender, sender, uuid.New(), "me"), http.StatusBadRequest, "invalid_input")
+	})
+
+	t.Run("the same key returns the stored request", func(t *testing.T) {
+		sender, recipient := e.user(t), e.user(t)
+		key := uuid.New()
+		first := decode[Conversation](t, e.rawRequest(sender, recipient, key, "hello"), http.StatusCreated)
+		rec := e.rawRequest(sender, recipient, key, "hello")
+		again := decode[Conversation](t, rec, http.StatusCreated)
+		if again.ID != first.ID || rec.Header().Get("Idempotent-Replayed") != "true" {
+			t.Errorf("replay = %s %q, want %s and true", again.ID, rec.Header().Get("Idempotent-Replayed"), first.ID)
+		}
+		expectError(t, e.rawRequest(sender, recipient, key, "other"), http.StatusUnprocessableEntity, "idempotency_key_reused")
+	})
+
+	t.Run("a double tap stores one request with one message", func(t *testing.T) {
+		sender, recipient := e.user(t), e.user(t)
+		key := uuid.New()
+		var wg sync.WaitGroup
+		codes := make(chan int, 2)
+		for range 2 {
+			wg.Go(func() {
+				codes <- e.rawRequest(sender, recipient, key, "hello").Code
+			})
+		}
+		wg.Wait()
+		close(codes)
+		for code := range codes {
+			if code != http.StatusCreated {
+				t.Errorf("status = %d, want 201", code)
+			}
+		}
+		var conversations, messages int
+		err := e.pool.QueryRow(t.Context(), `
+			SELECT COUNT(DISTINCT c.id), COUNT(m.id)
+			FROM chat_conversations c LEFT JOIN chat_messages m ON m.conversation_id = c.id
+			WHERE c.direct_user_low = LEAST($1::uuid, $2::uuid) AND c.direct_user_high = GREATEST($1::uuid, $2::uuid)`, sender.id, recipient.id).Scan(&conversations, &messages)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if conversations != 1 || messages != 1 {
+			t.Errorf("conversations = %d messages = %d, want 1 and 1", conversations, messages)
+		}
 	})
 
 	t.Run("the first message pushes a request, a reply pushes a message", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
-		e.send(t, sender, request.ID, "hello")
 		e.send(t, recipient, request.ID, "hi back")
 
 		var events []push.Event
@@ -111,53 +187,21 @@ func TestMessageRequests(t *testing.T) {
 		}
 	})
 
-	t.Run("the sender gets one text message without links or photos", func(t *testing.T) {
+	t.Run("the sender gets one text message without links", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
+		expectError(t, e.rawRequest(sender, recipient, uuid.New(), "see https://example.com"), http.StatusConflict, "request_pending")
+		expectError(t, e.rawRequest(sender, recipient, uuid.New(), "or example.com"), http.StatusConflict, "request_pending")
+		if rows := e.conversationRows(t, sender, recipient); rows != 0 {
+			t.Errorf("a refused request left %d conversations", rows)
+		}
+
 		request := e.request(t, sender, recipient)
-
-		expectError(t, e.rawSend(sender, request.ID, uuid.New(), map[string]any{"body": "see https://example.com"}), http.StatusConflict, "request_pending")
-		expectError(t, e.rawSend(sender, request.ID, uuid.New(), map[string]any{"body": "or example.com"}), http.StatusConflict, "request_pending")
-		image := e.pendingImage(t, sender)
-		expectError(t, e.rawSend(sender, request.ID, uuid.New(), map[string]any{"attachmentIds": []uuid.UUID{image}}), http.StatusConflict, "request_pending")
-
-		e.send(t, sender, request.ID, "hello")
 		expectError(t, e.rawSend(sender, request.ID, uuid.New(), map[string]any{"body": "again"}), http.StatusConflict, "request_pending")
-	})
-
-	t.Run("a double tap on the first message stores one message", func(t *testing.T) {
-		sender, recipient := e.user(t), e.user(t)
-		request := e.request(t, sender, recipient)
-
-		var wg sync.WaitGroup
-		codes := make(chan int, 2)
-		for range 2 {
-			wg.Go(func() {
-				codes <- e.rawSend(sender, request.ID, uuid.New(), map[string]any{"body": "hello"}).Code
-			})
-		}
-		wg.Wait()
-		close(codes)
-		created := 0
-		for code := range codes {
-			if code == http.StatusCreated {
-				created++
-			} else if code != http.StatusConflict {
-				t.Errorf("status = %d, want 201 or 409", code)
-			}
-		}
-		var rows int
-		if err := e.pool.QueryRow(t.Context(), "SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1", request.ID).Scan(&rows); err != nil {
-			t.Fatal(err)
-		}
-		if created != 1 || rows != 1 {
-			t.Errorf("created = %d rows = %d, want 1 and 1", created, rows)
-		}
 	})
 
 	t.Run("a reply from the recipient accepts the request", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
-		e.send(t, sender, request.ID, "hello")
 
 		e.send(t, recipient, request.ID, "hi back")
 		if c := e.conversation(t, sender, request.ID); *c.Status != StatusApproved {
@@ -173,9 +217,7 @@ func TestMessageRequests(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
 		path := "/chat/requests/" + request.ID.String() + "/acceptance"
-		expectError(t, e.api.Put(path, recipient.bearer, map[string]any{}), http.StatusNotFound, "not_found")
 
-		e.send(t, sender, request.ID, "hello")
 		expectError(t, e.api.Put(path, sender.bearer, map[string]any{}), http.StatusNotFound, "not_found")
 		accepted := decode[Conversation](t, e.api.Put(path, recipient.bearer, map[string]any{}), http.StatusOK)
 		if *accepted.Status != StatusApproved || *accepted.Origin != OriginRequest {
@@ -190,7 +232,6 @@ func TestMessageRequests(t *testing.T) {
 	t.Run("declining hides the request from the recipient and not from the sender", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
-		e.send(t, sender, request.ID, "hello")
 		path := "/chat/requests/" + request.ID.String()
 
 		expectError(t, e.api.Delete(path, sender.bearer), http.StatusNotFound, "not_found")
@@ -216,7 +257,6 @@ func TestMessageRequests(t *testing.T) {
 	t.Run("a match after a request approves it and keeps its origin", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
-		e.send(t, sender, request.ID, "hello")
 		e.connect(t, sender, recipient)
 
 		opened := decode[Conversation](t, e.api.Post("/chat/conversations/direct", sender.bearer, map[string]any{"userId": recipient.id}), http.StatusOK)
@@ -236,6 +276,7 @@ func TestMessageRequests(t *testing.T) {
 		decode[Settings](t, e.api.Patch("/chat/settings/me", recipient.bearer, map[string]any{"whoCanMessage": WhoMatches}), http.StatusOK)
 		stranger := e.user(t)
 		expectError(t, e.api.Post("/chat/conversations/direct", stranger.bearer, map[string]any{"userId": recipient.id}), http.StatusNotFound, "not_found")
+		expectError(t, e.rawRequest(stranger, recipient, uuid.New(), "hello"), http.StatusNotFound, "not_found")
 		friend := e.user(t)
 		e.connect(t, friend, recipient)
 		e.direct(t, friend, recipient)
@@ -250,6 +291,7 @@ func TestMessageRequests(t *testing.T) {
 			t.Fatal(err)
 		}
 		expectError(t, e.api.Post("/chat/conversations/direct", elsewhere.bearer, map[string]any{"userId": recipient.id}), http.StatusNotFound, "not_found")
+		expectError(t, e.rawRequest(elsewhere, recipient, uuid.New(), "hello"), http.StatusNotFound, "not_found")
 	})
 
 	t.Run("adults cannot write to minors without a match", func(t *testing.T) {
@@ -257,7 +299,7 @@ func TestMessageRequests(t *testing.T) {
 		e.setBirthDate(t, adult, time.Now().AddDate(-25, 0, 0))
 		e.setBirthDate(t, minor, time.Now().AddDate(-17, 0, 0))
 
-		expectError(t, e.api.Post("/chat/conversations/direct", adult.bearer, map[string]any{"userId": minor.id}), http.StatusNotFound, "not_found")
+		expectError(t, e.rawRequest(adult, minor, uuid.New(), "hello"), http.StatusNotFound, "not_found")
 		e.request(t, minor, adult)
 		e.request(t, adult, unknown)
 
@@ -265,38 +307,34 @@ func TestMessageRequests(t *testing.T) {
 		e.direct(t, adult, minor)
 	})
 
-	t.Run("a sender starts at most 20 requests a day, counted at the first message", func(t *testing.T) {
+	t.Run("a sender starts at most 20 requests a day", func(t *testing.T) {
 		sender := e.user(t)
-		for range requestLimit + 5 {
+		for range requestLimit {
 			e.request(t, sender, e.user(t))
 		}
-		for range requestLimit {
-			e.send(t, sender, e.request(t, sender, e.user(t)).ID, "hello")
+		late := e.user(t)
+		expectError(t, e.rawRequest(sender, late, uuid.New(), "hello"), http.StatusTooManyRequests, "rate_limited")
+		if rows := e.conversationRows(t, sender, late); rows != 0 {
+			t.Errorf("a limited request left %d conversations", rows)
 		}
-		late := e.request(t, sender, e.user(t))
-		expectError(t, e.rawSend(sender, late.ID, uuid.New(), map[string]any{"body": "hello"}), http.StatusTooManyRequests, "rate_limited")
 	})
 
 	t.Run("a recipient holds at most 5 pending requests from new accounts", func(t *testing.T) {
 		recipient := e.user(t)
 		for range maxNewAccountRequests {
-			sender := e.user(t)
-			e.send(t, sender, e.request(t, sender, recipient).ID, "hello")
+			e.request(t, e.user(t), recipient)
 		}
 
-		late := e.user(t)
-		lateRequest := e.request(t, late, recipient)
-		expectError(t, e.rawSend(late, lateRequest.ID, uuid.New(), map[string]any{"body": "hello"}), http.StatusTooManyRequests, "rate_limited")
+		expectError(t, e.rawRequest(e.user(t), recipient, uuid.New(), "hello"), http.StatusTooManyRequests, "rate_limited")
 
 		older := e.user(t)
 		e.setCreatedAt(t, older, time.Now().Add(-3*24*time.Hour))
-		e.send(t, older, e.request(t, older, recipient).ID, "hello")
+		e.request(t, older, recipient)
 	})
 
 	t.Run("account deletion removes requests and settings", func(t *testing.T) {
 		sender, recipient := e.user(t), e.user(t)
 		request := e.request(t, sender, recipient)
-		e.send(t, sender, request.ID, "hello")
 		decode[Settings](t, e.api.Patch("/chat/settings/me", sender.bearer, map[string]any{"whoCanMessage": WhoMatches}), http.StatusOK)
 
 		if err := e.module.ForgetUser(t.Context(), sender.id); err != nil {

@@ -83,11 +83,7 @@ func pairOpen(viewer string) string {
 }
 
 func directVisible(arg func(any) string, viewer string, inbox bool) string {
-	own := "c.started_by = " + viewer
-	if inbox {
-		own = "(" + own + " AND c.last_seq > 0)"
-	}
-	allowed := "c.status = " + arg(StatusApproved) + " OR " + own + " OR " + pairConnected(viewer)
+	allowed := "c.status = " + arg(StatusApproved) + " OR c.started_by = " + viewer + " OR " + pairConnected(viewer)
 	if !inbox {
 		allowed += " OR (c.status = " + arg(StatusPending) + " AND c.last_seq > 0)"
 	}
