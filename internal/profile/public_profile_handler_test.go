@@ -137,7 +137,7 @@ func TestPublicProfileAgeDoesNotExposeBirthDate(t *testing.T) {
 	}
 }
 
-func TestPublicProfilePhotosOnlyForConnectedUsers(t *testing.T) {
+func TestPublicProfilePhotosVisibleToEveryone(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	viewer := e.otpUser(t)
@@ -169,20 +169,9 @@ func TestPublicProfilePhotosOnlyForConnectedUsers(t *testing.T) {
 		return photos
 	}
 
-	if photos := getPhotos(); len(photos) != 0 {
-		t.Fatalf("unconnected viewer got photos: %v", photos)
-	}
-
-	if _, err := e.pool.Exec(ctx, `
-        INSERT INTO connections (user_low, user_high, mode)
-        VALUES (LEAST($1::uuid, $2::uuid), GREATEST($1::uuid, $2::uuid), 'friends')
-    `, viewer.id, student.id); err != nil {
-		t.Fatal(err)
-	}
-
 	photos := getPhotos()
 	if len(photos) != 3 {
-		t.Fatalf("connected viewer got %d photos, want 3: %v", len(photos), photos)
+		t.Fatalf("unconnected viewer got %d photos, want 3: %v", len(photos), photos)
 	}
 	for i, want := range []string{avatarURL(avatar), avatarURL(first), avatarURL(second)} {
 		if photos[i] != want {

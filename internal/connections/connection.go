@@ -7,10 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func (m Module) AreConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error) {
-	return m.connections.areConnected(ctx, viewerID, ownerID)
-}
-
 func (m Module) list(ctx context.Context, userID uuid.UUID, cursor string, limit int) ([]Connection, *string, error) {
 	var after *connectionCursor
 	if cursor != "" {

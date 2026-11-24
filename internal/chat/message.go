@@ -132,6 +132,9 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
+		if err := m.checkRequest(ctx, senderID, a, locked.LastSeq, in); err != nil {
+			return err
+		}
 
 		created, err = m.insertText(ctx, senderID, in, locked)
 		if err != nil {

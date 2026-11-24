@@ -253,6 +253,13 @@ components:
           type:
             - string
             - "null"
+        photos:
+          description: Avatar first, followed by additional photos
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         sharedInterests:
           description: The interests the viewer also has
           items:
@@ -260,12 +267,16 @@ components:
           type:
             - array
             - "null"
+        student:
+          $ref: "#/components/schemas/ProfileSummary"
         universityId:
           examples:
             - umcs
           type: string
       required:
         - candidateId
+        - student
+        - photos
         - intent
         - bio
         - interests
@@ -499,6 +510,11 @@ components:
         id:
           format: uuid
           type: string
+        incoming:
+          description: true when the other student started the direct conversation. Null for groups
+          type:
+            - boolean
+            - "null"
         kind:
           enum:
             - direct
@@ -533,9 +549,25 @@ components:
           type:
             - string
             - "null"
+        origin:
+          description: How the direct conversation began; request stays even after the students match. Null for groups
+          enum:
+            - match
+            - request
+          type:
+            - string
+            - "null"
         peer:
           $ref: "#/components/schemas/Student"
           description: The other student of a direct conversation; omitted for groups
+        status:
+          description: pending until the recipient accepts or replies; a declined request still shows pending to its sender. Null for groups
+          enum:
+            - pending
+            - approved
+          type:
+            - string
+            - "null"
         unreadCount:
           format: int64
           type: integer
@@ -549,6 +581,9 @@ components:
         - unreadCount
         - memberCount
         - myRole
+        - origin
+        - status
+        - incoming
         - createdAt
       type: object
     Course:
@@ -1400,6 +1435,33 @@ components:
         - name
         - memberIds
       type: object
+    Image:
+      additionalProperties: false
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        kind:
+          enum:
+            - avatar
+            - banner
+            - feed
+          type: string
+        ownerId:
+          format: uuid
+          type: string
+        url:
+          type: string
+      required:
+        - id
+        - kind
+        - url
+        - ownerId
+        - createdAt
+      type: object
     InviteCodeOutputBody:
       additionalProperties: false
       properties:
@@ -1537,6 +1599,24 @@ components:
         items:
           items:
             $ref: "#/components/schemas/Message"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
+    ListChatRequestsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Conversation"
           type:
             - array
             - "null"
@@ -1849,6 +1929,24 @@ components:
         - items
         - nextCursor
       type: object
+    ListUnreviewedImagesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Image"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
     MarkChatReadInputBody:
       additionalProperties: false
       properties:
@@ -2070,7 +2168,7 @@ components:
       additionalProperties: false
       properties:
         userId:
-          description: A student the caller has a Connection with
+          description: Any student; without a Connection the conversation starts as a message request
           format: uuid
           type: string
       required:
@@ -2756,7 +2854,7 @@ components:
             - string
             - "null"
         photos:
-          description: Avatar first, followed by additional photos; hidden from unconnected students
+          description: Avatar first, followed by additional photos
           items:
             type: string
           type:
@@ -3181,6 +3279,19 @@ components:
           description: Up to 4000 characters after HTML is stripped; may be empty only with attachments
           maxLength: 16000
           type: string
+      type: object
+    Settings:
+      additionalProperties: false
+      properties:
+        whoCanMessage:
+          description: "Who may send the student a message request: everyone, students of the same university, or only Connections"
+          enum:
+            - everyone
+            - university
+            - matches
+          type: string
+      required:
+        - whoCanMessage
       type: object
     Student:
       additionalProperties: false
@@ -3669,6 +3780,17 @@ components:
         - roles
         - onboardedAt
         - createdAt
+      type: object
+    UpdateMyChatSettingsInputBody:
+      additionalProperties: false
+      properties:
+        whoCanMessage:
+          description: Changes only new message requests; existing conversations stay
+          enum:
+            - everyone
+            - university
+            - matches
+          type: string
       type: object
     UpdatePostInputBody:
       additionalProperties: false
@@ -4275,7 +4397,7 @@ paths:
         - auth
   /chat/conversations:
     get:
-      description: Newest activity first, paginated by cursor. Direct conversations without a Connection, or with a block either way, are left out.
+      description: Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, and direct conversations with a block either way, are left out.
       operationId: listChatConversations
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -4335,7 +4457,7 @@ paths:
         - chat
   /chat/conversations/direct:
     post:
-      description: Returns 201 when the conversation was created and 200 when it already existed. Students without a Connection, blocked either way, banned or unknown answer 404.
+      description: "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404."
       operationId: openDirectConversation
       requestBody:
         content:
@@ -4374,6 +4496,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
         "500":
           content:
             application/json:
@@ -4382,7 +4510,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Open the direct conversation with a connected student
+      summary: Open the direct conversation with a student
       tags:
         - chat
   /chat/conversations/groups:
@@ -5123,6 +5251,228 @@ paths:
       security:
         - bearer: []
       summary: Get one message with fresh attachment URLs
+      tags:
+        - chat
+  /chat/requests:
+    get:
+      description: Pending requests that hold a message, newest first, paginated by cursor. Declined requests and requests from students blocked either way are left out.
+      operationId: listChatRequests
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListChatRequestsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the message requests sent to the logged-in student
+      tags:
+        - chat
+  /chat/requests/{id}:
+    delete:
+      description: The request disappears for the caller; its sender is not told and still sees it as pending. Declining it again succeeds.
+      operationId: declineChatRequest
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Decline a message request sent to the logged-in student
+      tags:
+        - chat
+  /chat/requests/{id}/acceptance:
+    put:
+      description: Turns the request into a normal conversation; replying to it does the same. Accepting it again changes nothing.
+      operationId: acceptChatRequest
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Accept a message request sent to the logged-in student
+      tags:
+        - chat
+  /chat/settings/me:
+    get:
+      operationId: getMyChatSettings
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get the logged-in student's chat settings
+      tags:
+        - chat
+    patch:
+      description: Fields left out keep their value.
+      operationId: updateMyChatSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMyChatSettingsInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Update the logged-in student's chat settings
       tags:
         - chat
   /chat/stream:
@@ -7183,6 +7533,176 @@ paths:
       summary: Save a post
       tags:
         - feed
+  /media/images:
+    get:
+      description: Oldest first, paginated by cursor. An image leaves the list once it is marked checked or removed. Private chat images are left out. Moderators and admins only.
+      operationId: listUnreviewedImages
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListUnreviewedImagesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: List the avatars, banners and feed images no moderator has checked yet
+      tags:
+        - media
+  /media/images/{id}:
+    delete:
+      description: The image disappears everywhere it was shown and its file is deleted. Removing it again succeeds. Moderators and admins only.
+      operationId: removeImage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Remove any student's avatar, banner or feed image
+      tags:
+        - media
+  /media/images/{id}/review:
+    put:
+      description: Marking it again changes nothing. Moderators and admins only.
+      operationId: markImageReviewed
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - moderator
+            - admin
+      summary: Mark an avatar, banner or feed image as checked
+      tags:
+        - media
   /media/uploads:
     post:
       description: Creates a pending media item owned by the caller and returns a presigned URL to upload the file to.

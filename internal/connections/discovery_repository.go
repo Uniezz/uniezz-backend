@@ -100,9 +100,9 @@ func (r *discoveryRepository) find(ctx context.Context, f discoveryFilter) ([]ca
 			ARRAY(SELECT i FROM unnest(p.interests) i WHERE i = ANY(vp.interests)),
 			p.university_id, p.level, EXTRACT(YEAR FROM age(CURRENT_DATE, t.birth_date))::int
 		FROM connection_profiles v
-		JOIN anonymous_profiles vp ON vp.id = v.user_id
+		JOIN discovery_profiles vp ON vp.id = v.user_id
 		JOIN connection_profiles t ON t.user_id <> v.user_id
-		JOIN anonymous_profiles p ON p.id = t.user_id
+		JOIN discovery_profiles p ON p.id = t.user_id
 		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY CASE WHEN p.programme = vp.programme THEN 2 ELSE 0 END
 				+ CASE WHEN p.faculty = vp.faculty THEN 1 ELSE 0 END
@@ -235,7 +235,7 @@ func (r *discoveryRepository) hide(ctx context.Context, viewerID, targetID uuid.
 func (r *discoveryRepository) snapshot(ctx context.Context, userID uuid.UUID) (*snapshotRow, error) {
 	const query = `
 		SELECT t.intent, p.bio, p.interests
-		FROM anonymous_profiles p
+		FROM discovery_profiles p
 		LEFT JOIN connection_profiles t ON t.user_id = p.id
 		WHERE p.id = $1`
 	var s snapshotRow

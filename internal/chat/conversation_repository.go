@@ -15,6 +15,9 @@ type accessRow struct {
 	Kind          Kind
 	Role          Role
 	DirectVisible bool
+	Status        Status
+	StartedBy     *uuid.UUID
+	Connected     bool
 }
 
 type conversationRow struct {
@@ -31,6 +34,10 @@ type conversationRow struct {
 	UnreadCount   int
 	MemberCount   int
 	SortAt        time.Time
+	Status        Status
+	Origin        *Origin
+	StartedBy     *uuid.UUID
+	Connected     bool
 }
 
 type conversationCursor struct {
@@ -40,6 +47,7 @@ type conversationCursor struct {
 
 type conversationFilter struct {
 	ViewerID uuid.UUID
+	Requests bool
 	After    *conversationCursor
 	Limit    int
 }
@@ -61,12 +69,30 @@ func newConversationRepository(db database.DB) *conversationRepository {
 	return &conversationRepository{db: db}
 }
 
-func directVisible(viewer, low, high string) string {
-	other := "(CASE WHEN " + low + " = " + viewer + " THEN " + high + " ELSE " + low + " END)"
-	return "(" + low + " IS NULL OR (" +
-		"EXISTS (SELECT 1 FROM connected_pairs p WHERE p.user_id = " + viewer + " AND p.other_id = " + other + ")" +
-		" AND NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = " + viewer + " AND b.other_id = " + other + ")" +
-		" AND NOT EXISTS (SELECT 1 FROM banned_users x WHERE x.id = " + other + ")))"
+func peerOf(viewer string) string {
+	return "(CASE WHEN c.direct_user_low = " + viewer + " THEN c.direct_user_high ELSE c.direct_user_low END)"
+}
+
+func pairConnected(viewer string) string {
+	return "EXISTS (SELECT 1 FROM connected_pairs p WHERE p.user_id = " + viewer + " AND p.other_id = " + peerOf(viewer) + ")"
+}
+
+func pairOpen(viewer string) string {
+	return "NOT EXISTS (SELECT 1 FROM blocked_pairs b WHERE b.user_id = " + viewer + " AND b.other_id = " + peerOf(viewer) + ")" +
+		" AND NOT EXISTS (SELECT 1 FROM banned_users x WHERE x.id = " + peerOf(viewer) + ")"
+}
+
+func directVisible(arg func(any) string, viewer string, inbox bool) string {
+	allowed := "c.status = " + arg(StatusApproved) + " OR c.started_by = " + viewer + " OR " + pairConnected(viewer)
+	if !inbox {
+		allowed += " OR (c.status = " + arg(StatusPending) + " AND c.last_seq > 0)"
+	}
+	return "(c.direct_user_low IS NULL OR (" + pairOpen(viewer) + " AND (" + allowed + ")))"
+}
+
+func incomingRequest(arg func(any) string, viewer string) string {
+	return "(c.kind = " + arg(KindDirect) + " AND c.status = " + arg(StatusPending) + " AND c.started_by <> " + viewer +
+		" AND c.last_seq > 0 AND " + pairOpen(viewer) + " AND NOT " + pairConnected(viewer) + ")"
 }
 
 const conversationSelect = `
@@ -75,14 +101,18 @@ const conversationSelect = `
 		c.last_seq, c.change_seq, c.last_message_at, c.created_at,
 		m.role, m.last_read_seq, m.unread_count,
 		CASE WHEN c.kind = $2 THEN (SELECT COUNT(*) FROM chat_members x WHERE x.conversation_id = c.id) ELSE 0 END,
-		COALESCE(c.last_message_at, c.created_at)
+		COALESCE(c.last_message_at, c.created_at),
+		c.status, c.origin, c.started_by,
+		c.direct_user_low IS NOT NULL AND EXISTS (SELECT 1 FROM connected_pairs p WHERE p.user_id = $1
+			AND p.other_id = CASE WHEN c.direct_user_low = $1 THEN c.direct_user_high ELSE c.direct_user_low END)
 	FROM chat_conversations c
 	JOIN chat_members m ON m.conversation_id = c.id AND m.user_id = $1`
 
 func scanConversation(row pgx.Row) (*conversationRow, error) {
 	var c conversationRow
 	err := row.Scan(&c.ID, &c.Kind, &c.Name, &c.PeerID, &c.LastSeq, &c.ChangeSeq, &c.LastMessageAt, &c.CreatedAt,
-		&c.MyRole, &c.LastReadSeq, &c.UnreadCount, &c.MemberCount, &c.SortAt)
+		&c.MyRole, &c.LastReadSeq, &c.UnreadCount, &c.MemberCount, &c.SortAt,
+		&c.Status, &c.Origin, &c.StartedBy, &c.Connected)
 	if err != nil {
 		return nil, err
 	}
@@ -90,10 +120,12 @@ func scanConversation(row pgx.Row) (*conversationRow, error) {
 }
 
 func (r *conversationRepository) get(ctx context.Context, viewerID, id uuid.UUID) (*conversationRow, error) {
+	args := database.Args{viewerID, KindGroup}
+	arg := args.Add
 	query := conversationSelect + `
-	WHERE c.id = $3 AND ` + directVisible("$1", "c.direct_user_low", "c.direct_user_high")
+	WHERE c.id = ` + arg(id) + ` AND ` + directVisible(arg, "$1", false)
 
-	c, err := scanConversation(r.db.Conn(ctx).QueryRow(ctx, query, viewerID, KindGroup, id))
+	c, err := scanConversation(r.db.Conn(ctx).QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -107,7 +139,12 @@ func (r *conversationRepository) list(ctx context.Context, f conversationFilter)
 	args := database.Args{f.ViewerID, KindGroup}
 	arg := args.Add
 
-	where := directVisible("$1", "c.direct_user_low", "c.direct_user_high")
+	var where string
+	if f.Requests {
+		where = incomingRequest(arg, "$1")
+	} else {
+		where = directVisible(arg, "$1", true)
+	}
 	if f.After != nil {
 		where += " AND (COALESCE(c.last_message_at, c.created_at), c.id) < (" + arg(f.After.SortAt) + ", " + arg(f.After.ID) + ")"
 	}
@@ -137,14 +174,17 @@ func (r *conversationRepository) list(ctx context.Context, f conversationFilter)
 }
 
 func (r *conversationRepository) access(ctx context.Context, viewerID, id uuid.UUID) (*accessRow, error) {
+	args := database.Args{viewerID, id}
+	arg := args.Add
 	query := `
-		SELECT c.kind, m.role, ` + directVisible("$1", "c.direct_user_low", "c.direct_user_high") + `
+		SELECT c.kind, m.role, ` + directVisible(arg, "$1", false) + `, c.status, c.started_by,
+			c.direct_user_low IS NOT NULL AND ` + pairConnected("$1") + `
 		FROM chat_members m
 		JOIN chat_conversations c ON c.id = m.conversation_id
 		WHERE m.conversation_id = $2 AND m.user_id = $1`
 
 	var a accessRow
-	err := r.db.Conn(ctx).QueryRow(ctx, query, viewerID, id).Scan(&a.Kind, &a.Role, &a.DirectVisible)
+	err := r.db.Conn(ctx).QueryRow(ctx, query, args...).Scan(&a.Kind, &a.Role, &a.DirectVisible, &a.Status, &a.StartedBy, &a.Connected)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -154,14 +194,14 @@ func (r *conversationRepository) access(ctx context.Context, viewerID, id uuid.U
 	return &a, nil
 }
 
-func (r *conversationRepository) openDirect(ctx context.Context, userID, otherID uuid.UUID) (uuid.UUID, bool, error) {
+func (r *conversationRepository) openDirect(ctx context.Context, userID, otherID uuid.UUID, origin Origin, status Status) (uuid.UUID, bool, error) {
 	const insert = `
-		INSERT INTO chat_conversations (kind, direct_user_low, direct_user_high)
-		VALUES ($3, LEAST($1, $2)::uuid, GREATEST($1, $2)::uuid)
+		INSERT INTO chat_conversations (kind, direct_user_low, direct_user_high, origin, status, started_by)
+		VALUES ($3, LEAST($1, $2)::uuid, GREATEST($1, $2)::uuid, $4, $5, $1::uuid)
 		ON CONFLICT (direct_user_low, direct_user_high) DO NOTHING
 		RETURNING id`
 	var id uuid.UUID
-	err := r.db.Conn(ctx).QueryRow(ctx, insert, userID, otherID, KindDirect).Scan(&id)
+	err := r.db.Conn(ctx).QueryRow(ctx, insert, userID, otherID, KindDirect, origin, status).Scan(&id)
 	if err == nil {
 		return id, true, nil
 	}
@@ -178,10 +218,33 @@ func (r *conversationRepository) openDirect(ctx context.Context, userID, otherID
 	return id, false, nil
 }
 
+func (r *conversationRepository) findDirect(ctx context.Context, userID, otherID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+	const query = `
+		SELECT id, started_by FROM chat_conversations
+		WHERE direct_user_low = LEAST($1, $2)::uuid AND direct_user_high = GREATEST($1, $2)::uuid`
+	var id, startedBy uuid.UUID
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID, otherID).Scan(&id, &startedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, uuid.Nil, ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("find direct conversation: %w", err)
+	}
+	return id, startedBy, nil
+}
+
+func (r *conversationRepository) approve(ctx context.Context, id uuid.UUID) error {
+	const query = `UPDATE chat_conversations SET status = $2 WHERE id = $1 AND status <> $2`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id, StatusApproved); err != nil {
+		return fmt.Errorf("approve conversation: %w", err)
+	}
+	return nil
+}
+
 func (r *conversationRepository) createGroup(ctx context.Context, name string) (uuid.UUID, error) {
-	const query = `INSERT INTO chat_conversations (kind, name) VALUES ($1, $2) RETURNING id`
+	const query = `INSERT INTO chat_conversations (kind, name, status) VALUES ($1, $2, $3) RETURNING id`
 	var id uuid.UUID
-	if err := r.db.Conn(ctx).QueryRow(ctx, query, KindGroup, name).Scan(&id); err != nil {
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, KindGroup, name, StatusApproved).Scan(&id); err != nil {
 		return uuid.Nil, fmt.Errorf("create group: %w", err)
 	}
 	return id, nil

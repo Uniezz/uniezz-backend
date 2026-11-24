@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"regexp"
 	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -21,6 +22,12 @@ func cleanBody(body string, attachments int) (string, error) {
 		return "", ErrInvalidInput
 	}
 	return clean, nil
+}
+
+var linkPattern = regexp.MustCompile(`(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,}\b`)
+
+func hasLink(body string) bool {
+	return linkPattern.MatchString(body)
 }
 
 func cleanName(name string) (string, error) {

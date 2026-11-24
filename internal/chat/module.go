@@ -1,5 +1,6 @@
-// Package chat owns direct and group conversations: messages with ordering and
-// catch-up counters, read positions, and the live event stream. Access rules
+// Package chat owns direct and group conversations, message requests between
+// students without a Connection, messages with ordering and catch-up
+// counters, read positions, and the live event stream. Access rules
 // are in access.go and conversation_repository.go; PostgreSQL is the only
 // source of truth, and the in-process hub only lowers latency.
 package chat
@@ -21,6 +22,8 @@ const (
 	sendWindow        = time.Minute
 	groupLimit        = 5
 	groupWindow       = time.Hour
+	requestLimit      = 20
+	requestWindow     = 24 * time.Hour
 	heartbeatInterval = 20 * time.Second
 	writeDeadline     = 30 * time.Second
 	closeGrace        = 2 * time.Second
@@ -50,10 +53,13 @@ type Module struct {
 	members       *memberRepository
 	messages      *messageRepository
 	students      *studentRepository
+	requests      *requestRepository
+	settings      *settingsRepository
 	sessions      *sessionRepository
 	media         mediaService
 	sends         limiter
 	groups        limiter
+	requestLimit  limiter
 	hub           *hub
 	heartbeat     time.Duration
 	sessionCheck  time.Duration
@@ -69,10 +75,13 @@ func New(pool *pgxpool.Pool, mediaModule mediaService) Module {
 		members:       newMemberRepository(db),
 		messages:      newMessageRepository(db),
 		students:      newStudentRepository(db),
+		requests:      newRequestRepository(db),
+		settings:      newSettingsRepository(db),
 		sessions:      newSessionRepository(db),
 		media:         mediaModule,
 		sends:         ratelimit.New(pool, "chat-send", sendLimit, sendWindow),
 		groups:        ratelimit.New(pool, "chat-group", groupLimit, groupWindow),
+		requestLimit:  ratelimit.New(pool, "chat-request", requestLimit, requestWindow),
 		hub:           newHub(),
 		heartbeat:     heartbeatInterval,
 		sessionCheck:  sessionCheckEvery,
@@ -86,6 +95,8 @@ func (m Module) Register(api huma.API) {
 	members := &memberHandler{chat: m}
 	messages := &messageHandler{chat: m}
 	stream := &streamHandler{chat: m}
+	requests := &requestHandler{chat: m}
+	settings := &settingsHandler{chat: m}
 
 	huma.Register(api, openDirectConversationOperation, conversations.openDirectConversation)
 	huma.Register(api, createGroupConversationOperation, conversations.createGroupConversation)
@@ -103,6 +114,11 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, getChatMessageOperation, messages.getMessage)
 	huma.Register(api, deleteChatMessageOperation, messages.deleteMessage)
 	huma.Register(api, openChatStreamOperation, stream.openStream)
+	huma.Register(api, listChatRequestsOperation, requests.listRequests)
+	huma.Register(api, acceptChatRequestOperation, requests.acceptRequest)
+	huma.Register(api, declineChatRequestOperation, requests.declineRequest)
+	huma.Register(api, getMyChatSettingsOperation, settings.getSettings)
+	huma.Register(api, updateMyChatSettingsOperation, settings.updateSettings)
 }
 
 func (m Module) Drain() {

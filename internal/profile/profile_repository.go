@@ -455,6 +455,43 @@ func (r *profileRepository) listProfilePhotos(ctx context.Context, userID uuid.U
 	return photos, nil
 }
 
+func (r *profileRepository) getManyPhotos(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]media.Ref, error) {
+	const query = `
+        SELECT u.id, 0 AS position, rm.kind, rm.object_key
+        FROM users u
+        JOIN ready_media rm ON rm.id = u.avatar_media_id
+        WHERE u.id = ANY($1) AND u.deleted_at IS NULL
+        UNION ALL
+        SELECT pp.user_id, pp.position, rm.kind, rm.object_key
+        FROM profile_photos pp
+        JOIN ready_media rm ON rm.id = pp.media_id
+        WHERE pp.user_id = ANY($1)
+        ORDER BY 1, 2
+    `
+	rows, err := r.db.Conn(ctx).Query(ctx, query, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get profile photos: %w", err)
+	}
+	defer rows.Close()
+
+	photos := make(map[uuid.UUID][]media.Ref, len(userIDs))
+	for rows.Next() {
+		var userID uuid.UUID
+		var position int16
+		var kind string
+		var ref media.Ref
+		if err := rows.Scan(&userID, &position, &kind, &ref.ObjectKey); err != nil {
+			return nil, fmt.Errorf("scan profile photo: %w", err)
+		}
+		ref.Kind = media.Kind(kind)
+		photos[userID] = append(photos[userID], ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get profile photos: %w", err)
+	}
+	return photos, nil
+}
+
 func (r *profileRepository) listProfilePhotoIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	const query = `
 		SELECT media_id
