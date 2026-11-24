@@ -87,10 +87,10 @@ var openDirectConversationOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/chat/conversations/direct",
 	Summary:       "Open the direct conversation with a student",
-	Description:   "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404.",
+	Description:   "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day, counted at their first message. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404.",
 	Tags:          []string{"chat"},
 	DefaultStatus: http.StatusCreated,
-	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusTooManyRequests},
+	Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
 func (h *conversationHandler) openDirectConversation(ctx context.Context, in *openDirectConversationInput) (*openDirectConversationOutput, error) {
@@ -175,7 +175,7 @@ var listChatConversationsOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/chat/conversations",
 	Summary:     "List the logged-in student's conversations",
-	Description: "Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, and direct conversations with a block either way, are left out.",
+	Description: "Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, the caller's own requests until they hold a message, and direct conversations with a block either way, are left out.",
 	Tags:        []string{"chat"},
 	Errors:      []int{http.StatusBadRequest},
 })

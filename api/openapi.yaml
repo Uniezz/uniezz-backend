@@ -4425,7 +4425,7 @@ paths:
         - auth
   /chat/conversations:
     get:
-      description: Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, and direct conversations with a block either way, are left out.
+      description: Newest activity first, paginated by cursor. Message requests the caller has not accepted yet, the caller's own requests until they hold a message, and direct conversations with a block either way, are left out.
       operationId: listChatConversations
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -4485,7 +4485,7 @@ paths:
         - chat
   /chat/conversations/direct:
     post:
-      description: "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404."
+      description: "Returns 201 when the conversation was created and 200 when it already existed. Without a Connection it is a message request: the caller may send one text message without links until the other student accepts or replies, at most 20 new requests a day, counted at their first message. Students who do not accept messages from the caller, blocked either way, banned or unknown answer 404."
       operationId: openDirectConversation
       requestBody:
         content:
@@ -4524,12 +4524,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unprocessable Entity
-        "429":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Too Many Requests
         "500":
           content:
             application/json:

@@ -27,12 +27,6 @@ func (m Module) startRequest(ctx context.Context, senderID, recipientID uuid.UUI
 	if !allowed {
 		return uuid.Nil, false, ErrNotFound
 	}
-	if err := m.requestLimit.Allow(ctx, senderID.String()); err != nil {
-		if errors.Is(err, ratelimit.ErrLimited) {
-			return uuid.Nil, false, errors.Join(ErrRateLimited, err)
-		}
-		return uuid.Nil, false, err
-	}
 
 	id, created, err := m.conversations.openDirect(ctx, senderID, recipientID, OriginRequest, StatusPending)
 	if err != nil || !created {
@@ -62,6 +56,12 @@ func (m Module) checkRequest(ctx context.Context, senderID uuid.UUID, a *accessR
 	}
 	if inbox.SenderIsNew && inbox.Pending >= maxNewAccountRequests {
 		return ErrRateLimited
+	}
+	if err := m.requestLimit.Allow(ctx, senderID.String()); err != nil {
+		if errors.Is(err, ratelimit.ErrLimited) {
+			return errors.Join(ErrRateLimited, err)
+		}
+		return err
 	}
 	return nil
 }

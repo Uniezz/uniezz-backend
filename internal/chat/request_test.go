@@ -65,6 +65,12 @@ func TestMessageRequests(t *testing.T) {
 		if listed(e.requests(t, recipient), request.ID) {
 			t.Errorf("empty request listed for the recipient")
 		}
+		if listed(e.inbox(t, sender), request.ID) {
+			t.Errorf("empty request listed in the sender's conversations")
+		}
+		if opened := e.conversation(t, sender, request.ID); opened.ID != request.ID {
+			t.Errorf("sender cannot open the empty request")
+		}
 
 		e.send(t, sender, request.ID, "hi, we share a class")
 		if !listed(e.requests(t, recipient), request.ID) {
@@ -259,12 +265,16 @@ func TestMessageRequests(t *testing.T) {
 		e.direct(t, adult, minor)
 	})
 
-	t.Run("a sender starts at most 20 requests a day", func(t *testing.T) {
+	t.Run("a sender starts at most 20 requests a day, counted at the first message", func(t *testing.T) {
 		sender := e.user(t)
-		for range requestLimit {
+		for range requestLimit + 5 {
 			e.request(t, sender, e.user(t))
 		}
-		expectError(t, e.api.Post("/chat/conversations/direct", sender.bearer, map[string]any{"userId": e.user(t).id}), http.StatusTooManyRequests, "rate_limited")
+		for range requestLimit {
+			e.send(t, sender, e.request(t, sender, e.user(t)).ID, "hello")
+		}
+		late := e.request(t, sender, e.user(t))
+		expectError(t, e.rawSend(sender, late.ID, uuid.New(), map[string]any{"body": "hello"}), http.StatusTooManyRequests, "rate_limited")
 	})
 
 	t.Run("a recipient holds at most 5 pending requests from new accounts", func(t *testing.T) {
