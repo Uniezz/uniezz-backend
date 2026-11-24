@@ -183,7 +183,7 @@ func TestUpdateComment(t *testing.T) {
 	if *got.Content != "Edited" || got.EditedAt == nil {
 		t.Errorf("edited = %+v", got)
 	}
-	expectError(t, e.api.Patch(path, e.user(t).bearer, map[string]any{"content": "Hijacked"}), 403, "forbidden")
+	expectError(t, e.api.Patch(path, e.user(t).bearer, map[string]any{"content": "Hijacked"}), 404, "not_found")
 	expectStatus(t, e.api.Delete(path, author.bearer), 204)
 	expectError(t, e.api.Patch(path, author.bearer, map[string]any{"content": "Back"}), 404, "not_found")
 }
@@ -194,9 +194,9 @@ func TestDeleteComment(t *testing.T) {
 	commenter := e.user(t)
 	post := e.createPost(t, author, nil)
 
-	t.Run("only the author", func(t *testing.T) {
+	t.Run("another student's comment is not found, even for the post's author", func(t *testing.T) {
 		c := e.comment(t, commenter, post.ID, nil, "Mine")
-		expectError(t, e.api.Delete("/feed/comments/"+c.ID.String(), author.bearer), 403, "forbidden")
+		expectError(t, e.api.Delete("/feed/comments/"+c.ID.String(), author.bearer), 404, "not_found")
 		expectStatus(t, e.api.Delete("/feed/comments/"+c.ID.String(), commenter.bearer), 204)
 	})
 
@@ -337,7 +337,7 @@ func TestConcurrentComments(t *testing.T) {
 				codes <- e.api.Delete("/feed/comments/"+root.ID.String(), author.bearer).Code
 			}()
 		}
-		waitForLockWait(t, 5, "FROM feed_posts WHERE id = $1 FOR NO KEY UPDATE")
+		waitForLockWait(t, 5, "FROM feed_posts WHERE id = $1 AND ($2::uuid IS NULL OR author_id = $2) FOR NO KEY UPDATE")
 		release()
 		wg.Wait()
 		close(codes)

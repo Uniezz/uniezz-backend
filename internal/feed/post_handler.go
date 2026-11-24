@@ -67,9 +67,10 @@ var createPostOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/feed/posts",
 	Summary:       "Create a feed post",
+	Description:   "At most 1 post every 2 minutes and 5 per hour; a retry with the same Idempotency-Key returns the first post and does not count again.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusCreated,
-	Errors:        []int{http.StatusBadRequest, http.StatusGone, http.StatusUnprocessableEntity},
+	Errors:        []int{http.StatusBadRequest, http.StatusGone, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 })
 
 func (h *postHandler) createPost(ctx context.Context, in *createPostInput) (*createPostOutput, error) {
@@ -282,6 +283,7 @@ var getPostOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/{id}",
 	Summary:     "Get a feed post",
+	Description: "A post by a banned student or by a student blocked in either direction is not found.",
 	Tags:        []string{"feed"},
 	Errors:      []int{http.StatusNotFound},
 })
@@ -316,7 +318,7 @@ var updatePostOperation = auth.Authenticated(huma.Operation{
 	Summary:     "Edit your feed post",
 	Description: "Only fields that are sent change. Type, target university and media cannot change.",
 	Tags:        []string{"feed"},
-	Errors:      []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
 func (h *postHandler) updatePost(ctx context.Context, in *updatePostInput) (*postOutput, error) {
@@ -345,7 +347,7 @@ var deletePostOperation = auth.Authenticated(huma.Operation{
 	Description:   "Deletes the post with its comments, likes and media.",
 	Tags:          []string{"feed"},
 	DefaultStatus: http.StatusNoContent,
-	Errors:        []int{http.StatusForbidden, http.StatusNotFound},
+	Errors:        []int{http.StatusNotFound},
 })
 
 func (h *postHandler) deletePost(ctx context.Context, in *postPath) (*struct{}, error) {

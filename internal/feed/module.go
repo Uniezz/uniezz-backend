@@ -12,15 +12,28 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const (
+	postBurstLimit     = 1
+	postBurstWindow    = 2 * time.Minute
+	postLimit          = 5
+	postWindow         = time.Hour
+	commentBurstLimit  = 5
+	commentBurstWindow = time.Minute
+	commentLimit       = 100
+	commentWindow      = time.Hour
+)
+
 var (
 	_ mediaService  = media.Module{}
 	_ rewardService = rewards.Module{}
+	_ limiter       = (*ratelimit.Limiter)(nil)
 )
 
 type mediaService interface {
@@ -36,28 +49,40 @@ type rewardService interface {
 	Progress(ctx context.Context, userID uuid.UUID, quest rewards.Quest) (int, error)
 }
 
+type limiter interface {
+	Allow(ctx context.Context, key string) error
+}
+
 type Module struct {
-	tx       database.Transactor
-	posts    *postRepository
-	comments *commentRepository
-	likes    *likeRepository
-	keys     *requestKeyRepository
-	media    mediaService
-	rewards  rewardService
-	jobs     *jobs.Runner
+	tx            database.Transactor
+	posts         *postRepository
+	comments      *commentRepository
+	likes         *likeRepository
+	keys          *requestKeyRepository
+	media         mediaService
+	rewards       rewardService
+	jobs          *jobs.Runner
+	postBursts    limiter
+	postsHourly   limiter
+	commentBursts limiter
+	commentHourly limiter
 }
 
 func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
-		tx:       db,
-		posts:    newPostRepository(db),
-		comments: newCommentRepository(db),
-		likes:    newLikeRepository(db),
-		keys:     newRequestKeyRepository(db),
-		media:    mediaModule,
-		rewards:  rewardsModule,
-		jobs:     runner,
+		tx:            db,
+		posts:         newPostRepository(db),
+		comments:      newCommentRepository(db),
+		likes:         newLikeRepository(db),
+		keys:          newRequestKeyRepository(db),
+		media:         mediaModule,
+		rewards:       rewardsModule,
+		jobs:          runner,
+		postBursts:    ratelimit.New(pool, "feed-post-burst", postBurstLimit, postBurstWindow),
+		postsHourly:   ratelimit.New(pool, "feed-post", postLimit, postWindow),
+		commentBursts: ratelimit.New(pool, "feed-comment-burst", commentBurstLimit, commentBurstWindow),
+		commentHourly: ratelimit.New(pool, "feed-comment", commentLimit, commentWindow),
 	}
 
 	if err := jobs.Register(runner, m.pruneKeys, jobs.Options{Timeout: time.Minute, MaxAttempts: 3}); err != nil {
