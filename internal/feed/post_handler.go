@@ -283,7 +283,7 @@ var getPostOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/feed/posts/{id}",
 	Summary:     "Get a feed post",
-	Description: "A post by a banned student or by a student blocked in either direction is not found.",
+	Description: "A post by a banned student, by a student blocked in either direction, or hidden after reports is not found. Its author still sees a hidden post.",
 	Tags:        []string{"feed"},
 	Errors:      []int{http.StatusNotFound},
 })

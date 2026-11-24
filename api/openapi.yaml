@@ -6633,7 +6633,7 @@ paths:
       tags:
         - feed
     get:
-      description: A post by a banned student or by a student blocked in either direction is not found.
+      description: A post by a banned student, by a student blocked in either direction, or hidden after reports is not found. Its author still sees a hidden post.
       operationId: getFeedPost
       parameters:
         - in: path
