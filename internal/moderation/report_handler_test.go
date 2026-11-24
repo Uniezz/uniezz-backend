@@ -49,6 +49,23 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 type fakeTargets struct {
 	authors map[uuid.UUID]uuid.UUID
 	removed map[uuid.UUID]string
+	hidden  *sync.Map
+}
+
+func (f fakeTargets) HideReported(_ context.Context, _ string, id uuid.UUID) error {
+	f.hidden.Store(id, true)
+	return nil
+}
+
+func (f fakeTargets) RestoreReported(_ context.Context, _ string, id uuid.UUID) error {
+	f.hidden.Store(id, false)
+	return nil
+}
+
+func (f fakeTargets) isHidden(id uuid.UUID) bool {
+	v, _ := f.hidden.Load(id)
+	hidden, _ := v.(bool)
+	return hidden
 }
 
 func (f fakeTargets) RemovePost(_ context.Context, id uuid.UUID) error {
@@ -146,7 +163,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	pool := setupTestDB(t)
 	e := &testEnv{
 		pool:       pool,
-		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}, removed: map[uuid.UUID]string{}},
+		targets:    fakeTargets{authors: map[uuid.UUID]uuid.UUID{}, removed: map[uuid.UUID]string{}, hidden: &sync.Map{}},
 		users:      fakeProfiles{users: map[uuid.UUID]bool{}},
 		candidates: fakeCandidates{users: map[uuid.UUID]uuid.UUID{}, hidden: map[uuid.UUID][]uuid.UUID{}},
 		messages:   fakeChat{authors: map[uuid.UUID]uuid.UUID{}},

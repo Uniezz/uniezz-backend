@@ -6633,7 +6633,7 @@ paths:
       tags:
         - feed
     get:
-      description: A post by a banned student or by a student blocked in either direction is not found.
+      description: A post by a banned student, by a student blocked in either direction, or hidden after reports is not found. Its author still sees a hidden post.
       operationId: getFeedPost
       parameters:
         - in: path
@@ -7849,7 +7849,7 @@ paths:
       tags:
         - moderation
     patch:
-      description: Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Sending the current status again changes nothing. Moderators and admins only.
+      description: Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Dismissing reports on a hidden post or comment shows it again, and further reports do not hide it until its author edits it. Sending the current status again changes nothing.
       operationId: updateReport
       parameters:
         - in: path
@@ -8709,7 +8709,7 @@ paths:
         - profile
   /reports:
     post:
-      description: One report per target and reporter; at most 5 reports per clock hour (UTC).
+      description: One report per target and reporter; at most 5 reports per clock hour (UTC). A post or comment with 3 pending reports is hidden from everyone but its author until a moderator dismisses them.
       operationId: createReport
       requestBody:
         content:

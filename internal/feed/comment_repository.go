@@ -65,7 +65,7 @@ func newCommentRepository(db database.DB) *commentRepository {
 }
 
 func (r *commentRepository) get(ctx context.Context, viewerID, commentID uuid.UUID) (*commentRow, error) {
-	c, err := scanComment(r.db.Conn(ctx).QueryRow(ctx, commentSelect+` WHERE c.id = $2 AND `+notHidden("$1", "c.author_id"), viewerID, commentID))
+	c, err := scanComment(r.db.Conn(ctx).QueryRow(ctx, commentSelect+` WHERE c.id = $2 AND `+notHidden("$1", "c"), viewerID, commentID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -91,7 +91,7 @@ func (r *commentRepository) list(ctx context.Context, where string, viewerID, sc
 	}
 
 	rows, err := r.db.Conn(ctx).Query(ctx, commentSelect+`
-		WHERE `+where+` AND `+notHidden("$1", "c.author_id")+`
+		WHERE `+where+` AND `+notHidden("$1", "c")+`
 		ORDER BY c.created_at, c.id
 		LIMIT $3`, args...)
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *commentRepository) visible(ctx context.Context, viewerID, commentID uui
 	query := `
 		SELECT EXISTS (
 			SELECT 1 FROM feed_comments c JOIN feed_posts p ON p.id = c.post_id
-			WHERE c.id = $2 AND ` + notHidden("$1", "c.author_id") + ` AND ` + notHidden("$1", "p.author_id") + `)`
+			WHERE c.id = $2 AND ` + notHidden("$1", "c") + ` AND ` + notHidden("$1", "p") + `)`
 	var found bool
 	if err := r.db.Conn(ctx).QueryRow(ctx, query, viewerID, commentID).Scan(&found); err != nil {
 		return fmt.Errorf("check comment: %w", err)
@@ -269,7 +269,7 @@ func (r *commentRepository) insert(ctx context.Context, c newComment) error {
 }
 
 func (r *commentRepository) update(ctx context.Context, commentID uuid.UUID, content string) error {
-	_, err := r.db.Conn(ctx).Exec(ctx, `UPDATE feed_comments SET content = $2, edited_at = NOW() WHERE id = $1`, commentID, content)
+	_, err := r.db.Conn(ctx).Exec(ctx, `UPDATE feed_comments SET content = $2, edited_at = NOW(), hide_cleared_at = NULL WHERE id = $1`, commentID, content)
 	if err != nil {
 		return fmt.Errorf("update comment: %w", err)
 	}
@@ -323,4 +323,20 @@ func (r *commentRepository) reportTarget(ctx context.Context, commentID uuid.UUI
 		return uuid.Nil, nil, fmt.Errorf("get reported comment: %w", err)
 	}
 	return authorID, map[string]any{"postId": postID, "content": content}, nil
+}
+
+func (r *commentRepository) hide(ctx context.Context, commentID uuid.UUID) error {
+	const query = `UPDATE feed_comments SET hidden_at = NOW() WHERE id = $1 AND hidden_at IS NULL AND hide_cleared_at IS NULL`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, commentID); err != nil {
+		return fmt.Errorf("hide comment: %w", err)
+	}
+	return nil
+}
+
+func (r *commentRepository) restore(ctx context.Context, commentID uuid.UUID) error {
+	const query = `UPDATE feed_comments SET hidden_at = NULL, hide_cleared_at = NOW() WHERE id = $1`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, commentID); err != nil {
+		return fmt.Errorf("restore comment: %w", err)
+	}
+	return nil
 }

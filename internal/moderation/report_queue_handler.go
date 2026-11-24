@@ -96,7 +96,7 @@ var updateReportOperation = auth.Authorized(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/moderation/reports/{id}",
 	Summary:     "Resolve a report about a post, comment, student, exam file or course",
-	Description: "Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Sending the current status again changes nothing. Moderators and admins only.",
+	Description: "Sets the status of this report and of every other pending report on the same target, so one decision clears them all. Dismissing reports on a hidden post or comment shows it again, and further reports do not hide it until its author edits it. Sending the current status again changes nothing.",
 	Tags:        []string{"moderation"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 }, auth.RoleModerator, auth.RoleAdmin)
