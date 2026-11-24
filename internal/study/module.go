@@ -52,6 +52,7 @@ type Module struct {
 	files      *fileRepository
 	comments   *commentRepository
 	professors *professorRepository
+	reviews    *professorReviewRepository
 	media      mediaService
 	rewards    rewardService
 	limiter    limiter
@@ -66,6 +67,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardServi
 		files:      newFileRepository(db),
 		comments:   newCommentRepository(db),
 		professors: newProfessorRepository(db),
+		reviews:    newProfessorReviewRepository(db),
 		media:      mediaModule,
 		rewards:    rewardsModule,
 		limiter:    ratelimit.New(pool, "study-create", createLimit, createWindow),
