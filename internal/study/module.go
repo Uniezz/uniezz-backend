@@ -91,6 +91,7 @@ func (m Module) Register(api huma.API) {
 	files := &fileHandler{study: m}
 	comments := &commentHandler{study: m}
 	professors := &professorHandler{study: m}
+	reviews := &professorReviewHandler{study: m}
 
 	huma.Register(api, createCourseOperation, courses.createCourse)
 	huma.Register(api, listCoursesOperation, courses.listCourses)
@@ -109,4 +110,7 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, listProfessorsOperation, professors.listProfessors)
 	huma.Register(api, getProfessorOperation, professors.getProfessor)
 	huma.Register(api, rateProfessorOperation, professors.rateProfessor)
+	huma.Register(api, reviewProfessorOperation, reviews.reviewProfessor)
+	huma.Register(api, listProfessorReviewsOperation, reviews.listProfessorReviews)
+	huma.Register(api, deleteMyProfessorReviewOperation, reviews.deleteMyProfessorReview)
 }

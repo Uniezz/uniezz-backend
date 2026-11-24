@@ -35,6 +35,9 @@ func TestCourseEndpointsNeedSession(t *testing.T) {
 		{"list professors", http.MethodGet, "/study/professors"},
 		{"get professor", http.MethodGet, "/study/professors/" + id},
 		{"rate professor", http.MethodPut, "/study/professors/" + id + "/rating"},
+		{"review professor", http.MethodPut, "/study/professors/" + id + "/review"},
+		{"list professor reviews", http.MethodGet, "/study/professors/" + id + "/reviews"},
+		{"delete professor review", http.MethodDelete, "/study/professors/" + id + "/review"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+" without a session is 401", func(t *testing.T) {
