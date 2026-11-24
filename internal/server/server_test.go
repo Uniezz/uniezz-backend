@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -41,8 +42,9 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("returns the module error instead of panicking", func(t *testing.T) {
-		if _, err := New(context.Background(), nil, productionConfig(nil)); err == nil {
-			t.Error("expected an error for missing USOS credentials in production, got nil")
+		empty := map[string]config.UsosCredentials{"umcs": {BaseURL: "https://apps.umcs.pl"}}
+		if _, err := New(context.Background(), nil, productionConfig(empty)); err == nil {
+			t.Error("expected an error for empty USOS credentials, got nil")
 		}
 	})
 }
@@ -67,7 +69,8 @@ func TestModules_OnlyAuthRoutesArePublic(t *testing.T) {
 			if op == nil {
 				continue
 			}
-			public := strings.HasPrefix(path, "/auth/") && !strings.HasPrefix(path, "/auth/invites/")
+			adminWrite := strings.HasPrefix(path, "/auth/universities") && op.Method != http.MethodGet
+			public := strings.HasPrefix(path, "/auth/") && !strings.HasPrefix(path, "/auth/invites/") && !adminWrite
 			if hasBearer := len(op.Security) > 0; hasBearer == public {
 				t.Errorf("%s %s: public=%v but security=%v", op.Method, path, public, op.Security)
 			}

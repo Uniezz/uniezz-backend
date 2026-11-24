@@ -56,6 +56,7 @@ type Module struct {
 	rewards    rewardService
 	limiter    limiter
 	radon      *radonClient
+	jobs       *jobs.Runner
 }
 
 func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
@@ -70,16 +71,17 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardServi
 		rewards:    rewardsModule,
 		limiter:    ratelimit.New(pool, "study-create", createLimit, createWindow),
 		radon:      newRadonClient(radonEmployeesURL),
+		jobs:       runner,
 	}
 
 	if err := jobs.Register(runner, m.importProfessors, jobs.Options{Timeout: importTimeout, MaxAttempts: importAttempts}); err != nil {
 		return Module{}, fmt.Errorf("study: %w", err)
 	}
-	for _, institution := range radonInstitutions {
-		args := ImportProfessorsArgs{University: institution.university}
-		if err := jobs.Schedule(runner, args.scheduleName(), args, importInterval); err != nil {
-			return Module{}, fmt.Errorf("study: %w", err)
-		}
+	if err := jobs.Register(runner, m.importAllProfessors, jobs.Options{Timeout: importAllTimeout, MaxAttempts: importAttempts}); err != nil {
+		return Module{}, fmt.Errorf("study: %w", err)
+	}
+	if err := jobs.Schedule(runner, importAllSchedule, ImportAllProfessorsArgs{}, importInterval); err != nil {
+		return Module{}, fmt.Errorf("study: %w", err)
 	}
 	return m, nil
 }

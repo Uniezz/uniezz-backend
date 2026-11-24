@@ -3,7 +3,6 @@ package study
 import (
 	"context"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -45,7 +44,7 @@ func (c courseChange) fields() (courseFields, error) {
 	if !validDifficulty(c.Difficulty) || c.Semester < minSemester || c.Semester > maxSemester {
 		return courseFields{}, ErrInvalidInput
 	}
-	if _, err := auth.GetUniversityByID(auth.UniversityID(c.UniversityID)); err != nil {
+	if c.UniversityID == "" {
 		return courseFields{}, ErrInvalidInput
 	}
 	f.Difficulty = c.Difficulty
@@ -97,11 +96,6 @@ type courseQuery struct {
 }
 
 func (q courseQuery) filter() (courseFilter, error) {
-	if q.UniversityID != "" {
-		if _, err := auth.GetUniversityByID(auth.UniversityID(q.UniversityID)); err != nil {
-			return courseFilter{}, ErrInvalidInput
-		}
-	}
 	if q.Semester != 0 && (q.Semester < minSemester || q.Semester > maxSemester) {
 		return courseFilter{}, ErrInvalidInput
 	}

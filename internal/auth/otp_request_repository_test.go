@@ -21,14 +21,14 @@ func newTestOTPEmail() string {
 
 func mustCreateOTP(t *testing.T, repo *otpRequestRepository, email, code string) {
 	t.Helper()
-	req := otpRequest{UniversityID: UniversityKUL, Email: email, CodeHash: testOTPHasher.hash(code)}
+	req := otpRequest{UniversityID: uniKUL, Email: email, CodeHash: testOTPHasher.hash(code)}
 	if err := repo.create(context.Background(), req, 10*time.Minute); err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
 }
 
 func verifyOTP(repo *otpRequestRepository, email, code string) error {
-	return repo.verify(context.Background(), UniversityKUL, email, testOTPHasher.hash(code))
+	return repo.verify(context.Background(), uniKUL, email, testOTPHasher.hash(code))
 }
 
 func execTest(t *testing.T, pool *pgxpool.Pool, query string, args ...any) {

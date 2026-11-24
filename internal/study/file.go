@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
@@ -63,11 +62,6 @@ type fileQuery struct {
 }
 
 func (q fileQuery) filter() (fileFilter, error) {
-	if q.UniversityID != "" {
-		if _, err := auth.GetUniversityByID(auth.UniversityID(q.UniversityID)); err != nil {
-			return fileFilter{}, ErrInvalidInput
-		}
-	}
 	if q.Semester != 0 && (q.Semester < minSemester || q.Semester > maxSemester) {
 		return fileFilter{}, ErrInvalidInput
 	}

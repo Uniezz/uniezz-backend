@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/Uniezz/uniezz-backend/internal/database"
 )
 
 func TestRadonLive(t *testing.T) {
@@ -14,8 +16,12 @@ func TestRadonLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), importTimeout)
 	defer cancel()
 
+	institutions, err := newProfessorRepository(database.New(setupTestDB(t))).radonInstitutions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := newRadonClient(radonEmployeesURL)
-	for _, institution := range radonInstitutions {
+	for _, institution := range institutions {
 		started := time.Now()
 		employees, err := client.employees(ctx, institution.id)
 		if err != nil {

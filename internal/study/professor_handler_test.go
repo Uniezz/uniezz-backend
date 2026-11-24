@@ -43,8 +43,11 @@ func TestListProfessors(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown university is invalid input", func(t *testing.T) {
+	t.Run("an unknown university lists no professors", func(t *testing.T) {
 		viewer := e.student(t)
-		expectError(t, e.api.Get("/study/professors?universityId=nowhere", viewer.bearer), http.StatusBadRequest, "invalid_input")
+		page := decode[itemPage[Professor]](t, e.api.Get("/study/professors?universityId=nowhere", viewer.bearer), http.StatusOK)
+		if len(page.Items) != 0 {
+			t.Errorf("expected no professors, got %d", len(page.Items))
+		}
 	})
 }

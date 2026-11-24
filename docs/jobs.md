@@ -57,7 +57,7 @@ err := jobs.Schedule(runner, "media-cleanup", CleanupArgs{}, time.Hour)
 
 Every poll interval the runner computes the current slot (`now` truncated to the interval) and inserts one job with `unique_key = <name>@<slot>`. The unique index makes the insert a no-op when the slot already has a job, so the task runs once per slot however many API instances run, and a restart does not repeat it. The job then goes through the normal queue: retries, leases and Sentry reports apply. A slot can start up to one poll interval late.
 
-The name is a lowercase slug of at most 50 characters, unique per schedule. One task can have several schedules with different args, as `study` has one import per university (`study-import-professors-umcs`, …).
+The name is a lowercase slug of at most 50 characters, unique per schedule. One task can have several schedules with different args. A set of targets that changes at runtime gets one schedule whose task enqueues a job per target, as `study-import-professors` does for every university with a POL-on institution.
 
 Every run of a scheduled job is a Sentry Crons check-in under the schedule's name: `in_progress` when it starts, then `ok` or `error`. The first check-in creates the monitor with the interval, a 15-minute margin and the task's timeout as its maximum runtime, so nothing is set up in Sentry by hand. A monitor opens an issue only after `MaxAttempts` failed runs in a row, or when a slot is missed. Jobs enqueued with `Enqueue` send no check-ins.
 

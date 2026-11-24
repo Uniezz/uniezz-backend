@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -228,7 +229,7 @@ func TestRadonClient(t *testing.T) {
 }
 
 func TestProfessorsAt(t *testing.T) {
-	institution := radonInstitution{university: auth.UniversityUMCS, id: uuid.New()}
+	institution := radonInstitution{university: auth.UniversityID("umcs"), id: uuid.New()}
 	post := uuid.New()
 	employee := func(id, first, last string, posts ...uuid.UUID) radonEmployee {
 		var e radonEmployee
@@ -253,4 +254,56 @@ func TestProfessorsAt(t *testing.T) {
 	if len(got) != 1 || got[0].ExternalID != post || got[0].Name != "Anna Nowak" {
 		t.Fatalf("professors = %#v", got)
 	}
+}
+
+func TestImportAllProfessors(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+
+	addUniversity := func(t *testing.T, radonID *uuid.UUID) string {
+		t.Helper()
+		id := "t-" + uuid.NewString()[:8]
+		_, err := e.pool.Exec(ctx, `INSERT INTO universities (id, name, auth_type, position, radon_institution_id) VALUES ($1, 'Testowa Uczelnia', 'USOS', 100, $2)`, id, radonID)
+		if err != nil {
+			t.Fatalf("insert university: %v", err)
+		}
+		t.Cleanup(func() {
+			_, _ = e.pool.Exec(context.Background(), "DELETE FROM jobs WHERE kind = $1 AND payload->>'university' = $2", ImportProfessorsArgs{}.Kind(), id)
+			_, _ = e.pool.Exec(context.Background(), "DELETE FROM universities WHERE id = $1", id)
+		})
+		return id
+	}
+	queued := func(t *testing.T, university string) int {
+		t.Helper()
+		var n int
+		err := e.pool.QueryRow(ctx, "SELECT count(*) FROM jobs WHERE kind = $1 AND payload->>'university' = $2", ImportProfessorsArgs{}.Kind(), university).Scan(&n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	t.Run("queues an import for every university with a POL-on institution", func(t *testing.T) {
+		radonID := uuid.New()
+		with := addUniversity(t, &radonID)
+		without := addUniversity(t, nil)
+
+		if err := e.module.importAllProfessors(ctx, ImportAllProfessorsArgs{}); err != nil {
+			t.Fatalf("importAllProfessors: %v", err)
+		}
+		if n := queued(t, with); n != 1 {
+			t.Errorf("imports queued for %s = %d, want 1", with, n)
+		}
+		if n := queued(t, without); n != 0 {
+			t.Errorf("imports queued for %s = %d, want 0", without, n)
+		}
+	})
+
+	t.Run("a university without a POL-on institution fails for good", func(t *testing.T) {
+		without := addUniversity(t, nil)
+		err := e.module.importProfessors(ctx, ImportProfessorsArgs{University: auth.UniversityID(without)})
+		if err == nil || !strings.Contains(err.Error(), "no POL-on institution") {
+			t.Errorf("importProfessors = %v, want a permanent error", err)
+		}
+	})
 }

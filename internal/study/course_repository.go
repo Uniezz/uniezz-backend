@@ -87,10 +87,14 @@ func scanCourse(row pgx.Row) (*courseRow, error) {
 func (r *courseRepository) create(ctx context.Context, authorID uuid.UUID, f courseFields) (*courseRow, error) {
 	const query = `
 		INSERT INTO courses (author_id, name, description, difficulty, university_id, faculty, subject, semester)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		SELECT $1, $2, $3, $4, $5::text, $6, $7, $8
+		WHERE EXISTS (SELECT 1 FROM supported_universities WHERE id = $5::text)
 		RETURNING ` + courseColumns + `, NULL::smallint`
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query,
 		authorID, f.Name, f.Description, f.Difficulty, f.UniversityID, f.Faculty, f.Subject, f.Semester))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvalidInput
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create course: %w", err)
 	}

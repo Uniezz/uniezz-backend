@@ -1053,6 +1053,70 @@ components:
         - targetId
         - reason
       type: object
+    CreateUniversityInputBody:
+      additionalProperties: false
+      properties:
+        authMethod:
+          description: How students log in
+          enum:
+            - USOS
+            - OTP
+          examples:
+            - OTP
+          type: string
+        domains:
+          description: Student email domains accepted for OTP login, at least one for OTP universities
+          examples:
+            - - student.kul.pl
+          items:
+            type: string
+          maxItems: 20
+          type:
+            - array
+            - "null"
+        faculties:
+          description: Faculties in display order
+          items:
+            $ref: "#/components/schemas/FacultyRequest"
+          maxItems: 50
+          type:
+            - array
+            - "null"
+        id:
+          description: Lowercase slug that identifies the university; it cannot change
+          examples:
+            - kul
+          maxLength: 32
+          minLength: 1
+          pattern: ^[a-z0-9][a-z0-9-]*$
+          type: string
+        name:
+          description: 3 to 200 characters after cleaning
+          examples:
+            - Katolicki Uniwersytet Lubelski Jana Pawła II
+          maxLength: 500
+          minLength: 1
+          type: string
+        position:
+          description: Display order, lowest first
+          examples:
+            - 3
+          format: int64
+          maximum: 10000
+          minimum: 0
+          type: integer
+        radonInstitutionId:
+          description: POL-on institution whose professors are imported; omit to import none
+          format: uuid
+          type: string
+      required:
+        - id
+        - name
+        - authMethod
+        - position
+        - domains
+        - faculties
+      type: object
     CreateUploadInputBody:
       additionalProperties: false
       properties:
@@ -1178,7 +1242,7 @@ components:
       required:
         - code
       type: object
-    FacultyDTO:
+    Faculty:
       additionalProperties: false
       properties:
         address:
@@ -1187,7 +1251,7 @@ components:
             - pl. Marii Curie-Skłodowskiej 2
           type: string
         location:
-          $ref: "#/components/schemas/GeoPointDTO"
+          $ref: "#/components/schemas/GeoPoint"
           description: Geographic location of the faculty building
         name:
           description: Display name of the faculty
@@ -1198,6 +1262,45 @@ components:
         - name
         - address
         - location
+      type: object
+    FacultyRequest:
+      additionalProperties: false
+      properties:
+        address:
+          description: Up to 200 characters after cleaning
+          examples:
+            - pl. Marii Curie-Skłodowskiej 2
+          maxLength: 500
+          minLength: 1
+          type: string
+        latitude:
+          description: Latitude in decimal degrees (WGS 84)
+          examples:
+            - 51.24513
+          format: double
+          maximum: 90
+          minimum: -90
+          type: number
+        longitude:
+          description: Longitude in decimal degrees (WGS 84)
+          examples:
+            - 22.54247
+          format: double
+          maximum: 180
+          minimum: -180
+          type: number
+        name:
+          description: 3 to 200 characters after cleaning
+          examples:
+            - Wydział Chemii
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - name
+        - address
+        - latitude
+        - longitude
       type: object
     FeaturedPost:
       additionalProperties: false
@@ -1236,7 +1339,7 @@ components:
       required:
         - items
       type: object
-    GeoPointDTO:
+    GeoPoint:
       additionalProperties: false
       properties:
         latitude:
@@ -3045,7 +3148,7 @@ components:
         - universityId
         - avatarUrl
       type: object
-    UniversityDTO:
+    University:
       additionalProperties: false
       properties:
         authMethod:
@@ -3054,7 +3157,7 @@ components:
             - USOS
           type: string
         domains:
-          description: Allowed student email domains for OTP authentication
+          description: Allowed student email domains for OTP authentication; empty for USOS universities
           examples:
             - - student.kul.pl
           items:
@@ -3065,7 +3168,7 @@ components:
         faculties:
           description: Faculties of the university with their locations
           items:
-            $ref: "#/components/schemas/FacultyDTO"
+            $ref: "#/components/schemas/Faculty"
           type:
             - array
             - "null"
@@ -3079,10 +3182,80 @@ components:
           examples:
             - Uniwersytet Marii Curie-Skłodowskiej
           type: string
+        position:
+          description: Display order, lowest first
+          examples:
+            - 1
+          format: int64
+          type: integer
+        radonInstitutionId:
+          description: POL-on institution whose professors are imported; null when none are imported
+          format: uuid
+          type:
+            - string
+            - "null"
       required:
         - id
         - name
         - authMethod
+        - position
+        - radonInstitutionId
+        - domains
+        - faculties
+      type: object
+    UniversityRequest:
+      additionalProperties: false
+      properties:
+        authMethod:
+          description: How students log in
+          enum:
+            - USOS
+            - OTP
+          examples:
+            - OTP
+          type: string
+        domains:
+          description: Student email domains accepted for OTP login, at least one for OTP universities
+          examples:
+            - - student.kul.pl
+          items:
+            type: string
+          maxItems: 20
+          type:
+            - array
+            - "null"
+        faculties:
+          description: Faculties in display order
+          items:
+            $ref: "#/components/schemas/FacultyRequest"
+          maxItems: 50
+          type:
+            - array
+            - "null"
+        name:
+          description: 3 to 200 characters after cleaning
+          examples:
+            - Uniwersytet Marii Curie-Skłodowskiej
+          maxLength: 500
+          minLength: 1
+          type: string
+        position:
+          description: Display order, lowest first
+          examples:
+            - 1
+          format: int64
+          maximum: 10000
+          minimum: 0
+          type: integer
+        radonInstitutionId:
+          description: POL-on institution whose professors are imported; omit to import none
+          format: uuid
+          type: string
+      required:
+        - name
+        - authMethod
+        - position
+        - domains
         - faculties
       type: object
     UpdateChallengeInputBody:
@@ -3712,7 +3885,7 @@ paths:
         - auth
   /auth/universities:
     get:
-      description: Lists every university the app supports, in display order, with how its students log in.
+      description: Lists every university the app supports, in display order, with how its students log in. The list is short by design and not paginated.
       operationId: getUniversities
       responses:
         "200":
@@ -3720,7 +3893,7 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: "#/components/schemas/UniversityDTO"
+                  $ref: "#/components/schemas/University"
                 type:
                   - array
                   - "null"
@@ -3732,6 +3905,177 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
           description: Error
       summary: Get the list of supported universities
+      tags:
+        - auth
+    post:
+      description: Students can log in to it right away. A domain belongs to one university only. Admins only.
+      operationId: createUniversity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUniversityInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/University"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Add a supported university
+      tags:
+        - auth
+  /auth/universities/{id}:
+    get:
+      operationId: getUniversity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            examples:
+              - umcs
+            maxLength: 32
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/University"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      summary: Get a supported university
+      tags:
+        - auth
+    put:
+      description: Every field is replaced, so send the full lists of domains and faculties. Students who already signed up keep their accounts. Admins only.
+      operationId: replaceUniversity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            examples:
+              - kul
+            maxLength: 32
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UniversityRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/University"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer:
+            - admin
+      summary: Replace a supported university's name, login method, domains and faculties
       tags:
         - auth
   /auth/usos/callback:

@@ -106,7 +106,7 @@ func newTestUsosLogin() (*usosLogin, *fakeUSOS, *fakeStateStore) {
 		user:         activeStudent(),
 	}
 	states := newFakeStateStore()
-	login := newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, states)
+	login := newUsosLogin(map[UniversityID]usosClient{uniUMCS: client}, states, testUniversities)
 	return login, client, states
 }
 
@@ -116,7 +116,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("returns the authorize URL and remembers the state", func(t *testing.T) {
 		login, client, states := newTestUsosLogin()
 
-		url, err := login.start(ctx, UniversityUMCS, PlatformMobile, "")
+		url, err := login.start(ctx, uniUMCS, PlatformMobile, "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -128,7 +128,7 @@ func TestUsosLogin_Start(t *testing.T) {
 		if !ok {
 			t.Fatal("expected the state to be saved under the request token")
 		}
-		want := usosState{RequestToken: client.rt, UniversityID: UniversityUMCS, Platform: PlatformMobile}
+		want := usosState{RequestToken: client.rt, UniversityID: uniUMCS, Platform: PlatformMobile}
 		if st != want {
 			t.Errorf("saved state mismatch:\nexpected %+v\ngot      %+v", want, st)
 		}
@@ -137,7 +137,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("rejects an OTP university without calling USOS", func(t *testing.T) {
 		login, client, _ := newTestUsosLogin()
 
-		_, err := login.start(ctx, UniversityKUL, PlatformWeb, "")
+		_, err := login.start(ctx, uniKUL, PlatformWeb, "")
 		if !errors.Is(err, ErrWrongAuthMethod) {
 			t.Fatalf("expected ErrWrongAuthMethod, got: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestUsosLogin_Start(t *testing.T) {
 	t.Run("fails for a USOS university with no configured client", func(t *testing.T) {
 		login, _, _ := newTestUsosLogin()
 
-		_, err := login.start(ctx, UniversityUMLub, PlatformWeb, "")
+		_, err := login.start(ctx, uniUMLub, PlatformWeb, "")
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -169,7 +169,7 @@ func TestUsosLogin_Start(t *testing.T) {
 		cause := errors.New("oauth1: invalid status 401")
 		client.beginErr = cause
 
-		_, err := login.start(ctx, UniversityUMCS, PlatformWeb, "")
+		_, err := login.start(ctx, uniUMCS, PlatformWeb, "")
 		if !errors.Is(err, ErrUpstream) {
 			t.Errorf("expected ErrUpstream, got: %v", err)
 		}
@@ -186,7 +186,7 @@ func TestUsosLogin_Start(t *testing.T) {
 		cause := errors.New("connection refused")
 		states.saveErr = cause
 
-		_, err := login.start(ctx, UniversityUMCS, PlatformWeb, "")
+		_, err := login.start(ctx, uniUMCS, PlatformWeb, "")
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -204,7 +204,7 @@ func TestUsosLogin_Finish(t *testing.T) {
 
 	startLogin := func(t *testing.T, login *usosLogin, platform Platform) {
 		t.Helper()
-		if _, err := login.start(ctx, UniversityUMCS, platform, ""); err != nil {
+		if _, err := login.start(ctx, uniUMCS, platform, ""); err != nil {
 			t.Fatalf("start failed: %v", err)
 		}
 	}
@@ -219,7 +219,7 @@ func TestUsosLogin_Finish(t *testing.T) {
 		}
 
 		want := Identity{
-			UniversityID: UniversityUMCS,
+			UniversityID: uniUMCS,
 			UsosUserID:   "123456",
 			Email:        "jan@umcs.pl",
 			FirstName:    "Jan",

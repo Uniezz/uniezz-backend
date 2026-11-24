@@ -421,11 +421,19 @@ func TestListPosts(t *testing.T) {
 		}
 	})
 
+	t.Run("an unknown university matches no posts", func(t *testing.T) {
+		page := decode[postPage](t, e.api.Get("/feed/posts?university=nowhere&limit=50", author.bearer), 200)
+		for _, p := range page.Items {
+			if p.University != "all" {
+				t.Errorf("post %s targets %q", p.Title, p.University)
+			}
+		}
+	})
+
 	t.Run("rejects bad queries", func(t *testing.T) {
 		expectError(t, e.api.Get("/feed/posts?cursor=not-a-cursor", author.bearer), 400, "invalid_cursor")
 		expectError(t, e.api.Get("/feed/posts?beforeCursor=not-a-cursor", author.bearer), 400, "invalid_cursor")
 		expectError(t, e.api.Get("/feed/posts?cursor=x&beforeCursor=y", author.bearer), 400, "invalid_input")
-		expectError(t, e.api.Get("/feed/posts?university=nowhere", author.bearer), 400, "invalid_input")
 		expectError(t, e.api.Get("/feed/posts?from=2026-01-02T00:00:00Z&to=2026-01-01T00:00:00Z", author.bearer), 400, "invalid_input")
 		expectError(t, e.api.Get("/feed/posts?limit=51", author.bearer), 400, "invalid_input")
 	})

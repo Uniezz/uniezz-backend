@@ -61,10 +61,10 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	})
 
 	sessions := NewSessionRepository(database.New(pool))
-	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), time.Hour)
+	logins := newLogins(database.New(pool), NewUserRepository(database.New(pool)), sessions, newLoginCodeRepository(database.New(pool)), newUniversityRepository(database.New(pool)), time.Hour)
 
 	m := Module{
-		usos:              newUsosLogin(map[UniversityID]usosClient{UniversityUMCS: client}, newUsosStateRepository(database.New(pool))),
+		usos:              newUsosLogin(map[UniversityID]usosClient{uniUMCS: client}, newUsosStateRepository(database.New(pool)), newUniversityRepository(database.New(pool))),
 		logins:            logins,
 		webRedirectURL:    testWebRedirectURL,
 		mobileRedirectURL: testMobileRedirectURL,

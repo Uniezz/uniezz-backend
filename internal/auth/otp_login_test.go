@@ -70,7 +70,7 @@ type otpLoginFixture struct {
 
 func newOTPLoginFixture() otpLoginFixture {
 	f := otpLoginFixture{store: &fakeOTPStore{}, sender: &fakeOTPSender{}, limiter: &fakeLimiter{}}
-	f.login = newOTPLogin(f.store, f.sender, f.limiter, newOTPHasher([]byte("test-key")), []string{"tester@gmail.com"})
+	f.login = newOTPLogin(f.store, testUniversities, f.sender, f.limiter, newOTPHasher([]byte("test-key")), []string{"tester@gmail.com"})
 	return f
 }
 
@@ -80,7 +80,7 @@ func TestOTPLogin_Request(t *testing.T) {
 	t.Run("stores the hash of the code it sends", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		if err := f.login.request(ctx, UniversityKUL, " Jan@Student.KUL.pl "); err != nil {
+		if err := f.login.request(ctx, uniKUL, " Jan@Student.KUL.pl "); err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 
@@ -91,7 +91,7 @@ func TestOTPLogin_Request(t *testing.T) {
 			t.Fatalf("expected 1 stored request, got %d", len(f.store.created))
 		}
 		got := f.store.created[0]
-		if got.UniversityID != UniversityKUL || got.Email != "jan@student.kul.pl" {
+		if got.UniversityID != uniKUL || got.Email != "jan@student.kul.pl" {
 			t.Errorf("unexpected stored request: %+v", got)
 		}
 		if !bytes.Equal(got.CodeHash, f.login.hasher.hash(f.sender.code)) {
@@ -108,7 +108,7 @@ func TestOTPLogin_Request(t *testing.T) {
 	t.Run("limits per university and normalized email", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		if err := f.login.request(ctx, UniversityKUL, "Jan@Student.KUL.pl"); err != nil {
+		if err := f.login.request(ctx, uniKUL, "Jan@Student.KUL.pl"); err != nil {
 			t.Fatal(err)
 		}
 		if len(f.limiter.keys) != 1 || f.limiter.keys[0] != "kul:jan@student.kul.pl" {
@@ -120,7 +120,7 @@ func TestOTPLogin_Request(t *testing.T) {
 		f := newOTPLoginFixture()
 		f.limiter.err = ratelimit.ErrLimited
 
-		err := f.login.request(ctx, UniversityKUL, "jan@student.kul.pl")
+		err := f.login.request(ctx, uniKUL, "jan@student.kul.pl")
 		if !errors.Is(err, ErrRateLimited) {
 			t.Fatalf("expected ErrRateLimited, got: %v", err)
 		}
@@ -133,7 +133,7 @@ func TestOTPLogin_Request(t *testing.T) {
 		f := newOTPLoginFixture()
 		f.limiter.err = errors.New("db down")
 
-		err := f.login.request(ctx, UniversityKUL, "jan@student.kul.pl")
+		err := f.login.request(ctx, uniKUL, "jan@student.kul.pl")
 		if err == nil || errors.Is(err, ErrRateLimited) {
 			t.Fatalf("expected a plain error, got: %v", err)
 		}
@@ -145,7 +145,7 @@ func TestOTPLogin_Request(t *testing.T) {
 	t.Run("foreign email domain is rejected before the limiter", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		err := f.login.request(ctx, UniversityKUL, "jan@gmail.com")
+		err := f.login.request(ctx, uniKUL, "jan@gmail.com")
 		if !errors.Is(err, ErrEmailNotAllowed) {
 			t.Fatalf("expected ErrEmailNotAllowed, got: %v", err)
 		}
@@ -157,7 +157,7 @@ func TestOTPLogin_Request(t *testing.T) {
 	t.Run("test email is accepted outside the university domains", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		if err := f.login.request(ctx, UniversityKUL, " Tester@Gmail.com "); err != nil {
+		if err := f.login.request(ctx, uniKUL, " Tester@Gmail.com "); err != nil {
 			t.Fatalf("expected the test email to be accepted, got: %v", err)
 		}
 		if f.sender.to != "tester@gmail.com" {
@@ -168,7 +168,7 @@ func TestOTPLogin_Request(t *testing.T) {
 	t.Run("test email still needs an OTP university", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		if err := f.login.request(ctx, UniversityUMCS, "tester@gmail.com"); !errors.Is(err, ErrWrongAuthMethod) {
+		if err := f.login.request(ctx, uniUMCS, "tester@gmail.com"); !errors.Is(err, ErrWrongAuthMethod) {
 			t.Fatalf("expected ErrWrongAuthMethod, got: %v", err)
 		}
 	})
@@ -176,7 +176,7 @@ func TestOTPLogin_Request(t *testing.T) {
 	t.Run("USOS university is rejected", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		if err := f.login.request(ctx, UniversityUMCS, "jan@umcs.pl"); !errors.Is(err, ErrWrongAuthMethod) {
+		if err := f.login.request(ctx, uniUMCS, "jan@umcs.pl"); !errors.Is(err, ErrWrongAuthMethod) {
 			t.Fatalf("expected ErrWrongAuthMethod, got: %v", err)
 		}
 	})
@@ -193,7 +193,7 @@ func TestOTPLogin_Request(t *testing.T) {
 		f := newOTPLoginFixture()
 		f.store.createErr = errors.New("db down")
 
-		if err := f.login.request(ctx, UniversityKUL, "jan@student.kul.pl"); err == nil {
+		if err := f.login.request(ctx, uniKUL, "jan@student.kul.pl"); err == nil {
 			t.Fatal("expected an error")
 		}
 		if f.sender.calls != 0 {
@@ -205,7 +205,7 @@ func TestOTPLogin_Request(t *testing.T) {
 		f := newOTPLoginFixture()
 		f.sender.err = errors.New("resend down")
 
-		if err := f.login.request(ctx, UniversityKUL, "jan@student.kul.pl"); !errors.Is(err, ErrUpstream) {
+		if err := f.login.request(ctx, uniKUL, "jan@student.kul.pl"); !errors.Is(err, ErrUpstream) {
 			t.Fatalf("expected ErrUpstream, got: %v", err)
 		}
 	})
@@ -216,26 +216,26 @@ func TestOTPLogin_Verify(t *testing.T) {
 
 	t.Run("sent code returns the identity", func(t *testing.T) {
 		f := newOTPLoginFixture()
-		if err := f.login.request(ctx, UniversityKUL, "jan@student.kul.pl"); err != nil {
+		if err := f.login.request(ctx, uniKUL, "jan@student.kul.pl"); err != nil {
 			t.Fatal(err)
 		}
 
-		id, err := f.login.verify(ctx, UniversityKUL, " JAN@student.kul.pl", f.sender.code)
+		id, err := f.login.verify(ctx, uniKUL, " JAN@student.kul.pl", f.sender.code)
 		if err != nil {
 			t.Fatalf("verify failed: %v", err)
 		}
-		want := Identity{UniversityID: UniversityKUL, Email: "jan@student.kul.pl"}
+		want := Identity{UniversityID: uniKUL, Email: "jan@student.kul.pl"}
 		if !reflect.DeepEqual(id, want) {
 			t.Errorf("expected %+v, got %+v", want, id)
 		}
-		if err := id.validate(); err != nil {
+		if err := id.validate(testUniversities[id.UniversityID]); err != nil {
 			t.Errorf("expected a valid identity, got: %v", err)
 		}
 	})
 
 	t.Run("wrong code is rejected", func(t *testing.T) {
 		f := newOTPLoginFixture()
-		if err := f.login.request(ctx, UniversityKUL, "jan@student.kul.pl"); err != nil {
+		if err := f.login.request(ctx, uniKUL, "jan@student.kul.pl"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -243,7 +243,7 @@ func TestOTPLogin_Verify(t *testing.T) {
 		if f.sender.code == wrong {
 			wrong = "111111"
 		}
-		if _, err := f.login.verify(ctx, UniversityKUL, "jan@student.kul.pl", wrong); !errors.Is(err, ErrInvalidCode) {
+		if _, err := f.login.verify(ctx, uniKUL, "jan@student.kul.pl", wrong); !errors.Is(err, ErrInvalidCode) {
 			t.Fatalf("expected ErrInvalidCode, got: %v", err)
 		}
 	})
@@ -251,7 +251,7 @@ func TestOTPLogin_Verify(t *testing.T) {
 	t.Run("USOS university is rejected", func(t *testing.T) {
 		f := newOTPLoginFixture()
 
-		if _, err := f.login.verify(ctx, UniversityUMCS, "jan@umcs.pl", "123456"); !errors.Is(err, ErrWrongAuthMethod) {
+		if _, err := f.login.verify(ctx, uniUMCS, "jan@umcs.pl", "123456"); !errors.Is(err, ErrWrongAuthMethod) {
 			t.Fatalf("expected ErrWrongAuthMethod, got: %v", err)
 		}
 	})

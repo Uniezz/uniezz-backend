@@ -2,6 +2,7 @@ package study
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -13,10 +14,12 @@ import (
 )
 
 const (
-	importInterval  = 30 * 24 * time.Hour
-	importTimeout   = 2 * time.Minute
-	importAttempts  = 3
-	maxRetiredShare = 0.3
+	importAllSchedule = "study-import-professors"
+	importInterval    = 30 * 24 * time.Hour
+	importAllTimeout  = 30 * time.Second
+	importTimeout     = 2 * time.Minute
+	importAttempts    = 3
+	maxRetiredShare   = 0.3
 )
 
 type ImportProfessorsArgs struct {
@@ -25,32 +28,49 @@ type ImportProfessorsArgs struct {
 
 func (ImportProfessorsArgs) Kind() string { return "study.import-professors.v1" }
 
-func (a ImportProfessorsArgs) scheduleName() string {
-	return "study-import-professors-" + string(a.University)
-}
+type ImportAllProfessorsArgs struct{}
+
+func (ImportAllProfessorsArgs) Kind() string { return "study.import-all-professors.v1" }
 
 type radonInstitution struct {
 	university auth.UniversityID
 	id         uuid.UUID
 }
 
-var radonInstitutions = []radonInstitution{
-	{auth.UniversityUMCS, uuid.MustParse("a013df22-d5c5-4871-849c-69e8c6e7e912")},
-	{auth.UniversityUMLub, uuid.MustParse("28f45cd0-ed86-4162-baf8-d0add700e59f")},
-	{auth.UniversityKUL, uuid.MustParse("9d3664e2-2c7a-448a-9fb2-278de61e6136")},
-	{auth.UniversityUP, uuid.MustParse("bc05e3e9-35c4-47a4-be34-d13dd35fd0bf")},
-	{auth.UniversityPolLub, uuid.MustParse("337ae4a1-4e95-456f-bc53-d8d54b952a53")},
-	{auth.UniversityWSPA, uuid.MustParse("a029c48a-4b25-4ee7-bae6-8296a405206b")},
-	{auth.UniversityWSEI, uuid.MustParse("f4dd5e8d-c071-4ec2-a048-faf9c2aae76d")},
+func (m Module) importAllProfessors(ctx context.Context, _ ImportAllProfessorsArgs) error {
+	var institutions []radonInstitution
+	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
+		var err error
+		institutions, err = m.professors.radonInstitutions(ctx)
+		if err != nil {
+			return err
+		}
+		for _, institution := range institutions {
+			if err := m.jobs.Enqueue(ctx, ImportProfessorsArgs{University: institution.university}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(institutions) > 0 {
+		m.jobs.Wake()
+	}
+	return nil
 }
 
 func (m Module) importProfessors(ctx context.Context, args ImportProfessorsArgs) error {
-	for _, institution := range radonInstitutions {
-		if institution.university == args.University {
-			return m.syncUniversity(ctx, m.radon, institution)
-		}
+	institution, err := m.professors.radonInstitution(ctx, args.University)
+	if errors.Is(err, ErrNotFound) {
+		return jobs.Permanent(fmt.Errorf("no POL-on institution for university %q", args.University))
 	}
-	return jobs.Permanent(fmt.Errorf("no POL-on institution for university %q", args.University))
+	if err != nil {
+		return err
+	}
+	return m.syncUniversity(ctx, m.radon, institution)
 }
 
 func (m Module) syncUniversity(ctx context.Context, client *radonClient, institution radonInstitution) error {

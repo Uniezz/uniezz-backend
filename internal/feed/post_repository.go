@@ -189,7 +189,7 @@ func postWhere(f postFilter, args *database.Args) string {
 			SELECT fp.id FROM feed_posts fp JOIN public_profiles author ON author.id = fp.author_id
 			WHERE author.name_search LIKE `+pattern+`
 			UNION ALL
-			SELECT id FROM feed_posts WHERE university_id IN (`+auth.MatchingUniversities(args, pattern)+`))`)
+			SELECT id FROM feed_posts WHERE university_id IN (`+auth.MatchingUniversities(pattern)+`))`)
 	}
 	if f.After != nil {
 		where = append(where, "(p.created_at, p.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")

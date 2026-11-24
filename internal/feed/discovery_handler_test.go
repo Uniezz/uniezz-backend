@@ -134,7 +134,7 @@ func TestPostNavigation(t *testing.T) {
 	path := "/feed/posts/" + ids[0].String() + "/navigation"
 	expectError(t, e.api.Get(path), 401, "unauthorized")
 	expectError(t, e.api.Get(path+"?type=question", author.bearer), 404, "not_found")
-	expectError(t, e.api.Get(path+"?university=unknown", author.bearer), 400, "invalid_input")
+	expectError(t, e.api.Get(path+"?university=unknown", author.bearer), 404, "not_found")
 	expectError(t, e.api.Get(path+"?from=2026-02-01T00:00:00Z&to=2026-01-01T00:00:00Z", author.bearer), 400, "invalid_input")
 	expectStatus(t, e.api.Delete("/feed/posts/"+ids[1].String(), author.bearer), 204)
 	nav := decode[PostNavigation](t, e.api.Get(path+query, author.bearer), 200)

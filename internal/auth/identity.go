@@ -39,15 +39,14 @@ func (i Identity) normalized() Identity {
 	return i
 }
 
-func (i Identity) validate() error {
+func (i Identity) validateReferral() error {
 	if i.ReferralCode != "" && !validInviteCode(i.ReferralCode) {
 		return ErrInvalidReferralCode
 	}
-	u, err := GetUniversityByID(i.UniversityID)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidIdentity, err)
-	}
+	return nil
+}
 
+func (i Identity) validate(u universityRow) error {
 	switch u.AuthType {
 	case AuthTypeUSOS:
 		if i.UsosUserID == "" {

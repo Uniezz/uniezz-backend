@@ -9,6 +9,9 @@ import (
 
 var (
 	ErrUnknownUniversity    = errors.New("unknown university")
+	ErrUniversityNotFound   = errors.New("university not found")
+	ErrUniversityExists     = errors.New("university already exists")
+	ErrDomainTaken          = errors.New("email domain belongs to another university")
 	ErrWrongAuthMethod      = errors.New("university does not support this authentication method")
 	ErrInvalidInput         = errors.New("invalid input")
 	ErrInvalidReferralCode  = errors.New("invalid referral code")
@@ -37,6 +40,9 @@ var (
 var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrInvalidIdentity, Status: http.StatusInternalServerError, Code: "internal_error"},
 	{Err: ErrUnknownUniversity, Status: http.StatusBadRequest, Code: "unknown_university"},
+	{Err: ErrUniversityNotFound, Status: http.StatusNotFound, Code: "not_found"},
+	{Err: ErrUniversityExists, Status: http.StatusConflict, Code: "university_exists"},
+	{Err: ErrDomainTaken, Status: http.StatusConflict, Code: "domain_taken"},
 	{Err: ErrWrongAuthMethod, Status: http.StatusBadRequest, Code: "wrong_auth_method"},
 	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
 	{Err: ErrInvalidReferralCode, Status: http.StatusBadRequest, Code: "invalid_referral_code"},

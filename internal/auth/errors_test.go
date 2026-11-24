@@ -46,7 +46,7 @@ func TestErrorResponse(t *testing.T) {
 // An invalid Identity is our bug, even when its cause is an unknown university,
 // so it must be a 500 and not the 400 that ErrUnknownUniversity alone gives.
 func TestErrorResponse_InvalidIdentityWinsOverItsCause(t *testing.T) {
-	err := Identity{UniversityID: "unknown-uni", Email: "jan@student.kul.pl"}.validate()
+	err := fmt.Errorf("%w: %w", ErrInvalidIdentity, ErrUnknownUniversity)
 	if !errors.Is(err, ErrUnknownUniversity) {
 		t.Fatalf("precondition: expected the error to wrap ErrUnknownUniversity, got: %v", err)
 	}

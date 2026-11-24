@@ -25,17 +25,19 @@ func fullUsosCredentials() map[string]config.UsosCredentials {
 }
 
 func TestNewUsosClients(t *testing.T) {
-	t.Run("builds a client for every USOS university and none for OTP ones", func(t *testing.T) {
+	t.Run("builds a client for every configured USOS university", func(t *testing.T) {
 		clients, err := newUsosClients(testConfig("production", fullUsosCredentials()))
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 
-		for _, u := range GetUniversities() {
-			_, ok := clients[u.ID]
-			if want := u.AuthType == AuthTypeUSOS; ok != want {
-				t.Errorf("%s (%s): expected client present = %v, got %v", u.ID, u.AuthType, want, ok)
+		for _, id := range []UniversityID{uniUMCS, uniUMLub} {
+			if _, ok := clients[id]; !ok {
+				t.Errorf("expected a client for %s", id)
 			}
+		}
+		if len(clients) != 2 {
+			t.Errorf("expected 2 clients, got %d", len(clients))
 		}
 	})
 
@@ -43,7 +45,6 @@ func TestNewUsosClients(t *testing.T) {
 		name  string
 		creds func(map[string]config.UsosCredentials)
 	}{
-		{name: "missing", creds: func(c map[string]config.UsosCredentials) { delete(c, "umlub") }},
 		{name: "empty key", creds: func(c map[string]config.UsosCredentials) {
 			c["umlub"] = config.UsosCredentials{BaseURL: "https://usosapps.umlub.pl", ConsumerSecret: "secret"}
 		}},
@@ -77,6 +78,9 @@ func TestModule_ZeroValueDescribesOperations(t *testing.T) {
 		{"/auth/otp/verify", http.MethodPost},
 		{"/auth/invites/me", http.MethodGet},
 		{"/auth/invites/redeem", http.MethodPost},
+		{"/auth/universities", http.MethodGet},
+		{"/auth/universities", http.MethodPost},
+		{"/auth/universities/{id}", http.MethodGet},
 	} {
 		item := api.OpenAPI().Paths[want.path]
 		if item == nil {
@@ -98,8 +102,8 @@ func TestNew(t *testing.T) {
 	}
 
 	creds := fullUsosCredentials()
-	delete(creds, "umcs")
+	creds["umcs"] = config.UsosCredentials{BaseURL: "https://apps.umcs.pl"}
 	if _, err := New(nil, testConfig("production", creds), nil, nil, nil); err == nil {
-		t.Error("expected an error for missing umcs credentials outside development, got nil")
+		t.Error("expected an error for empty umcs credentials, got nil")
 	}
 }

@@ -172,7 +172,7 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 				UNION ALL
 				SELECT id FROM users WHERE public.search_text(interests) LIKE `+pattern+`
 				UNION ALL
-				SELECT id FROM users WHERE university_id IN (`+auth.MatchingUniversities(&args, pattern)+`)
+				SELECT id FROM users WHERE university_id IN (`+auth.MatchingUniversities(pattern)+`)
 				UNION ALL
 				SELECT user_id FROM student_programmes WHERE public.search_text(programme_name) LIKE `+pattern+`
 				UNION ALL
