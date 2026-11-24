@@ -32,6 +32,9 @@ func TestDiscoverCards(t *testing.T) {
 		len(card.SharedInterests) != 1 || card.SharedInterests[0] != e.tag {
 		t.Errorf("card = %+v", card)
 	}
+	if card.Student.ID != b.id || card.Student.FirstName == nil || *card.Student.FirstName != "Jan" || card.Photos == nil {
+		t.Errorf("card does not show who the student is: %+v", card)
+	}
 	if again := e.discover(t, a, "mode=friends"); len(again) != 1 || again[0].CandidateID != card.CandidateID {
 		t.Errorf("candidateId changed between views: %+v", again)
 	}

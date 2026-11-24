@@ -95,8 +95,8 @@ Export only `Module`, `New`, sentinel errors, response types, enum types and the
 
 ## Between modules
 
-- A module reads only its own tables. To read another module's data, it joins a view that the owner publishes in its own migration (`ready_media`, `public_profiles`, `anonymous_profiles`, `user_emails`, `blocked_pairs`). The view is the owner's contract, and it applies the owner's privacy rules, so readers cannot bypass them. Anything that needs code, such as building a URL, stays a Go call to the owner (`media.URLOf`).
-- `users` belongs to auth and profile, and `user_roles` belongs to auth. Every other module reads one of their views (`public_profiles`, `anonymous_profiles`, `user_emails`) or calls profile; when a module needs a column no view has, the owner adds a view in its own migration.
+- A module reads only its own tables. To read another module's data, it joins a view that the owner publishes in its own migration (`ready_media`, `public_profiles`, `discovery_profiles`, `user_emails`, `blocked_pairs`). The view is the owner's contract, and it applies the owner's privacy rules, so readers cannot bypass them. Anything that needs code, such as building a URL, stays a Go call to the owner (`media.URLOf`).
+- `users` belongs to auth and profile, and `user_roles` belongs to auth. Every other module reads one of their views (`public_profiles`, `discovery_profiles`, `user_emails`) or calls profile; when a module needs a column no view has, the owner adds a view in its own migration.
 - Use another module through a small unexported interface in `module.go` that lists only the methods called. On the line above it, assert the real type: `var _ mediaService = media.Module{}`, or `var _ limiter = (*ratelimit.Limiter)(nil)`.
 - When a lower module calls back into a higher one, the lower module declares the exported interface (`auth.ProfileInitializer`) and the higher one asserts it. `internal/server` wires them together.
 - Map another module's sentinel errors to your own at the boundary (`media.ErrNotFound` becomes `ErrInvalidAvatar`).

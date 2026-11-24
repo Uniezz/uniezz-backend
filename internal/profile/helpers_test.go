@@ -197,22 +197,6 @@ func (f *fakeConnectionPreferences) UpdateConnectionPreferences(
 	return 0, nil
 }
 
-func (f *fakeConnectionPreferences) AreConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error) {
-	const query = `
-		SELECT EXISTS (
-			SELECT 1
-			FROM connections
-			WHERE user_low = LEAST($1::uuid, $2::uuid)
-			  AND user_high = GREATEST($1::uuid, $2::uuid)
-		)
-	`
-	var connected bool
-	if err := f.pool.QueryRow(ctx, query, viewerID, ownerID).Scan(&connected); err != nil {
-		return false, err
-	}
-	return connected, nil
-}
-
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
 	return insertMediaOf(ctx, pool, ownerID, media.KindAvatar, status)
 }

@@ -68,6 +68,14 @@ func (m Module) discover(ctx context.Context, q discoveryQuery) ([]Card, error) 
 	if err != nil {
 		return nil, err
 	}
+	summaries, err := m.profiles.Summaries(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	photos, err := m.profiles.Photos(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	cards := make([]Card, 0, len(rows))
 	for _, row := range rows {
@@ -75,8 +83,14 @@ func (m Module) discover(ctx context.Context, q discoveryQuery) ([]Card, error) 
 		if !ok {
 			continue
 		}
+		student, ok := summaries[row.UserID]
+		if !ok {
+			continue
+		}
 		cards = append(cards, Card{
 			CandidateID:     candidateID,
+			Student:         student,
+			Photos:          text.NonNil(photos[row.UserID]),
 			Intent:          row.Intent,
 			Bio:             row.Bio,
 			Interests:       text.NonNil(row.Interests),

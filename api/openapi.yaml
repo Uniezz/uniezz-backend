@@ -253,6 +253,13 @@ components:
           type:
             - string
             - "null"
+        photos:
+          description: Avatar first, followed by additional photos
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         sharedInterests:
           description: The interests the viewer also has
           items:
@@ -260,12 +267,16 @@ components:
           type:
             - array
             - "null"
+        student:
+          $ref: "#/components/schemas/ProfileSummary"
         universityId:
           examples:
             - umcs
           type: string
       required:
         - candidateId
+        - student
+        - photos
         - intent
         - bio
         - interests
@@ -2756,7 +2767,7 @@ components:
             - string
             - "null"
         photos:
-          description: Avatar first, followed by additional photos; hidden from unconnected students
+          description: Avatar first, followed by additional photos
           items:
             type: string
           type:

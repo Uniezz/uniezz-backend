@@ -64,7 +64,6 @@ type ConnectionPreferencesChange struct {
 
 type connectionService interface {
 	UpdateConnectionPreferences(ctx context.Context, userID uuid.UUID, change ConnectionPreferencesChange) (int, error)
-	AreConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error)
 }
 
 type Module struct {

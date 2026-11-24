@@ -6,6 +6,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -15,14 +16,16 @@ type discoveryHandler struct {
 }
 
 type Card struct {
-	CandidateID     uuid.UUID `json:"candidateId" format:"uuid" doc:"Opaque token, valid only for this viewer, for 30 days after it was first issued"`
-	Intent          *string   `json:"intent" nullable:"true" doc:"Null when the student has none"`
-	Bio             *string   `json:"bio" nullable:"true" doc:"Null when the student has none"`
-	Interests       []string  `json:"interests"`
-	SharedInterests []string  `json:"sharedInterests" doc:"The interests the viewer also has"`
-	UniversityID    string    `json:"universityId" example:"umcs"`
-	Level           *string   `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school" doc:"Of the primary programme; null when unknown"`
-	Age             *int      `json:"age" nullable:"true" doc:"Null when the student has not set a birth date"`
+	CandidateID     uuid.UUID              `json:"candidateId" format:"uuid" doc:"Opaque token, valid only for this viewer, for 30 days after it was first issued"`
+	Student         profile.ProfileSummary `json:"student"`
+	Photos          []string               `json:"photos" doc:"Avatar first, followed by additional photos"`
+	Intent          *string                `json:"intent" nullable:"true" doc:"Null when the student has none"`
+	Bio             *string                `json:"bio" nullable:"true" doc:"Null when the student has none"`
+	Interests       []string               `json:"interests"`
+	SharedInterests []string               `json:"sharedInterests" doc:"The interests the viewer also has"`
+	UniversityID    string                 `json:"universityId" example:"umcs"`
+	Level           *string                `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school" doc:"Of the primary programme; null when unknown"`
+	Age             *int                   `json:"age" nullable:"true" doc:"Null when the student has not set a birth date"`
 }
 
 type ActionResult struct {
