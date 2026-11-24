@@ -66,7 +66,7 @@ var createReportOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/reports",
 	Summary:       "Report a post, comment, student, exam file, course or chat message",
-	Description:   "One report per target and reporter; at most 5 reports per clock hour (UTC).",
+	Description:   "One report per target and reporter; at most 5 reports per clock hour (UTC). A post or comment with 3 pending reports is hidden from everyone but its author until a moderator dismisses them.",
 	Tags:          []string{"moderation"},
 	DefaultStatus: http.StatusCreated,
 	Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict, http.StatusTooManyRequests},

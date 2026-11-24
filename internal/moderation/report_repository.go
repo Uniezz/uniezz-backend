@@ -91,3 +91,12 @@ func (r *reportRepository) anonymiseForgotten(ctx context.Context, age time.Dura
 	}
 	return nil
 }
+
+func (r *reportRepository) countPending(ctx context.Context, targetType string, targetID uuid.UUID) (int, error) {
+	const query = `SELECT COUNT(*) FROM reports WHERE target_type = $1 AND target_id = $2 AND status = $3`
+	var n int
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, targetType, targetID, ReportPending).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count pending reports: %w", err)
+	}
+	return n, nil
+}

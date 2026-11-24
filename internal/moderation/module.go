@@ -24,6 +24,7 @@ import (
 
 const (
 	reportLimit           = 5
+	autoHideReports       = 3
 	reportWindow          = time.Hour
 	anonymiseReportsEvery = 24 * time.Hour
 	pruneActionsEvery     = 24 * time.Hour
@@ -42,6 +43,8 @@ type feedTargets interface {
 	ReportTarget(ctx context.Context, targetType string, id uuid.UUID) (uuid.UUID, map[string]any, error)
 	RemovePost(ctx context.Context, postID uuid.UUID) error
 	RemoveComment(ctx context.Context, commentID uuid.UUID) error
+	HideReported(ctx context.Context, targetType string, id uuid.UUID) error
+	RestoreReported(ctx context.Context, targetType string, id uuid.UUID) error
 }
 
 type profileTargets interface {

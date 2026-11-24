@@ -3,6 +3,7 @@ package moderation
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/chat"
@@ -11,6 +12,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/study"
+	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
@@ -81,8 +83,21 @@ func (m Module) createReport(ctx context.Context, reporterID uuid.UUID, in repor
 	if err != nil {
 		return nil, err
 	}
+	if in.TargetType == targetPost || in.TargetType == targetComment {
+		m.hideIfReported(ctx, in.TargetType, in.TargetID)
+	}
 	report := toReport(*row)
 	return &report, nil
+}
+
+func (m Module) hideIfReported(ctx context.Context, targetType string, id uuid.UUID) {
+	n, err := m.reports.countPending(ctx, targetType, id)
+	if err == nil && n >= autoHideReports {
+		err = m.feed.HideReported(ctx, targetType, id)
+	}
+	if err != nil {
+		telemetry.ReportError(ctx, "hide reported content", err, slog.String("target_type", targetType), slog.String("target_id", id.String()))
+	}
 }
 
 func toReport(row reportRow) Report {

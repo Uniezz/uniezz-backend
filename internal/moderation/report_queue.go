@@ -54,11 +54,22 @@ func (m Module) updateReport(ctx context.Context, actorID, id uuid.UUID, change 
 	default:
 		return nil, ErrInvalidInput
 	}
-	row, err := m.queue.resolve(ctx, id, change.Status)
+	var row *reportRow
+	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
+		var err error
+		row, err = m.queue.resolve(ctx, id, change.Status)
+		if err != nil {
+			return err
+		}
+		if err := m.actions.create(ctx, actorID, action, id); err != nil {
+			return err
+		}
+		if change.Status != ReportDismissed || (row.TargetType != targetPost && row.TargetType != targetComment) {
+			return nil
+		}
+		return m.feed.RestoreReported(ctx, row.TargetType, row.TargetID)
+	})
 	if err != nil {
-		return nil, err
-	}
-	if err := m.actions.create(ctx, actorID, action, id); err != nil {
 		return nil, err
 	}
 	report := toReport(*row)
