@@ -11,6 +11,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -41,6 +42,13 @@ type mediaService interface {
 	URLOf(ctx context.Context, ref media.Ref) (string, error)
 }
 
+var _ notifier = push.Module{}
+
+type notifier interface {
+	Notify(ctx context.Context, args push.SendArgs) error
+	Wake()
+}
+
 var _ limiter = (*ratelimit.Limiter)(nil)
 
 type limiter interface {
@@ -57,6 +65,7 @@ type Module struct {
 	settings      *settingsRepository
 	sessions      *sessionRepository
 	media         mediaService
+	push          notifier
 	sends         limiter
 	groups        limiter
 	requestLimit  limiter
@@ -67,7 +76,7 @@ type Module struct {
 	now           func() time.Time
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService) Module {
+func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier) Module {
 	db := database.New(pool)
 	return Module{
 		tx:            db,
@@ -79,6 +88,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService) Module {
 		settings:      newSettingsRepository(db),
 		sessions:      newSessionRepository(db),
 		media:         mediaModule,
+		push:          pushModule,
 		sends:         ratelimit.New(pool, "chat-send", sendLimit, sendWindow),
 		groups:        ratelimit.New(pool, "chat-group", groupLimit, groupWindow),
 		requestLimit:  ratelimit.New(pool, "chat-request", requestLimit, requestWindow),

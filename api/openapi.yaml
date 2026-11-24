@@ -2164,6 +2164,15 @@ components:
         - completed
         - resetsAt
       type: object
+    NotificationSettings:
+      additionalProperties: false
+      properties:
+        enabled:
+          description: false stops every push notification to the student's devices
+          type: boolean
+      required:
+        - enabled
+      type: object
     OpenDirectConversationInputBody:
       additionalProperties: false
       properties:
@@ -3090,6 +3099,18 @@ components:
       required:
         - coinsEarned
       type: object
+    RegisterMyPushTokenInputBody:
+      additionalProperties: false
+      properties:
+        token:
+          description: The Expo push token of this device
+          examples:
+            - ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]
+          maxLength: 200
+          type: string
+      required:
+        - token
+      type: object
     ReorderProfilePhotosInputBody:
       additionalProperties: false
       properties:
@@ -3791,6 +3812,13 @@ components:
             - university
             - matches
           type: string
+      type: object
+    UpdateMyPushSettingsInputBody:
+      additionalProperties: false
+      properties:
+        enabled:
+          description: false stops every push notification to the student's devices
+          type: boolean
       type: object
     UpdatePostInputBody:
       additionalProperties: false
@@ -9227,6 +9255,137 @@ paths:
       summary: Get a student's public profile
       tags:
         - profile
+  /push/settings/me:
+    get:
+      operationId: getMyPushSettings
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Get the logged-in student's push notification settings
+      tags:
+        - push
+    patch:
+      description: Fields left out keep their value.
+      operationId: updateMyPushSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMyPushSettingsInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Update the logged-in student's push notification settings
+      tags:
+        - push
+  /push/tokens/me:
+    delete:
+      description: Call it before signing out. Removing a token that is already gone succeeds.
+      operationId: deleteMyPushToken
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove the push token of the logged-in student's current device
+      tags:
+        - push
+    put:
+      description: "One token per session: a new token replaces the old one, and a token that another session held moves to this one. Call it after every sign-in and whenever Expo hands out a new token."
+      operationId: registerMyPushToken
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterMyPushTokenInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Set the push token of the logged-in student's current device
+      tags:
+        - push
   /reports:
     post:
       description: One report per target and reporter; at most 5 reports per clock hour (UTC).

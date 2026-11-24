@@ -34,6 +34,7 @@ type Config struct {
 	OTPHashKey         string
 	OTPTestEmails      []string
 	FAQPublisherEmails []string
+	ExpoAccessToken    string
 
 	ServiceName       string
 	SentryDSN         string
@@ -80,6 +81,7 @@ func Load() (*Config, error) {
 		AppWebURL:           getEnv("APP_WEB_URL", "http://localhost:3000"),
 		AppMobileScheme:     getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
 		ResendAPIKey:        os.Getenv("RESEND_API_KEY"),
+		ExpoAccessToken:     os.Getenv("EXPO_ACCESS_TOKEN"),
 		MailFrom:            getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
 		OTPEmailTemplateID:  os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
 		OTPHashKey:          os.Getenv("OTP_HASH_KEY"),

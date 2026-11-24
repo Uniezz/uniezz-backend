@@ -11,6 +11,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -145,7 +146,7 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 			return err
 		}
 		notes = []notification{{Event: eventMessageCreated, Recipients: recipients, ConversationID: in.ConversationID, ChangeSeq: created.ChangeSeq, Message: created}}
-		return nil
+		return m.notifyMessage(ctx, senderID, a, locked, in, recipients)
 	})
 	if errors.Is(err, errReplayed) || errors.Is(err, errClientTaken) {
 		message, err := m.replayMessage(ctx, senderID, in)
@@ -161,7 +162,27 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 	}
 	notes[0].Hydrated = &views[0]
 	m.publish(ctx, notes)
+	m.push.Wake()
 	return &views[0], false, nil
+}
+
+func (m Module) notifyMessage(ctx context.Context, senderID uuid.UUID, a *accessRow, conversation *lockedRow, in sendInput, recipients []uuid.UUID) error {
+	recipients = slices.DeleteFunc(slices.Clone(recipients), func(id uuid.UUID) bool { return id == senderID })
+	if len(recipients) == 0 {
+		return nil
+	}
+	event := push.EventMessage
+	if a.Kind == KindDirect && a.Status != StatusApproved && !a.Connected && a.StartedBy != nil && *a.StartedBy == senderID {
+		event = push.EventRequest
+	}
+	return m.push.Notify(ctx, push.SendArgs{
+		Event:          event,
+		RecipientIDs:   recipients,
+		ActorID:        senderID,
+		ConversationID: &in.ConversationID,
+		GroupName:      conversation.Name,
+		Preview:        in.Body,
+	})
 }
 
 func (m Module) insertText(ctx context.Context, senderID uuid.UUID, in sendInput, conversation *lockedRow) (*messageRow, error) {

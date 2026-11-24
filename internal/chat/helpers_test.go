@@ -15,6 +15,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -107,6 +108,7 @@ type testEnv struct {
 	api    humatest.TestAPI
 	auth   auth.Module
 	media  *fakeMedia
+	push   *fakePush
 	module Module
 	now    time.Time
 }
@@ -115,8 +117,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 
 	pool := setupTestDB(t)
-	e := &testEnv{pool: pool, media: &fakeMedia{pool: pool}, now: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)}
-	e.module = New(pool, e.media)
+	e := &testEnv{pool: pool, media: &fakeMedia{pool: pool}, push: &fakePush{}, now: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)}
+	e.module = New(pool, e.media, e.push)
 	e.module.now = func() time.Time { return e.now }
 
 	authModule, err := auth.New(pool, &config.Config{}, nil, nil, nil)
@@ -298,4 +300,24 @@ func seqs(messages []Message) []int64 {
 		out = append(out, m.Seq)
 	}
 	return out
+}
+
+type fakePush struct {
+	mu   sync.Mutex
+	sent []push.SendArgs
+}
+
+func (f *fakePush) Notify(_ context.Context, args push.SendArgs) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, args)
+	return nil
+}
+
+func (f *fakePush) Wake() {}
+
+func (f *fakePush) notices() []push.SendArgs {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]push.SendArgs(nil), f.sent...)
 }
