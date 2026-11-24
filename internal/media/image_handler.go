@@ -17,8 +17,8 @@ type imageHandler struct {
 
 type Image struct {
 	ID        uuid.UUID `json:"id" format:"uuid"`
-	Kind      Kind      `json:"kind" enum:"avatar,banner,feed,chat"`
-	URL       string    `json:"url" doc:"Chat images get a link that expires after 10 minutes"`
+	Kind      Kind      `json:"kind" enum:"avatar,banner,feed"`
+	URL       string    `json:"url"`
 	OwnerID   uuid.UUID `json:"ownerId" format:"uuid"`
 	CreatedAt time.Time `json:"createdAt"`
 }
@@ -38,8 +38,8 @@ var listUnreviewedImagesOperation = auth.Authorized(huma.Operation{
 	OperationID: "listUnreviewedImages",
 	Method:      http.MethodGet,
 	Path:        "/media/images",
-	Summary:     "List the avatars, banners, feed and chat images no moderator has checked yet",
-	Description: "Oldest first, paginated by cursor. An image leaves the list once it is marked checked or removed. Moderators and admins only.",
+	Summary:     "List the avatars, banners and feed images no moderator has checked yet",
+	Description: "Oldest first, paginated by cursor. An image leaves the list once it is marked checked or removed. Private chat images are left out. Moderators and admins only.",
 	Tags:        []string{"media"},
 	Errors:      []int{http.StatusBadRequest},
 }, auth.RoleModerator, auth.RoleAdmin)
@@ -64,7 +64,7 @@ var markImageReviewedOperation = auth.Authorized(huma.Operation{
 	OperationID:   "markImageReviewed",
 	Method:        http.MethodPut,
 	Path:          "/media/images/{id}/review",
-	Summary:       "Mark an avatar, banner, feed or chat image as checked",
+	Summary:       "Mark an avatar, banner or feed image as checked",
 	Description:   "Marking it again changes nothing. Moderators and admins only.",
 	Tags:          []string{"media"},
 	DefaultStatus: http.StatusNoContent,
@@ -82,7 +82,7 @@ var removeImageOperation = auth.Authorized(huma.Operation{
 	OperationID:   "removeImage",
 	Method:        http.MethodDelete,
 	Path:          "/media/images/{id}",
-	Summary:       "Remove any student's avatar, banner, feed or chat image",
+	Summary:       "Remove any student's avatar, banner or feed image",
 	Description:   "The image disappears everywhere it was shown and its file is deleted. Removing it again succeeds. Moderators and admins only.",
 	Tags:          []string{"media"},
 	DefaultStatus: http.StatusNoContent,

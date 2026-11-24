@@ -1449,13 +1449,11 @@ components:
             - avatar
             - banner
             - feed
-            - chat
           type: string
         ownerId:
           format: uuid
           type: string
         url:
-          description: Chat images get a link that expires after 10 minutes
           type: string
       required:
         - id
@@ -7537,7 +7535,7 @@ paths:
         - feed
   /media/images:
     get:
-      description: Oldest first, paginated by cursor. An image leaves the list once it is marked checked or removed. Moderators and admins only.
+      description: Oldest first, paginated by cursor. An image leaves the list once it is marked checked or removed. Private chat images are left out. Moderators and admins only.
       operationId: listUnreviewedImages
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -7600,7 +7598,7 @@ paths:
         - bearer:
             - moderator
             - admin
-      summary: List the avatars, banners, feed and chat images no moderator has checked yet
+      summary: List the avatars, banners and feed images no moderator has checked yet
       tags:
         - media
   /media/images/{id}:
@@ -7651,7 +7649,7 @@ paths:
         - bearer:
             - moderator
             - admin
-      summary: Remove any student's avatar, banner, feed or chat image
+      summary: Remove any student's avatar, banner or feed image
       tags:
         - media
   /media/images/{id}/review:
@@ -7702,7 +7700,7 @@ paths:
         - bearer:
             - moderator
             - admin
-      summary: Mark an avatar, banner, feed or chat image as checked
+      summary: Mark an avatar, banner or feed image as checked
       tags:
         - media
   /media/uploads:

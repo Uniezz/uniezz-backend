@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var reviewedKinds = []Kind{KindAvatar, KindBanner, KindFeed, KindChat}
+var reviewedKinds = []Kind{KindAvatar, KindBanner, KindFeed}
 
 func (m Module) listUnreviewed(ctx context.Context, cursor string, limit int) ([]Image, *string, error) {
 	filter := imageFilter{Kinds: reviewedKinds, Limit: limit + 1}

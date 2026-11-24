@@ -109,9 +109,10 @@ func TestImageReview(t *testing.T) {
 		}
 	})
 
-	t.Run("new images wait in the queue until checked, exam files and pending uploads never do", func(t *testing.T) {
+	t.Run("new images wait in the queue until checked, chat images, exam files and pending uploads never do", func(t *testing.T) {
 		ownerID := createTestUser(t, pool)
 		image := readyOf(t, repo, ownerID, KindFeed, "image/jpeg")
+		chatImage := readyOf(t, repo, ownerID, KindChat, "image/jpeg")
 		exam := readyOf(t, repo, ownerID, KindExam, "application/pdf")
 		pending, err := repo.createPending(context.Background(), ownerID, KindChat, objectKey(KindChat, "image/png"), "image/png", 10)
 		if err != nil {
@@ -122,8 +123,11 @@ func TestImageReview(t *testing.T) {
 		if !slices.Contains(ids, image.ID) {
 			t.Errorf("ready image missing from the queue")
 		}
-		if slices.Contains(ids, exam.ID) || slices.Contains(ids, pending.ID) {
-			t.Errorf("exam or pending upload listed")
+		if slices.Contains(ids, chatImage.ID) || slices.Contains(ids, exam.ID) || slices.Contains(ids, pending.ID) {
+			t.Errorf("chat image, exam or pending upload listed")
+		}
+		if rec := api.Delete("/media/images/"+chatImage.ID.String(), moderator); rec.Code != http.StatusNotFound {
+			t.Errorf("removing a chat image = %d, want 404", rec.Code)
 		}
 
 		for range 2 {
