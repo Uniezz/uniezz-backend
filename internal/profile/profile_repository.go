@@ -192,7 +192,7 @@ func (r *profileRepository) list(ctx context.Context, f profileFilter) ([]profil
 			" AND (u.created_at, u.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")))")
 	}
 
-	where = append(where, "u.deleted_at IS NULL", "u.banned_at IS NULL")
+	where = append(where, "u.deleted_at IS NULL", "u.banned_at IS NULL", "u.first_name IS NOT NULL", "u.last_name IS NOT NULL")
 
 	query := "SELECT " + profileColumns + ", " + rank + " AS search_rank" + profileFrom
 	query += " WHERE " + strings.Join(where, " AND ")
