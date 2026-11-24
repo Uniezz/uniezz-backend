@@ -162,6 +162,7 @@ var updateCommentOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodPatch,
 	Path:        "/feed/comments/{id}",
 	Summary:     "Edit your comment",
+	Description: "Only the author can edit; another student's comment is not found. Sets editedAt.",
 	Tags:        []string{"feed"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })

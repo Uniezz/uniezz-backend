@@ -34,24 +34,45 @@ type likePostOutput struct {
 	}
 }
 
-func likeOperation(id, method, path, summary, description string) huma.Operation {
-	return auth.Authenticated(huma.Operation{
-		OperationID: id,
-		Method:      method,
-		Path:        path,
-		Summary:     summary,
-		Description: description,
-		Tags:        []string{"feed"},
-		Errors:      []int{http.StatusNotFound},
-	})
-}
+var likePostOperation = auth.Authenticated(huma.Operation{
+	OperationID: "likeFeedPost",
+	Method:      http.MethodPut,
+	Path:        "/feed/posts/{id}/like",
+	Summary:     "Like a post",
+	Description: "Idempotent: repeating it changes nothing. The first like on another student's post pays you and the author 1 Uniezz coin each; unliking does not take them back.",
+	Tags:        []string{"feed"},
+	Errors:      []int{http.StatusNotFound},
+})
 
-var (
-	likePostOperation      = likeOperation("likeFeedPost", http.MethodPut, "/feed/posts/{id}/like", "Like a post", "Idempotent: repeating it changes nothing. The first like on another student's post pays you and the author 1 Uniezz coin each; unliking does not take them back.")
-	unlikePostOperation    = likeOperation("unlikeFeedPost", http.MethodDelete, "/feed/posts/{id}/like", "Remove your like from a post", "Idempotent: repeating it changes nothing.")
-	likeCommentOperation   = likeOperation("likeFeedComment", http.MethodPut, "/feed/comments/{id}/like", "Like a comment", "Idempotent: repeating it changes nothing.")
-	unlikeCommentOperation = likeOperation("unlikeFeedComment", http.MethodDelete, "/feed/comments/{id}/like", "Remove your like from a comment", "Idempotent: repeating it changes nothing.")
-)
+var unlikePostOperation = auth.Authenticated(huma.Operation{
+	OperationID: "unlikeFeedPost",
+	Method:      http.MethodDelete,
+	Path:        "/feed/posts/{id}/like",
+	Summary:     "Remove your like from a post",
+	Description: "Idempotent: repeating it changes nothing.",
+	Tags:        []string{"feed"},
+	Errors:      []int{http.StatusNotFound},
+})
+
+var likeCommentOperation = auth.Authenticated(huma.Operation{
+	OperationID: "likeFeedComment",
+	Method:      http.MethodPut,
+	Path:        "/feed/comments/{id}/like",
+	Summary:     "Like a comment",
+	Description: "Idempotent: repeating it changes nothing.",
+	Tags:        []string{"feed"},
+	Errors:      []int{http.StatusNotFound},
+})
+
+var unlikeCommentOperation = auth.Authenticated(huma.Operation{
+	OperationID: "unlikeFeedComment",
+	Method:      http.MethodDelete,
+	Path:        "/feed/comments/{id}/like",
+	Summary:     "Remove your like from a comment",
+	Description: "Idempotent: repeating it changes nothing.",
+	Tags:        []string{"feed"},
+	Errors:      []int{http.StatusNotFound},
+})
 
 func (h *likeHandler) likePost(ctx context.Context, in *likeInput) (*likePostOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)

@@ -121,8 +121,6 @@ type commentRef struct {
 	AuthorID *uuid.UUID
 }
 
-// ref reads the comment's immutable place in the tree without locking, so the
-// caller can lock the post and the root first.
 func (r *commentRepository) ref(ctx context.Context, commentID uuid.UUID) (*commentRef, error) {
 	c := commentRef{ID: commentID}
 	err := r.db.Conn(ctx).QueryRow(ctx,
@@ -211,8 +209,6 @@ func (r *commentRepository) lockRoot(ctx context.Context, rootID uuid.UUID) erro
 	return nil
 }
 
-// addReply locks the root of the post and counts one more reply under it. The
-// root may be a tombstone: its thread stays open while it has replies.
 func (r *commentRepository) addReply(ctx context.Context, postID, rootID uuid.UUID) error {
 	result, err := r.db.Conn(ctx).Exec(ctx, `
 		UPDATE feed_comments SET replies_count = replies_count + 1
@@ -226,7 +222,6 @@ func (r *commentRepository) addReply(ctx context.Context, postID, rootID uuid.UU
 	return nil
 }
 
-// removeReply returns whether the root is a tombstone left with no replies.
 func (r *commentRepository) removeReply(ctx context.Context, rootID uuid.UUID) (bool, error) {
 	var orphanTombstone bool
 	err := r.db.Conn(ctx).QueryRow(ctx, `

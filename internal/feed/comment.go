@@ -15,8 +15,6 @@ type commentInput struct {
 	Content          string     `json:"content"`
 }
 
-// createComment adds a root comment, or a reply when ReplyToCommentID is set.
-// A reply to a reply joins the same thread: its parent is the thread's root.
 func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentInput, key string) (*Comment, int, bool, error) {
 	content, err := cleanText(in.Content, true, 1, maxCommentLength)
 	if err != nil {
@@ -219,9 +217,6 @@ func (m Module) deleteComment(ctx context.Context, userID, commentID uuid.UUID) 
 	return m.removeComment(ctx, commentID, &userID)
 }
 
-// removeComment locks top-down — post, root, the comment — then deletes the
-// comment. A root that still has replies becomes a tombstone so the thread
-// survives; the post loses one live comment either way, exactly once.
 func (m Module) removeComment(ctx context.Context, commentID uuid.UUID, authorID *uuid.UUID) error {
 	ref, err := m.comments.ref(ctx, commentID)
 	if err != nil {

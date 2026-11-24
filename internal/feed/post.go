@@ -60,8 +60,6 @@ func (in postInput) clean() (postInput, error) {
 	return in, nil
 }
 
-// sortedIDs gives media row locks one order, so two requests attaching the
-// same media cannot deadlock.
 func sortedIDs(ids []uuid.UUID) []uuid.UUID {
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
@@ -79,8 +77,6 @@ func hasDuplicates(ids []uuid.UUID) bool {
 	return false
 }
 
-// createPost returns the post and whether it was created by an earlier request
-// with the same idempotency key.
 func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, int, bool, error) {
 	in, err := in.clean()
 	if err != nil {
@@ -169,8 +165,6 @@ func (m Module) checkUniversity(ctx context.Context, userID uuid.UUID, universit
 	return nil
 }
 
-// checkUploads asks storage about every file at once; each check is a HEAD
-// request, and a post has up to ten files.
 func (m Module) checkUploads(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for _, id := range ids {
@@ -472,9 +466,6 @@ func (m Module) deletePost(ctx context.Context, userID, postID uuid.UUID) error 
 	return m.removePost(ctx, postID, &userID)
 }
 
-// removePost deletes the post with its comments and likes, and hands its media
-// to the media module: marked deleting in the same transaction, deleted from
-// storage after the commit. A failed storage delete is retried by media cleanup.
 func (m Module) removePost(ctx context.Context, postID uuid.UUID, authorID *uuid.UUID) error {
 	var mediaIDs []uuid.UUID
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {

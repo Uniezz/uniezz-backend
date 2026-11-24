@@ -72,9 +72,6 @@ type likeChange struct {
 	delta   int
 }
 
-// setLike runs with the liked row already locked, so the counter changes
-// exactly when a like row was inserted or deleted. The change is nil when
-// nothing changed.
 func (m Module) setLike(ctx context.Context, t likeTarget, targetID, userID uuid.UUID, liked bool) (*LikeState, *likeChange, error) {
 	var likedAt *time.Time
 	var err error

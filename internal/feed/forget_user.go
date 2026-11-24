@@ -11,16 +11,8 @@ var errStillActive = errors.New("feed content of the user keeps appearing; revok
 
 const forgetPasses = 3
 
-// ForgetUser removes everything the user left in the feed through the same
-// per-item paths a user takes, so counters, threads and media stay consistent:
-// own posts go with their comments and media, own root comments that others
-// answered stay as anonymous tombstones, and likes are taken back. Saves feed
-// no counter, so they go in one statement. Each item commits on its own, so a
-// failed run can simply be repeated, and it must not run inside a caller's
-// transaction: media leaves storage after each commit.
-// Call it after the user's sessions are revoked and before the user row is
-// deleted; the feed's foreign keys to users refuse the delete while anything
-// is left.
+// ForgetUser must run after the user's sessions are revoked, outside any
+// transaction, and before the user row is deleted.
 func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
 	for range forgetPasses {
 		found, err := m.forgetPass(ctx, userID)

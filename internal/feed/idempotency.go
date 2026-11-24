@@ -26,8 +26,6 @@ func fingerprint(input any) ([]byte, error) {
 	return sum[:], nil
 }
 
-// replayed returns the resource a previous request with the same key created,
-// or ErrNotFound when the key is unused.
 func (m Module) replayed(ctx context.Context, userID uuid.UUID, operation, key string, fp []byte) (uuid.UUID, error) {
 	row, err := m.keys.get(ctx, userID, operation, key)
 	if err != nil {

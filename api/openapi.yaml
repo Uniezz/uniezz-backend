@@ -6027,6 +6027,7 @@ paths:
       tags:
         - feed
     patch:
+      description: Only the author can edit; another student's comment is not found. Sets editedAt.
       operationId: updateFeedComment
       parameters:
         - in: path
@@ -6632,6 +6633,7 @@ paths:
       tags:
         - feed
     get:
+      description: A post by a banned student or by a student blocked in either direction is not found.
       operationId: getFeedPost
       parameters:
         - in: path
