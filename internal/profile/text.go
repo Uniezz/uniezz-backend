@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"unicode/utf8"
@@ -25,6 +26,9 @@ func cleanBio(bio *string) (*string, bool, error) {
 	}
 	if clean == "" {
 		return nil, true, nil
+	}
+	if err := text.Allowed("bio", clean); err != nil {
+		return nil, false, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return &clean, true, nil
 }
@@ -55,6 +59,11 @@ func cleanInterests(interests *[]string) ([]string, error) {
 	clean, err := text.Tags(*interests, maxInterests, maxInterestLength)
 	if err != nil {
 		return nil, ErrInvalidInput
+	}
+	for _, interest := range clean {
+		if err := text.Allowed("interests", interest); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+		}
 	}
 	return clean, nil
 }

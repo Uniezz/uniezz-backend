@@ -8,25 +8,27 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("not found")
-	ErrInvalidInput    = errors.New("invalid input")
-	ErrForbidden       = errors.New("only the group owner may do this")
-	ErrInvalidMember   = errors.New("members must be your own unblocked connections")
-	ErrGroupFull       = errors.New("the group is full")
-	ErrInvalidMedia    = errors.New("attachment is missing, not owned by the user or not uploaded")
-	ErrKeyReused       = errors.New("idempotency key was used with a different request")
-	ErrResourceDeleted = errors.New("the message created with this idempotency key was deleted")
-	ErrRateLimited     = errors.New("too many requests")
-	ErrRequestPending  = errors.New("until the recipient accepts, a message request holds one text message without links")
-	ErrRequestRequired = errors.New("a conversation with this student starts with a message request")
-	ErrDirectExists    = errors.New("a direct conversation with this student already exists")
-	ErrTooManyStreams  = errors.New("too many open streams")
-	ErrDraining        = errors.New("the server is shutting down")
+	ErrNotFound          = errors.New("not found")
+	ErrInvalidInput      = errors.New("invalid input")
+	ErrContentNotAllowed = errors.New("content not allowed")
+	ErrForbidden         = errors.New("only the group owner may do this")
+	ErrInvalidMember     = errors.New("members must be your own unblocked connections")
+	ErrGroupFull         = errors.New("the group is full")
+	ErrInvalidMedia      = errors.New("attachment is missing, not owned by the user or not uploaded")
+	ErrKeyReused         = errors.New("idempotency key was used with a different request")
+	ErrResourceDeleted   = errors.New("the message created with this idempotency key was deleted")
+	ErrRateLimited       = errors.New("too many requests")
+	ErrRequestPending    = errors.New("until the recipient accepts, a message request holds one text message without links")
+	ErrRequestRequired   = errors.New("a conversation with this student starts with a message request")
+	ErrDirectExists      = errors.New("a direct conversation with this student already exists")
+	ErrTooManyStreams    = errors.New("too many open streams")
+	ErrDraining          = errors.New("the server is shutting down")
 )
 
 var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
 	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
+	{Err: ErrContentNotAllowed, Status: http.StatusBadRequest, Code: "content_not_allowed"},
 	{Err: ErrForbidden, Status: http.StatusForbidden, Code: "forbidden"},
 	{Err: ErrInvalidMember, Status: http.StatusBadRequest, Code: "invalid_member"},
 	{Err: ErrGroupFull, Status: http.StatusConflict, Code: "group_full"},

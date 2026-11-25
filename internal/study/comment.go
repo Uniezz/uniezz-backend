@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -30,6 +31,7 @@ func (q commentQuery) filter() (commentFilter, error) {
 func (m Module) addComment(ctx context.Context, userID uuid.UUID, change commentChange) (*CourseComment, error) {
 	content, err := cleanComment(change.Content)
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 

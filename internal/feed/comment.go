@@ -6,6 +6,8 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
+	"github.com/Uniezz/uniezz-backend/internal/text"
+
 	"github.com/google/uuid"
 )
 
@@ -16,8 +18,9 @@ type commentInput struct {
 }
 
 func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentInput, key string) (*Comment, int, bool, error) {
-	content, err := cleanText(in.Content, true, 1, maxCommentLength)
+	content, err := cleanText("content", in.Content, true, 1, maxCommentLength)
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, 0, false, err
 	}
 	in.Content = content
@@ -196,8 +199,9 @@ func (m Module) toComment(ctx context.Context, row commentRow) Comment {
 }
 
 func (m Module) updateComment(ctx context.Context, userID, commentID uuid.UUID, content string) (*Comment, error) {
-	content, err := cleanText(content, true, 1, maxCommentLength)
+	content, err := cleanText("content", content, true, 1, maxCommentLength)
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 

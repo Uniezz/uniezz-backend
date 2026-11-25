@@ -38,7 +38,7 @@ type fileChange struct {
 }
 
 func (c fileChange) fields() (fileFields, error) {
-	title, err := cleanName(c.Title)
+	title, err := cleanName("title", c.Title)
 	if err != nil {
 		return fileFields{}, err
 	}
@@ -101,6 +101,7 @@ func (q fileQuery) filter() (fileFilter, error) {
 func (m Module) addFile(ctx context.Context, userID uuid.UUID, change fileChange) (*CourseFile, error) {
 	fields, err := change.fields()
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 	if err := m.media.CheckUpload(ctx, fields.MediaID, userID, media.KindExam); err != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 )
@@ -97,6 +98,7 @@ func (m Module) checkUploads(ctx context.Context, userID uuid.UUID, ids []uuid.U
 func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChange) (*Message, bool, error) {
 	in, err := c.clean()
 	if err != nil {
+		text.ReportNotAllowed(ctx, senderID, err)
 		return nil, false, err
 	}
 

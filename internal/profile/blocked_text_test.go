@@ -1,0 +1,53 @@
+package profile
+
+import (
+	"context"
+	"net/http"
+	"testing"
+)
+
+func TestBlockedText(t *testing.T) {
+	e := newTestEnv(t)
+
+	for _, tc := range []struct {
+		name string
+		body map[string]any
+	}{
+		{name: "a blocked first name", body: map[string]any{"firstName": "Kurwa"}},
+		{name: "a spaced-out last name", body: map[string]any{"lastName": "c h u j"}},
+		{name: "a leetspeak bio", body: map[string]any{"bio": "Lubię sh1t i matematykę"}},
+		{name: "a blocked interest", body: map[string]any{"interests": []string{"climbing", "wh0re"}}},
+	} {
+		t.Run(tc.name+" is rejected and nothing is saved", func(t *testing.T) {
+			u := e.otpUser(t)
+
+			expectError(t, e.api.Patch("/profile/me", u.bearer, tc.body), http.StatusBadRequest, "content_not_allowed")
+
+			var firstName, lastName string
+			var bioIsNull bool
+			var interests int
+			err := e.pool.QueryRow(context.Background(),
+				"SELECT first_name, last_name, bio IS NULL, COALESCE(cardinality(interests), 0) FROM users WHERE id = $1", u.id,
+			).Scan(&firstName, &lastName, &bioIsNull, &interests)
+			if err != nil {
+				t.Fatalf("read user: %v", err)
+			}
+			if firstName != "Jan" || lastName != "Kowalski" || !bioIsNull || interests != 0 {
+				t.Errorf("profile changed: %q %q, bio null %v, %d interests", firstName, lastName, bioIsNull, interests)
+			}
+		})
+	}
+
+	t.Run("an ordinary profile in several languages is accepted", func(t *testing.T) {
+		u := e.otpUser(t)
+		body := map[string]any{
+			"firstName": "Ołeksandr",
+			"bio":       "Студентка першого курсу, люблю шахи. Mi computadora es vieja.",
+			"interests": []string{"szachy", "Schlüssel", "climbing"},
+		}
+		got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, body), http.StatusOK)
+		if got.FirstName == nil || *got.FirstName != "Ołeksandr" || got.Bio == nil || len(got.Interests) != 3 {
+			t.Errorf("profile = %+v", got)
+		}
+	})
+}

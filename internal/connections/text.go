@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"fmt"
 	"time"
 	"unicode/utf8"
 
@@ -24,6 +25,9 @@ func cleanIntent(intent *string) (*string, error) {
 	}
 	if clean == "" {
 		return nil, nil
+	}
+	if err := text.Allowed("intent", clean); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return &clean, nil
 }

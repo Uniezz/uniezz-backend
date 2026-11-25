@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -24,6 +25,7 @@ type requestChange struct {
 func (m Module) createRequest(ctx context.Context, senderID uuid.UUID, c requestChange) (*Conversation, bool, error) {
 	in, err := sendChange{Body: c.Body, Key: c.Key}.clean()
 	if err != nil {
+		text.ReportNotAllowed(ctx, senderID, err)
 		return nil, false, err
 	}
 	if senderID == c.RecipientID {

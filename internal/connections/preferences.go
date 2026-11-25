@@ -8,6 +8,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -74,6 +75,8 @@ func (m Module) UpdateConnectionPreferences(ctx context.Context, userID uuid.UUI
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrContentNotAllowed):
+			return 0, profile.ErrContentNotAllowed
 		case errors.Is(err, ErrInvalidInput):
 			return 0, profile.ErrInvalidInput
 		case errors.Is(err, ErrBirthDateImmutable):
@@ -93,6 +96,7 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 	today := m.now().UTC()
 	f, err := c.fields(today)
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, 0, err
 	}
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -213,6 +214,7 @@ func parseKey(key string) (*uuid.UUID, error) {
 func (m Module) createGroup(ctx context.Context, creatorID uuid.UUID, c groupChange) (*Conversation, bool, error) {
 	name, err := cleanName(c.Name)
 	if err != nil {
+		text.ReportNotAllowed(ctx, creatorID, err)
 		return nil, false, err
 	}
 	memberIDs, err := cleanMemberIDs(creatorID, c.MemberIDs)
@@ -316,6 +318,7 @@ func (m Module) replayGroup(ctx context.Context, creatorID, key uuid.UUID, name 
 func (m Module) renameConversation(ctx context.Context, userID uuid.UUID, c renameChange) (*Conversation, error) {
 	name, err := cleanName(c.Name)
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 

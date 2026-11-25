@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
@@ -104,10 +105,10 @@ type profileChange struct {
 func (c profileChange) fields() (profileFields, error) {
 	var f profileFields
 	var err error
-	if f.FirstName, err = trimmedName(c.FirstName); err != nil {
+	if f.FirstName, err = trimmedName("firstName", c.FirstName); err != nil {
 		return profileFields{}, err
 	}
-	if f.LastName, err = trimmedName(c.LastName); err != nil {
+	if f.LastName, err = trimmedName("lastName", c.LastName); err != nil {
 		return profileFields{}, err
 	}
 	if f.Bio, f.SetBio, err = cleanBio(c.Bio); err != nil {
@@ -132,6 +133,7 @@ func (c profileChange) fields() (profileFields, error) {
 func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change profileChange) (int, error) {
 	fields, err := change.fields()
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return 0, err
 	}
 
@@ -206,13 +208,16 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 	return earned, nil
 }
 
-func trimmedName(name *string) (*string, error) {
+func trimmedName(field string, name *string) (*string, error) {
 	if name == nil {
 		return nil, nil
 	}
 	trimmed := text.Plain(*name, false)
 	if trimmed == "" {
 		return nil, ErrInvalidInput
+	}
+	if err := text.Allowed(field, trimmed); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return &trimmed, nil
 }

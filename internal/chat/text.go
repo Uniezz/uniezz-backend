@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"regexp"
 	"unicode/utf8"
 
@@ -21,6 +22,9 @@ func cleanBody(body string, attachments int) (string, error) {
 	if length > maxBodyLength || (length == 0 && attachments == 0) {
 		return "", ErrInvalidInput
 	}
+	if err := text.Allowed("body", clean); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
 	return clean, nil
 }
 
@@ -35,6 +39,9 @@ func cleanName(name string) (string, error) {
 	length := utf8.RuneCountInString(clean)
 	if length < minNameLength || length > maxNameLength {
 		return "", ErrInvalidInput
+	}
+	if err := text.Allowed("name", clean); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return clean, nil
 }

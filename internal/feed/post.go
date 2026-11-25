@@ -35,10 +35,10 @@ type postInput struct {
 
 func (in postInput) clean() (postInput, error) {
 	var err error
-	if in.Title, err = cleanText(in.Title, false, minTitleLength, maxTitleLength); err != nil {
+	if in.Title, err = cleanText("title", in.Title, false, minTitleLength, maxTitleLength); err != nil {
 		return postInput{}, err
 	}
-	if in.Content, err = cleanText(in.Content, true, minContentLength, maxContentLength); err != nil {
+	if in.Content, err = cleanText("content", in.Content, true, minContentLength, maxContentLength); err != nil {
 		return postInput{}, err
 	}
 	if in.Tags, err = cleanTags(in.Tags); err != nil {
@@ -80,6 +80,7 @@ func hasDuplicates(ids []uuid.UUID) bool {
 func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, int, bool, error) {
 	in, err := in.clean()
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, 0, false, err
 	}
 	fp, err := fingerprint(in)
@@ -410,14 +411,14 @@ type postEdit struct {
 func (e postEdit) clean() (postChange, error) {
 	var c postChange
 	if e.Title != nil {
-		title, err := cleanText(*e.Title, false, minTitleLength, maxTitleLength)
+		title, err := cleanText("title", *e.Title, false, minTitleLength, maxTitleLength)
 		if err != nil {
 			return postChange{}, err
 		}
 		c.Title = &title
 	}
 	if e.Content != nil {
-		content, err := cleanText(*e.Content, true, minContentLength, maxContentLength)
+		content, err := cleanText("content", *e.Content, true, minContentLength, maxContentLength)
 		if err != nil {
 			return postChange{}, err
 		}
@@ -440,6 +441,7 @@ func (e postEdit) clean() (postChange, error) {
 func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit postEdit) (*Post, error) {
 	change, err := edit.clean()
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 

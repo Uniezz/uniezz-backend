@@ -29,16 +29,16 @@ type courseChange struct {
 func (c courseChange) fields() (courseFields, error) {
 	var f courseFields
 	var err error
-	if f.Name, err = cleanName(c.Name); err != nil {
+	if f.Name, err = cleanName("name", c.Name); err != nil {
 		return courseFields{}, err
 	}
 	if f.Description, err = cleanDescription(c.Description); err != nil {
 		return courseFields{}, err
 	}
-	if f.Faculty, err = cleanName(c.Faculty); err != nil {
+	if f.Faculty, err = cleanName("faculty", c.Faculty); err != nil {
 		return courseFields{}, err
 	}
-	if f.Subject, err = cleanName(c.Subject); err != nil {
+	if f.Subject, err = cleanName("subject", c.Subject); err != nil {
 		return courseFields{}, err
 	}
 	if !validDifficulty(c.Difficulty) || c.Semester < minSemester || c.Semester > maxSemester {
@@ -62,7 +62,7 @@ type courseEditChange struct {
 func (c courseEditChange) fields() (courseEditFields, error) {
 	var f courseEditFields
 	if c.Name != nil {
-		name, err := cleanName(*c.Name)
+		name, err := cleanName("name", *c.Name)
 		if err != nil {
 			return courseEditFields{}, err
 		}
@@ -130,6 +130,7 @@ func (q courseQuery) filter() (courseFilter, error) {
 func (m Module) createCourse(ctx context.Context, authorID uuid.UUID, change courseChange) (*Course, error) {
 	fields, err := change.fields()
 	if err != nil {
+		text.ReportNotAllowed(ctx, authorID, err)
 		return nil, err
 	}
 
@@ -182,6 +183,7 @@ func (m Module) listCourses(ctx context.Context, q courseQuery) ([]Course, *stri
 func (m Module) updateCourse(ctx context.Context, userID, id uuid.UUID, change courseEditChange) (*Course, error) {
 	fields, err := change.fields()
 	if err != nil {
+		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 	row, err := m.courses.update(ctx, id, userID, fields)
