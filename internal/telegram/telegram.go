@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,8 +17,9 @@ import (
 )
 
 const (
-	APIURL      = "https://api.telegram.org"
-	sendTimeout = 5 * time.Second
+	APIURL       = "https://api.telegram.org"
+	sendTimeout  = 5 * time.Second
+	maxErrorBody = 4 << 10
 )
 
 type Client struct {
@@ -60,6 +62,10 @@ type linkPreviewOptions struct {
 	IsDisabled bool `json:"is_disabled"`
 }
 
+type errorAnswer struct {
+	Description string `json:"description"`
+}
+
 func (t Thread) Send(ctx context.Context, text string) error {
 	if !t.Enabled() {
 		return nil
@@ -93,6 +99,11 @@ func (t Thread) Send(ctx context.Context, text string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		var answer errorAnswer
+		_ = json.NewDecoder(io.LimitReader(resp.Body, maxErrorBody)).Decode(&answer)
+		if answer.Description != "" {
+			return fmt.Errorf("send message: telegram answered %d: %s", resp.StatusCode, answer.Description)
+		}
 		return fmt.Errorf("send message: telegram answered %d", resp.StatusCode)
 	}
 	return nil

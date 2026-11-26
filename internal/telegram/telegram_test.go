@@ -79,6 +79,19 @@ func TestThreadSend(t *testing.T) {
 		}
 	})
 
+	t.Run("an error carries telegram's description", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"Bad Request: message thread not found"}`))
+		}))
+		t.Cleanup(server.Close)
+
+		err := New(server.URL, testToken, testChatID).Thread(813).Send(context.Background(), "x")
+		if err == nil || !strings.Contains(err.Error(), "message thread not found") {
+			t.Errorf("err = %v, want telegram's description", err)
+		}
+	})
+
 	t.Run("a failed post does not leak the bot token", func(t *testing.T) {
 		server := httptest.NewServer(http.NotFoundHandler())
 		url := server.URL
