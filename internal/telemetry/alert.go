@@ -1,37 +1,29 @@
 package telemetry
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 )
 
 const (
-	telegramAPI      = "https://api.telegram.org"
-	alertCooldown    = 10 * time.Minute
-	alertHourlyCap   = 20
-	alertQueueSize   = 32
-	alertSendTimeout = 5 * time.Second
-	alertMaxDetail   = 300
+	alertCooldown  = 10 * time.Minute
+	alertHourlyCap = 20
+	alertQueueSize = 32
+	alertMaxDetail = 300
 )
 
 var alerts atomic.Pointer[alerter]
 
 type alerter struct {
-	baseURL  string
-	token    string
-	chatID   string
+	thread   telegram.Thread
 	resource Resource
-	client   *http.Client
 	now      func() time.Time
 	queue    chan string
 	done     chan struct{}
@@ -44,22 +36,9 @@ type alerter struct {
 	sentInWindow int
 }
 
-type sendMessageRequest struct {
-	ChatID             string             `json:"chat_id"`
-	Text               string             `json:"text"`
-	LinkPreviewOptions linkPreviewOptions `json:"link_preview_options"`
-}
-
-type linkPreviewOptions struct {
-	IsDisabled bool `json:"is_disabled"`
-}
-
-func newAlerter(baseURL, token, chatID string, now func() time.Time) *alerter {
+func newAlerter(thread telegram.Thread, now func() time.Time) *alerter {
 	a := &alerter{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		token:      token,
-		chatID:     chatID,
-		client:     &http.Client{Timeout: alertSendTimeout},
+		thread:     thread,
 		now:        now,
 		queue:      make(chan string, alertQueueSize),
 		done:       make(chan struct{}),
@@ -154,28 +133,8 @@ func (a *alerter) run() {
 }
 
 func (a *alerter) send(text string) error {
-	body, err := json.Marshal(sendMessageRequest{
-		ChatID:             a.chatID,
-		Text:               text,
-		LinkPreviewOptions: linkPreviewOptions{IsDisabled: true},
-	})
-	if err != nil {
-		return fmt.Errorf("encode alert: %w", err)
-	}
-
-	resp, err := a.client.Post(a.baseURL+"/bot"+a.token+"/sendMessage", "application/json", bytes.NewReader(body))
-	if err != nil {
-		// The *url.Error repeats the request URL, which holds the bot token.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			err = urlErr.Err
-		}
+	if err := a.thread.Send(context.Background(), text); err != nil {
 		return fmt.Errorf("post alert: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("post alert: telegram answered %d", resp.StatusCode)
 	}
 	return nil
 }

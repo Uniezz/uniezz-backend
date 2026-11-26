@@ -193,20 +193,46 @@ func TestLoad_Telemetry(t *testing.T) {
 	})
 }
 
-func TestLoad_TelegramAlerts(t *testing.T) {
+func TestLoad_Telegram(t *testing.T) {
 	t.Run("off by default", func(t *testing.T) {
-		cfg := loadWith(t, map[string]string{"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_ALERT_CHAT_ID": ""})
+		cfg := loadWith(t, map[string]string{"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": "", "TELEGRAM_THREAD_ID": ""})
 
-		if cfg.TelegramBotToken != "" || cfg.TelegramAlertChatID != "" {
-			t.Errorf("expected no Telegram settings, got %q %q", cfg.TelegramBotToken, cfg.TelegramAlertChatID)
+		if cfg.TelegramBotToken != "" || cfg.TelegramChatID != "" || cfg.TelegramAlertsThreadID != 0 || cfg.TelegramNewcomersThreadID != 0 {
+			t.Errorf("expected no Telegram settings, got %+v", cfg)
 		}
 	})
 
-	t.Run("reads the variables", func(t *testing.T) {
-		cfg := loadWith(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123:abc", "TELEGRAM_ALERT_CHAT_ID": "-100123"})
+	t.Run("reads the token, chat and named threads", func(t *testing.T) {
+		cfg := loadWith(t, map[string]string{
+			"TELEGRAM_BOT_TOKEN": "123:abc",
+			"TELEGRAM_CHAT_ID":   "-100123",
+			"TELEGRAM_THREAD_ID": " alerts:825, deploys:825 ,newcomers:813",
+		})
 
-		if cfg.TelegramBotToken != "123:abc" || cfg.TelegramAlertChatID != "-100123" {
-			t.Errorf("unexpected Telegram config: %q %q", cfg.TelegramBotToken, cfg.TelegramAlertChatID)
+		if cfg.TelegramBotToken != "123:abc" || cfg.TelegramChatID != "-100123" {
+			t.Errorf("unexpected Telegram config: %q %q", cfg.TelegramBotToken, cfg.TelegramChatID)
+		}
+		if cfg.TelegramAlertsThreadID != 825 || cfg.TelegramNewcomersThreadID != 813 {
+			t.Errorf("threads = alerts %d, newcomers %d; want 825, 813", cfg.TelegramAlertsThreadID, cfg.TelegramNewcomersThreadID)
+		}
+	})
+
+	t.Run("a thread left out of the list is zero, which turns it off", func(t *testing.T) {
+		cfg := loadWith(t, map[string]string{"TELEGRAM_THREAD_ID": "alerts:825"})
+
+		if cfg.TelegramNewcomersThreadID != 0 {
+			t.Errorf("newcomers thread = %d, want 0", cfg.TelegramNewcomersThreadID)
+		}
+	})
+
+	t.Run("rejects threads without names or with bad ids", func(t *testing.T) {
+		loadWith(t, nil)
+		for _, value := range []string{"825,813", "alerts:", ":825", "alerts:abc", "alerts:-1"} {
+			t.Setenv("TELEGRAM_THREAD_ID", value)
+
+			if _, err := Load(); err == nil {
+				t.Errorf("expected an error for TELEGRAM_THREAD_ID=%q, got nil", value)
+			}
 		}
 	})
 }

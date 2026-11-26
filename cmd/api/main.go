@@ -20,6 +20,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/health"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/server"
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 	"github.com/Uniezz/uniezz-backend/internal/telemetry"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -105,13 +106,12 @@ func main() {
 	}
 
 	tel, err := telemetry.Setup(context.Background(), telemetry.Options{
-		Resource:            telemetry.Resource{Service: cfg.ServiceName, Env: cfg.Env, Version: httpapi.Version},
-		SentryDSN:           cfg.SentryDSN,
-		SentryEnvironment:   cfg.SentryEnvironment,
-		SentryRelease:       cfg.SentryRelease,
-		TelegramBotToken:    cfg.TelegramBotToken,
-		TelegramAlertChatID: cfg.TelegramAlertChatID,
-		Stdout:              os.Stdout,
+		Resource:          telemetry.Resource{Service: cfg.ServiceName, Env: cfg.Env, Version: httpapi.Version},
+		SentryDSN:         cfg.SentryDSN,
+		SentryEnvironment: cfg.SentryEnvironment,
+		SentryRelease:     cfg.SentryRelease,
+		Alerts:            telegram.New(telegram.APIURL, cfg.TelegramBotToken, cfg.TelegramChatID).Thread(cfg.TelegramAlertsThreadID),
+		Stdout:            os.Stdout,
 	})
 	if err != nil {
 		slog.Error("set up telemetry", "error", err)
