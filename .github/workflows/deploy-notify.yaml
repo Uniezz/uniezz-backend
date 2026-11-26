@@ -48,9 +48,12 @@ jobs:
         run: |
           token="$(doppler secrets get TELEGRAM_BOT_TOKEN --plain)"
           chat="$(doppler secrets get TELEGRAM_CHAT_ID --plain)"
+          threads="$(doppler secrets get TELEGRAM_THREAD_ID --plain 2>/dev/null || true)"
+          thread="$(printf '%s' "$threads" | tr ',' '\n' | sed -n 's/^ *deploys *: *\([0-9][0-9]*\) *$/\1/p' | head -n 1)"
           echo "::add-mask::$token"
           echo "TELEGRAM_BOT_TOKEN=$token" >> "$GITHUB_ENV"
           echo "TELEGRAM_CHAT_ID=$chat" >> "$GITHUB_ENV"
+          echo "TELEGRAM_DEPLOYS_THREAD_ID=$thread" >> "$GITHUB_ENV"
 
       - name: Build message
         env:
@@ -100,7 +103,8 @@ jobs:
           if [ ! -s message.txt ]; then
             exit 0
           fi
-          jq -n --rawfile text message.txt --arg chat "$TELEGRAM_CHAT_ID" \
-            '{chat_id: $chat, text: $text, link_preview_options: {is_disabled: true}}' \
+          jq -n --rawfile text message.txt --arg chat "$TELEGRAM_CHAT_ID" --arg thread "$TELEGRAM_DEPLOYS_THREAD_ID" \
+            '{chat_id: $chat, text: $text, link_preview_options: {is_disabled: true}}
+             + (if $thread == "" then {} else {message_thread_id: ($thread | tonumber)} end)' \
             | curl -fsS -X POST -H 'Content-Type: application/json' -d @- \
               "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null

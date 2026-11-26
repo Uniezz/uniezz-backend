@@ -15,6 +15,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,7 @@ var (
 	_ forgetter     = study.Module{}
 	_ forgetter     = chat.Module{}
 	_ rewardService = rewards.Module{}
+	_ announcer     = telegram.Thread{}
 )
 
 type mediaService interface {
@@ -49,6 +51,10 @@ type mediaService interface {
 type rewardService interface {
 	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
 	Balance(ctx context.Context, userID uuid.UUID) (int, error)
+}
+
+type announcer interface {
+	Send(ctx context.Context, text string) error
 }
 
 type forgetter interface {
@@ -76,11 +82,12 @@ type Module struct {
 	study       forgetter
 	chat        forgetter
 	rewards     rewardService
+	newcomers   announcer
 	jobs        *jobs.Runner
 	now         func() time.Time
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule, chatModule forgetter, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule, chatModule forgetter, rewardsModule rewardService, newcomers announcer, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:         db,
@@ -91,6 +98,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule, 
 		study:      studyModule,
 		chat:       chatModule,
 		rewards:    rewardsModule,
+		newcomers:  newcomers,
 		jobs:       runner,
 		now:        time.Now,
 	}
@@ -102,6 +110,9 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule, studyModule, 
 		return Module{}, fmt.Errorf("profile: %w", err)
 	}
 	if err := jobs.Register(runner, m.resumeDeletions, jobs.Options{Timeout: resumeDeletionsTimeout, MaxAttempts: 3}); err != nil {
+		return Module{}, fmt.Errorf("profile: %w", err)
+	}
+	if err := jobs.Register(runner, m.announceNewcomer, jobs.Options{Timeout: announceNewcomerTimeout, MaxAttempts: announceNewcomerAttempts}); err != nil {
 		return Module{}, fmt.Errorf("profile: %w", err)
 	}
 	if err := jobs.Schedule(runner, "profile-resume-deletions", ResumeDeletionsArgs{}, resumeDeletionsEvery); err != nil {

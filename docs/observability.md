@@ -81,7 +81,7 @@ On the free Developer plan, Sentry delivers alerts by email only. Slack needs th
 
 ## Telegram alerts
 
-Production posts unexpected errors to the team Telegram chat, without Sentry and without a paid plan. Deploy results go to the same chat from the deploy workflows.
+Production posts unexpected errors to the alerts topic of the team Telegram chat, without Sentry and without a paid plan. Deploy results go to the deploys topic from the deploy workflows. Students who finish onboarding, and a daily chart of how many there are, go to the newcomers topic.
 
 - **What alerts:** every `ReportError` and every recovered panic: 5xx responses, USOS login failures and failed background jobs. 4xx responses never alert.
 - **What a message holds:** environment, operation, route, version and request ID. The error text is scrubbed like Sentry events and cut to 300 characters; search the request ID in Sentry or `docker logs` for the rest.
@@ -89,7 +89,12 @@ Production posts unexpected errors to the team Telegram chat, without Sentry and
   - one message per operation and route every 10 minutes; the next message says how many were held back;
   - at most 20 messages an hour;
   - alerts that do not fit in the queue are counted and dropped, so a request never waits for Telegram.
-- **Configuration:** set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALERT_CHAT_ID` in Doppler `prd` only. Without the chat ID, alerts are off, so staging and local runs post nothing.
+- **Configuration:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `TELEGRAM_THREAD_ID` in Doppler. `TELEGRAM_THREAD_ID` lists topics as `name:id` pairs, e.g. `alerts:825,deploys:825,newcomers:825`. The API posts only to the `alerts` and `newcomers` topics that are listed, so staging lists only `deploys` and its API posts nothing.
+
+## Newcomers
+
+- **On onboarding:** the first `PUT /profile/onboarding` of a student queues the `profile.announce-newcomer.v1` job, which posts `👋 New student: Anna Kowalska · UMCS · #142` to the newcomers topic. The number is the student's place among onboarded students who are not deleted or banned. A student deleted before the job runs is not announced; delivery is at least once, so a rare duplicate is possible.
+- **Daily chart:** `.github/workflows/daily-stats.yaml` runs `scripts/daily-stats/daily_stats.py` at 20:00 Warsaw time with the `production` environment's Doppler token. It counts onboarded students per day straight from the production database and posts the running total as a chart. The curve is built from current rows, so deleted accounts drop out of past days too. Run it by hand from the Actions tab, or locally with `--out chart.png` to only draw the chart.
 
 ## Verifying on staging
 

@@ -22,6 +22,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -84,7 +85,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("rewards.New failed: %v", err)
 	}
-	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, chat.Module{}, rewardsModule, runner)
+	profiles, err := profile.New(pool, media.Module{}, feed.Module{}, study.Module{}, chat.Module{}, rewardsModule, telegram.Thread{}, runner)
 	if err != nil {
 		t.Fatalf("profile.New failed: %v", err)
 	}
