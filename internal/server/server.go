@@ -21,6 +21,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/study"
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -67,7 +68,8 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 
 	chatModule := chat.New(db, mediaModule, pushModule)
 
-	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, chatModule, rewardsModule, runner)
+	newcomers := telegram.New(telegram.APIURL, cfg.TelegramBotToken, cfg.TelegramChatID).Thread(cfg.TelegramNewcomersThreadID)
+	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, chatModule, rewardsModule, newcomers, runner)
 	if err != nil {
 		return Modules{}, err
 	}

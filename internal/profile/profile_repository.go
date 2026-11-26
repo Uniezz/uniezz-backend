@@ -35,6 +35,13 @@ type profileRow struct {
 	SearchRank    int
 }
 
+type newcomerRow struct {
+	FirstName    *string
+	LastName     *string
+	UniversityID string
+	Number       int
+}
+
 type connectionPreferencesRow struct {
 	BirthDate *time.Time
 	OpenTo    []string
@@ -95,12 +102,32 @@ func (r *profileRepository) get(ctx context.Context, userID uuid.UUID) (*profile
 	return p, nil
 }
 
-func (r *profileRepository) markOnboarded(ctx context.Context, userID uuid.UUID) error {
+func (r *profileRepository) markOnboarded(ctx context.Context, userID uuid.UUID) (bool, error) {
 	const query = `UPDATE users SET onboarded_at = NOW() WHERE id = $1 AND onboarded_at IS NULL`
-	if _, err := r.db.Conn(ctx).Exec(ctx, query, userID); err != nil {
-		return fmt.Errorf("mark profile onboarded: %w", err)
+	tag, err := r.db.Conn(ctx).Exec(ctx, query, userID)
+	if err != nil {
+		return false, fmt.Errorf("mark profile onboarded: %w", err)
 	}
-	return nil
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *profileRepository) getNewcomer(ctx context.Context, userID uuid.UUID) (*newcomerRow, error) {
+	const query = `
+		SELECT u.first_name, u.last_name, u.university_id,
+			(SELECT COUNT(*) FROM users o
+			 WHERE o.onboarded_at IS NOT NULL AND o.deleted_at IS NULL AND o.banned_at IS NULL
+			   AND (o.onboarded_at, o.id) <= (u.onboarded_at, u.id))
+		FROM users u
+		WHERE u.id = $1 AND u.onboarded_at IS NOT NULL AND u.deleted_at IS NULL AND u.banned_at IS NULL`
+	var n newcomerRow
+	err := r.db.Conn(ctx).QueryRow(ctx, query, userID).Scan(&n.FirstName, &n.LastName, &n.UniversityID, &n.Number)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get newcomer: %w", err)
+	}
+	return &n, nil
 }
 
 func (r *profileRepository) getConnectionPreferences(ctx context.Context, userID uuid.UUID) (*connectionPreferencesRow, error) {
