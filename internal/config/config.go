@@ -195,7 +195,7 @@ func parseThreads(s string) (map[string]int, error) {
 		name, value, ok := strings.Cut(pair, ":")
 		id, err := strconv.Atoi(strings.TrimSpace(value))
 		if !ok || strings.TrimSpace(name) == "" || err != nil || id <= 0 {
-			return nil, fmt.Errorf("TELEGRAM_THREAD_ID must be name:id pairs separated by commas, e.g. alerts:825,newcomers:813")
+			return nil, fmt.Errorf("TELEGRAM_THREAD_ID must be name:id pairs separated by commas, e.g. alerts:825,newcomers:825")
 		}
 		threads[strings.TrimSpace(name)] = id
 	}

@@ -89,7 +89,7 @@ Production posts unexpected errors to the alerts topic of the team Telegram chat
   - one message per operation and route every 10 minutes; the next message says how many were held back;
   - at most 20 messages an hour;
   - alerts that do not fit in the queue are counted and dropped, so a request never waits for Telegram.
-- **Configuration:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `TELEGRAM_THREAD_ID` in Doppler. `TELEGRAM_THREAD_ID` lists topics as `name:id` pairs, e.g. `alerts:825,deploys:825,newcomers:813`. The API posts only to the `alerts` and `newcomers` topics that are listed, so staging lists only `deploys` and its API posts nothing.
+- **Configuration:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `TELEGRAM_THREAD_ID` in Doppler. `TELEGRAM_THREAD_ID` lists topics as `name:id` pairs, e.g. `alerts:825,deploys:825,newcomers:825`. The API posts only to the `alerts` and `newcomers` topics that are listed, so staging lists only `deploys` and its API posts nothing.
 
 ## Newcomers
 
