@@ -23,6 +23,11 @@ var (
 	ErrDirectExists      = errors.New("a direct conversation with this student already exists")
 	ErrTooManyStreams    = errors.New("too many open streams")
 	ErrDraining          = errors.New("the server is shutting down")
+	ErrPollClosed        = errors.New("the poll is closed")
+	ErrEventCanceled     = errors.New("the event was canceled")
+	ErrEventEnded        = errors.New("the event has ended")
+	ErrLocationNotLive   = errors.New("the location is not shared live any more")
+	ErrSearchTooBroad    = errors.New("the search took too long; add or lengthen words")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -41,5 +46,10 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrDirectExists, Status: http.StatusConflict, Code: "conversation_exists"},
 	{Err: ErrTooManyStreams, Status: http.StatusServiceUnavailable, Code: "too_many_streams"},
 	{Err: ErrDraining, Status: http.StatusTooManyRequests, Code: "shutting_down"},
+	{Err: ErrPollClosed, Status: http.StatusConflict, Code: "poll_closed"},
+	{Err: ErrEventCanceled, Status: http.StatusConflict, Code: "event_canceled"},
+	{Err: ErrEventEnded, Status: http.StatusConflict, Code: "event_ended"},
+	{Err: ErrLocationNotLive, Status: http.StatusConflict, Code: "location_not_live"},
+	{Err: ErrSearchTooBroad, Status: http.StatusUnprocessableEntity, Code: "search_too_broad"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

@@ -66,7 +66,10 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	chatModule := chat.New(db, mediaModule, pushModule)
+	chatModule, err := chat.New(db, mediaModule, feedModule, studyModule, pushModule, runner)
+	if err != nil {
+		return Modules{}, err
+	}
 
 	newcomers := telegram.New(telegram.APIURL, cfg.TelegramBotToken, cfg.TelegramChatID).Thread(cfg.TelegramNewcomersThreadID)
 	profileModule, err := profile.New(db, mediaModule, feedModule, studyModule, chatModule, rewardsModule, newcomers, runner)

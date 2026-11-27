@@ -8,6 +8,8 @@ const (
 	KindFeed   Kind = "feed"
 	KindChat   Kind = "chat"
 	KindExam   Kind = "exam"
+
+	KindLinkPreview Kind = "link_preview"
 )
 
 type kindRule struct {
@@ -22,6 +24,8 @@ var kindRules = map[Kind]kindRule{
 	KindFeed:   {prefix: "feed", maxSize: 10 << 20, public: true},
 	KindChat:   {prefix: "chat", maxSize: 10 << 20, public: false},
 	KindExam:   {prefix: "exams", maxSize: 20 << 20, public: false},
+
+	KindLinkPreview: {prefix: "link-previews", maxSize: 1 << 20, public: false},
 }
 
 var extensions = map[string]string{

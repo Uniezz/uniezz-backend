@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
@@ -24,6 +25,7 @@ type messageQuery struct {
 	ConversationID uuid.UUID
 	Cursor         string
 	ChangedAfter   string
+	AroundID       string
 	Limit          int
 }
 
@@ -31,33 +33,65 @@ type sendChange struct {
 	ConversationID uuid.UUID
 	Body           string
 	AttachmentIDs  []uuid.UUID
+	NoPreview      bool
 	Key            string
+	Poll           *pollChange
+	Event          *eventChange
+	Location       *locationChange
+	Card           *cardChange
 }
 
 type sendInput struct {
 	ConversationID uuid.UUID
+	Kind           MessageKind
 	Body           string
+	Payload        []byte
 	MediaIDs       []uuid.UUID
+	Link           *messageLink
 	Key            uuid.UUID
 }
 
-func (c sendChange) clean() (sendInput, error) {
-	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
-		return sendInput{}, ErrInvalidInput
-	}
-	body, err := cleanBody(c.Body, len(c.AttachmentIDs))
-	if err != nil {
-		return sendInput{}, err
-	}
+func (c sendChange) clean(now time.Time) (sendInput, error) {
 	key, err := parseKey(c.Key)
 	if err != nil || key == nil {
 		return sendInput{}, ErrInvalidInput
 	}
-	mediaIDs := c.AttachmentIDs
-	if mediaIDs == nil {
-		mediaIDs = []uuid.UUID{}
+	in := sendInput{ConversationID: c.ConversationID, Kind: MessageText, Payload: []byte("{}"), MediaIDs: []uuid.UUID{}, Key: *key}
+
+	cards := 0
+	for _, set := range []bool{c.Poll != nil, c.Event != nil, c.Location != nil, c.Card != nil} {
+		if set {
+			cards++
+		}
 	}
-	return sendInput{ConversationID: c.ConversationID, Body: body, MediaIDs: mediaIDs, Key: *key}, nil
+	if cards > 1 || (cards == 1 && (c.Body != "" || len(c.AttachmentIDs) > 0)) {
+		return sendInput{}, ErrInvalidInput
+	}
+	switch {
+	case c.Poll != nil:
+		return in.withCard(MessagePoll, now, c.Poll)
+	case c.Event != nil:
+		return in.withCard(MessageEvent, now, c.Event)
+	case c.Location != nil:
+		return in.withCard(MessageLocation, now, c.Location)
+	case c.Card != nil:
+		return in.withCard(MessagePost, now, c.Card)
+	}
+
+	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
+		return sendInput{}, ErrInvalidInput
+	}
+	in.Body, err = cleanBody(c.Body, len(c.AttachmentIDs))
+	if err != nil {
+		return sendInput{}, err
+	}
+	if c.AttachmentIDs != nil {
+		in.MediaIDs = c.AttachmentIDs
+	}
+	if !c.NoPreview {
+		in.Link = firstLink(in.Body)
+	}
+	return in, nil
 }
 
 func hasDuplicates(ids []uuid.UUID) bool {
@@ -95,7 +129,7 @@ func (m Module) checkUploads(ctx context.Context, userID uuid.UUID, ids []uuid.U
 }
 
 func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChange) (*Message, bool, error) {
-	in, err := c.clean()
+	in, err := c.clean(m.now())
 	if err != nil {
 		return nil, false, err
 	}
@@ -108,6 +142,9 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 		return nil, false, err
 	}
 	if err := m.checkUploads(ctx, senderID, in.MediaIDs); err != nil {
+		return nil, false, err
+	}
+	if err := m.checkCard(ctx, senderID, in); err != nil {
 		return nil, false, err
 	}
 
@@ -155,9 +192,21 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 	if err := m.checkRequest(ctx, senderID, a, locked.LastSeq, in); err != nil {
 		return nil, nil, err
 	}
+	if in.Kind == MessageEvent && a.Kind != KindGroup {
+		return nil, nil, ErrInvalidInput
+	}
+	if err := m.startLive(ctx, &in); err != nil {
+		return nil, nil, err
+	}
 
-	created, err := m.insertText(ctx, senderID, in, locked)
+	created, err := m.insertMessage(ctx, senderID, in, locked)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := m.queuePreview(ctx, created.ID, in.Link); err != nil {
+		return nil, nil, err
+	}
+	if err := m.storeLive(ctx, senderID, created); err != nil {
 		return nil, nil, err
 	}
 	recipients, err := m.members.recipients(ctx, in.ConversationID, senderID)
@@ -169,13 +218,14 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 }
 
 func (m Module) deliverMessage(ctx context.Context, created *messageRow, notes []notification) (*Message, error) {
-	views, err := m.messageViews(ctx, []messageRow{*created})
+	views, err := m.messageViews(ctx, uuid.Nil, []messageRow{*created})
 	if err != nil {
 		return nil, err
 	}
 	notes[0].Hydrated = &views[0]
 	m.publish(ctx, notes)
 	m.push.Wake()
+	m.jobs.Wake()
 	return &views[0], nil
 }
 
@@ -198,7 +248,7 @@ func (m Module) notifyMessage(ctx context.Context, senderID uuid.UUID, a *access
 	})
 }
 
-func (m Module) insertText(ctx context.Context, senderID uuid.UUID, in sendInput, conversation *lockedRow) (*messageRow, error) {
+func (m Module) insertMessage(ctx context.Context, senderID uuid.UUID, in sendInput, conversation *lockedRow) (*messageRow, error) {
 	var body *string
 	if in.Body != "" {
 		body = &in.Body
@@ -208,9 +258,9 @@ func (m Module) insertText(ctx context.Context, senderID uuid.UUID, in sendInput
 		Seq:            conversation.LastSeq,
 		ChangeSeq:      conversation.ChangeSeq,
 		SenderID:       &senderID,
-		Kind:           MessageText,
+		Kind:           in.Kind,
 		Body:           body,
-		Payload:        []byte("{}"),
+		Payload:        in.Payload,
 		ClientID:       &in.Key,
 	})
 	if err != nil {
@@ -241,7 +291,7 @@ func (m Module) replayMessage(ctx context.Context, senderID uuid.UUID, in sendIn
 	if err != nil {
 		return nil, err
 	}
-	if row.ConversationID != in.ConversationID || row.Kind != MessageText {
+	if row.ConversationID != in.ConversationID || row.Kind != in.Kind {
 		return nil, ErrKeyReused
 	}
 	if row.DeletedAt != nil {
@@ -256,38 +306,45 @@ func (m Module) replayMessage(ctx context.Context, senderID uuid.UUID, in sendIn
 	if row.Body != nil {
 		body = *row.Body
 	}
-	if body != in.Body || !slices.Equal(mediaIDs, in.MediaIDs) {
+	if body != in.Body || !slices.Equal(mediaIDs, in.MediaIDs) || !sameCard(row.Payload, in.Payload) {
 		return nil, ErrKeyReused
 	}
 
-	views, err := m.messageViews(ctx, []messageRow{*row})
+	views, err := m.messageViews(ctx, senderID, []messageRow{*row})
 	if err != nil {
 		return nil, err
 	}
 	return &views[0], nil
 }
 
-func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *string, error) {
+func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *string, *string, error) {
+	if q.AroundID != "" && (q.Cursor != "" || q.ChangedAfter != "") {
+		return nil, nil, nil, ErrInvalidInput
+	}
 	a, err := m.conversations.access(ctx, q.ViewerID, q.ConversationID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := a.viewable(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if q.AroundID != "" {
+		return m.listAround(ctx, q)
 	}
 
 	filter := messageFilter{ConversationID: q.ConversationID, ViewerID: q.ViewerID, Limit: q.Limit + 1}
 	catchUp := q.ChangedAfter != ""
+	newer := false
 	switch {
 	case catchUp:
 		after, err := strconv.ParseInt(q.ChangedAfter, 10, 64)
 		if err != nil {
-			return nil, nil, ErrInvalidInput
+			return nil, nil, nil, ErrInvalidInput
 		}
 		if q.Cursor != "" {
 			var cursor changeCursor
 			if err := httpapi.DecodeCursor(q.Cursor, &cursor); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			after = cursor.ChangeSeq
 		}
@@ -295,30 +352,97 @@ func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *s
 	case q.Cursor != "":
 		var cursor messageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &cursor); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		filter.BeforeSeq = &cursor.Seq
+		if cursor.Newer {
+			newer = true
+			filter.AfterSeq = &cursor.Seq
+		} else {
+			filter.BeforeSeq = &cursor.Seq
+		}
 	}
 
 	rows, err := m.messages.list(ctx, filter)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rows, next, err := httpapi.Page(rows, q.Limit, func(last messageRow) any {
-		if catchUp {
+		switch {
+		case catchUp:
 			return changeCursor{ChangeSeq: last.ChangeSeq}
+		case newer:
+			return messageCursor{Seq: last.Seq, Newer: true}
 		}
 		return messageCursor{Seq: last.Seq}
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if newer {
+		slices.Reverse(rows)
 	}
 
-	items, err := m.messageViews(ctx, rows)
+	items, err := m.messageViews(ctx, q.ViewerID, rows)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return items, next, nil
+	if newer {
+		return items, nil, next, nil
+	}
+	return items, next, nil, nil
+}
+
+func (m Module) listAround(ctx context.Context, q messageQuery) ([]Message, *string, *string, error) {
+	id, err := uuid.Parse(q.AroundID)
+	if err != nil {
+		return nil, nil, nil, ErrInvalidInput
+	}
+	anchor, err := m.messages.getVisible(ctx, q.ViewerID, id)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if anchor.ConversationID != q.ConversationID {
+		return nil, nil, nil, ErrNotFound
+	}
+
+	olderLimit := (q.Limit + 1) / 2
+	newerLimit := q.Limit - olderLimit
+	through := anchor.Seq + 1
+	older, err := m.messages.list(ctx, messageFilter{ConversationID: q.ConversationID, ViewerID: q.ViewerID, BeforeSeq: &through, Limit: olderLimit + 1})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	older, next, err := httpapi.Page(older, olderLimit, func(last messageRow) any {
+		return messageCursor{Seq: last.Seq}
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	newerRows, err := m.messages.list(ctx, messageFilter{ConversationID: q.ConversationID, ViewerID: q.ViewerID, AfterSeq: &anchor.Seq, Limit: newerLimit + 1})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var newer *string
+	if len(newerRows) > newerLimit {
+		newerRows = newerRows[:newerLimit]
+		top := anchor.Seq
+		if len(newerRows) > 0 {
+			top = newerRows[len(newerRows)-1].Seq
+		}
+		cursor, err := httpapi.EncodeCursor(messageCursor{Seq: top, Newer: true})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		newer = &cursor
+	}
+	slices.Reverse(newerRows)
+
+	items, err := m.messageViews(ctx, q.ViewerID, append(newerRows, older...))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return items, next, newer, nil
 }
 
 func (m Module) getMessage(ctx context.Context, viewerID, id uuid.UUID) (*Message, error) {
@@ -326,7 +450,7 @@ func (m Module) getMessage(ctx context.Context, viewerID, id uuid.UUID) (*Messag
 	if err != nil {
 		return nil, err
 	}
-	views, err := m.messageViews(ctx, []messageRow{*row})
+	views, err := m.messageViews(ctx, viewerID, []messageRow{*row})
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +493,7 @@ func (m Module) tombstone(ctx context.Context, id uuid.UUID, owner *uuid.UUID) (
 	if err != nil {
 		return nil, nil, err
 	}
-	if owner != nil && (row.SenderID == nil || *row.SenderID != *owner || row.Kind != MessageText) {
+	if owner != nil && (row.SenderID == nil || *row.SenderID != *owner || row.Kind == MessageSystem) {
 		return nil, nil, ErrForbidden
 	}
 	if row.DeletedAt != nil {
@@ -381,6 +505,12 @@ func (m Module) tombstone(ctx context.Context, id uuid.UUID, owner *uuid.UUID) (
 		return nil, nil, err
 	}
 	if err := m.messages.tombstone(ctx, id, changeSeq); err != nil {
+		return nil, nil, err
+	}
+	if err := m.previews.deleteLink(ctx, id); err != nil {
+		return nil, nil, err
+	}
+	if err := m.clearCard(ctx, row); err != nil {
 		return nil, nil, err
 	}
 	released, err := m.messages.detachMedia(ctx, id)
@@ -418,7 +548,7 @@ func (m Module) releaseMedia(ctx context.Context, ids []uuid.UUID) {
 	}
 }
 
-func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message, error) {
+func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []messageRow) ([]Message, error) {
 	items := make([]Message, 0, len(rows))
 	if len(rows) == 0 {
 		return items, nil
@@ -437,6 +567,26 @@ func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message,
 		return nil, err
 	}
 	attachmentRows, err := m.messages.attachments(ctx, messageIDs)
+	if err != nil {
+		return nil, err
+	}
+	previews, err := m.previewViews(ctx, messageIDs)
+	if err != nil {
+		return nil, err
+	}
+	polls, err := m.pollViews(ctx, viewerID, rows, m.now())
+	if err != nil {
+		return nil, err
+	}
+	events, err := m.eventViews(ctx, viewerID, rows, m.now())
+	if err != nil {
+		return nil, err
+	}
+	locations, err := m.locationViews(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	cards, err := m.cardViews(ctx, viewerID, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +617,11 @@ func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message,
 			Payload:        payload,
 			ClientID:       row.ClientID,
 			Attachments:    nonNilAttachments(attachments[row.ID]),
+			LinkPreview:    previews[row.ID],
+			Poll:           polls[row.ID],
+			Event:          events[row.ID],
+			Location:       locations[row.ID],
+			Card:           cards[row.ID],
 			CreatedAt:      row.CreatedAt,
 			DeletedAt:      row.DeletedAt,
 		})

@@ -18,6 +18,7 @@ const (
 	eventConversationUpdated eventName = "conversation.updated"
 	eventConversationRemoved eventName = "conversation.removed"
 	eventReadUpdated         eventName = "read.updated"
+	eventLocationUpdated     eventName = "location.updated"
 	eventReconnect           eventName = "reconnect"
 	eventAuthExpired         eventName = "auth_expired"
 )
@@ -42,6 +43,16 @@ type readEvent struct {
 	UserID         uuid.UUID `json:"userId"`
 	LastReadSeq    int64     `json:"lastReadSeq"`
 	UnreadCount    *int      `json:"unreadCount,omitempty"`
+}
+
+type locationEvent struct {
+	ConversationID uuid.UUID `json:"conversationId"`
+	MessageID      uuid.UUID `json:"messageId"`
+	Lat            float64   `json:"lat"`
+	Lng            float64   `json:"lng"`
+	Accuracy       *int      `json:"accuracy,omitempty"`
+	Heading        *int      `json:"heading,omitempty"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 type reconnectEvent struct {

@@ -11,6 +11,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
+	"github.com/Uniezz/uniezz-backend/internal/safehttp"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,11 @@ type objectStore interface {
 	deleteObject(ctx context.Context, key string) error
 }
 
+const (
+	importUserAgent = "UniezzMedia/1.0"
+	importTimeout   = 10 * time.Second
+)
+
 type Module struct {
 	storage    objectStore
 	repo       mediaStore
@@ -62,7 +68,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, runner *jo
 		slog.WarnContext(ctx, "media storage bucket is unavailable", "error", err)
 	}
 
-	m := Module{storage: storage, repo: newRepository(database.New(pool)), httpClient: &http.Client{Timeout: 10 * time.Second}}
+	m := Module{storage: storage, repo: newRepository(database.New(pool)), httpClient: safehttp.New(safehttp.Config{UserAgent: importUserAgent, Timeout: importTimeout}).HTTP()}
 	if err := jobs.Register(runner, m.cleanup, jobs.Options{Timeout: 5 * time.Minute, MaxAttempts: 3}); err != nil {
 		return Module{}, fmt.Errorf("media: %w", err)
 	}

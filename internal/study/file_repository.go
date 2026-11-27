@@ -209,3 +209,34 @@ func (r *fileRepository) idsByAuthor(ctx context.Context, authorID uuid.UUID) ([
 	}
 	return ids, nil
 }
+
+func (r *fileRepository) chatCards(ctx context.Context, viewerID uuid.UUID, ids []uuid.UUID) ([]ChatCard, error) {
+	query := `
+		SELECT f.id, f.title, c.name
+		FROM course_files f
+		JOIN courses c ON c.id = f.course_id
+		JOIN ready_media m ON m.id = f.media_id
+		WHERE f.id = ANY($1) AND ` + notHidden("$2", "f.author_id")
+	return scanChatCards(ctx, r.db, "list notes cards", query, ids, viewerID)
+}
+
+func scanChatCards(ctx context.Context, db database.DB, what, query string, args ...any) ([]ChatCard, error) {
+	rows, err := db.Conn(ctx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	defer rows.Close()
+
+	var cards []ChatCard
+	for rows.Next() {
+		var c ChatCard
+		if err := rows.Scan(&c.ID, &c.Title, &c.Subtitle); err != nil {
+			return nil, fmt.Errorf("%s: %w", what, err)
+		}
+		cards = append(cards, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	return cards, nil
+}

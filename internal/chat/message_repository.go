@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
@@ -15,6 +17,7 @@ import (
 
 const (
 	uniqueViolation  = "23505"
+	queryCanceled    = "57014"
 	clientConstraint = "uq_chat_messages_client"
 )
 
@@ -52,7 +55,8 @@ type attachmentRow struct {
 }
 
 type messageCursor struct {
-	Seq int64 `json:"s"`
+	Seq   int64 `json:"s"`
+	Newer bool  `json:"n,omitempty"`
 }
 
 type changeCursor struct {
@@ -63,7 +67,16 @@ type messageFilter struct {
 	ConversationID uuid.UUID
 	ViewerID       uuid.UUID
 	BeforeSeq      *int64
+	AfterSeq       *int64
 	AfterChange    *int64
+	Limit          int
+}
+
+type searchFilter struct {
+	ConversationID uuid.UUID
+	ViewerID       uuid.UUID
+	Words          []string
+	BeforeSeq      *int64
 	Limit          int
 }
 
@@ -191,12 +204,50 @@ func (r *messageRepository) list(ctx context.Context, f messageFilter) ([]messag
 	if f.BeforeSeq != nil {
 		where += " AND msg.seq < " + arg(*f.BeforeSeq)
 	}
+	if f.AfterSeq != nil {
+		where += " AND msg.seq > " + arg(*f.AfterSeq)
+		order = "msg.seq ASC"
+	}
 	if f.AfterChange != nil {
 		where += " AND msg.change_seq > " + arg(*f.AfterChange)
 		order = "msg.change_seq ASC"
 	}
 	query := `SELECT ` + messageColumns + ` FROM chat_messages msg WHERE ` + where + ` ORDER BY ` + order + ` LIMIT ` + arg(f.Limit)
 	return r.scanMessages(ctx, "list messages", query, args...)
+}
+
+func (r *messageRepository) limitTime(ctx context.Context, limit time.Duration) error {
+	const query = `SELECT set_config('statement_timeout', $1, true)`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, strconv.FormatInt(limit.Milliseconds(), 10)); err != nil {
+		return fmt.Errorf("set search timeout: %w", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) search(ctx context.Context, f searchFilter) ([]messageRow, error) {
+	args := database.Args{f.ConversationID, f.ViewerID}
+	arg := args.Add
+
+	where := []string{
+		"msg.conversation_id = $1",
+		"msg.body IS NOT NULL",
+		"msg.deleted_at IS NULL",
+		messageVisible("$2", "msg.sender_id"),
+	}
+	for _, word := range f.Words {
+		where = append(where, "public.search_text(msg.body) LIKE "+database.SearchPattern(arg(word)))
+	}
+	if f.BeforeSeq != nil {
+		where = append(where, "msg.seq < "+arg(*f.BeforeSeq))
+	}
+	query := `SELECT ` + messageColumns + ` FROM chat_messages msg WHERE ` + strings.Join(where, " AND ") +
+		` ORDER BY msg.seq DESC LIMIT ` + arg(f.Limit)
+	rows, err := r.scanMessages(ctx, "search messages", query, args...)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == queryCanceled {
+		return nil, ErrSearchTooBroad
+	}
+	return rows, err
 }
 
 func (r *messageRepository) lastVisible(ctx context.Context, viewerID uuid.UUID, conversationIDs []uuid.UUID) ([]messageRow, error) {
@@ -270,12 +321,24 @@ func (r *messageRepository) tombstone(ctx context.Context, id uuid.UUID, changeS
 	return nil
 }
 
+func (r *messageRepository) setChange(ctx context.Context, id uuid.UUID, changeSeq int64) error {
+	const query = `UPDATE chat_messages SET change_seq = $2 WHERE id = $1`
+	result, err := r.db.Conn(ctx).Exec(ctx, query, id, changeSeq)
+	if err != nil {
+		return fmt.Errorf("touch message: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *messageRepository) liveIDsBySender(ctx context.Context, senderID uuid.UUID) ([]uuid.UUID, error) {
 	const query = `
 		SELECT id FROM chat_messages
-		WHERE sender_id = $1 AND kind = $2 AND deleted_at IS NULL
+		WHERE sender_id = $1 AND kind <> $2 AND deleted_at IS NULL
 		ORDER BY id`
-	return scanUUIDs(ctx, r.db, "list sender messages", query, senderID, MessageText)
+	return scanUUIDs(ctx, r.db, "list sender messages", query, senderID, MessageSystem)
 }
 
 func scanUUIDs(ctx context.Context, db database.DB, what, query string, args ...any) ([]uuid.UUID, error) {
