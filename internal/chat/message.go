@@ -36,6 +36,7 @@ type sendChange struct {
 	NoPreview      bool
 	Key            string
 	Poll           *pollChange
+	Event          *eventChange
 }
 
 type sendInput struct {
@@ -55,11 +56,20 @@ func (c sendChange) clean(now time.Time) (sendInput, error) {
 	}
 	in := sendInput{ConversationID: c.ConversationID, Kind: MessageText, Payload: []byte("{}"), MediaIDs: []uuid.UUID{}, Key: *key}
 
-	if c.Poll != nil {
-		if c.Body != "" || len(c.AttachmentIDs) > 0 {
-			return sendInput{}, ErrInvalidInput
+	cards := 0
+	for _, set := range []bool{c.Poll != nil, c.Event != nil} {
+		if set {
+			cards++
 		}
+	}
+	if cards > 1 || (cards == 1 && (c.Body != "" || len(c.AttachmentIDs) > 0)) {
+		return sendInput{}, ErrInvalidInput
+	}
+	switch {
+	case c.Poll != nil:
 		return in.withCard(MessagePoll, now, c.Poll)
+	case c.Event != nil:
+		return in.withCard(MessageEvent, now, c.Event)
 	}
 
 	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
@@ -172,6 +182,9 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 	}
 	if err := m.checkRequest(ctx, senderID, a, locked.LastSeq, in); err != nil {
 		return nil, nil, err
+	}
+	if in.Kind == MessageEvent && a.Kind != KindGroup {
+		return nil, nil, ErrInvalidInput
 	}
 
 	created, err := m.insertMessage(ctx, senderID, in, locked)
@@ -550,6 +563,10 @@ func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []mes
 	if err != nil {
 		return nil, err
 	}
+	events, err := m.eventViews(ctx, viewerID, rows, m.now())
+	if err != nil {
+		return nil, err
+	}
 
 	expiresAt := m.now().Add(media.PrivateURLTTL)
 	attachments := make(map[uuid.UUID][]Attachment, len(rows))
@@ -579,6 +596,7 @@ func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []mes
 			Attachments:    nonNilAttachments(attachments[row.ID]),
 			LinkPreview:    previews[row.ID],
 			Poll:           polls[row.ID],
+			Event:          events[row.ID],
 			CreatedAt:      row.CreatedAt,
 			DeletedAt:      row.DeletedAt,
 		})

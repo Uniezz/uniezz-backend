@@ -147,6 +147,18 @@ components:
       required:
         - mediaId
       type: object
+    AnswerChatEventInputBody:
+      additionalProperties: false
+      properties:
+        answer:
+          enum:
+            - going
+            - maybe
+            - "no"
+          type: string
+      required:
+        - answer
+      type: object
     Attachment:
       additionalProperties: false
       properties:
@@ -1287,6 +1299,104 @@ components:
       required:
         - error
       type: object
+    Event:
+      additionalProperties: false
+      properties:
+        attendees:
+          description: Up to 5 students who answered going or maybe, latest first; empty in stream events, so fetch the message to show them
+          items:
+            $ref: "#/components/schemas/Student"
+          type:
+            - array
+            - "null"
+        canceledAt:
+          description: Set once the creator or the group owner canceled the event; null otherwise
+          format: date-time
+          type:
+            - string
+            - "null"
+        ended:
+          description: True after endsAt, or after startsAt when there is no end; answers are then refused
+          type: boolean
+        endsAt:
+          description: Null when the event has no set end
+          format: date-time
+          type:
+            - string
+            - "null"
+        going:
+          format: int64
+          type: integer
+        maybe:
+          format: int64
+          type: integer
+        myAnswer:
+          description: Null before the viewer answers and in stream events
+          enum:
+            - going
+            - maybe
+            - "no"
+          type:
+            - string
+            - "null"
+        "no":
+          format: int64
+          type: integer
+        place:
+          description: Null when no place was given
+          examples:
+            - Library, floor 2
+          type:
+            - string
+            - "null"
+        startsAt:
+          format: date-time
+          type: string
+        title:
+          examples:
+            - Study session
+          type: string
+      required:
+        - title
+        - startsAt
+        - endsAt
+        - place
+        - canceledAt
+        - ended
+        - going
+        - maybe
+        - "no"
+        - attendees
+        - myAnswer
+      type: object
+    EventRequest:
+      additionalProperties: false
+      properties:
+        endsAt:
+          description: After startsAt
+          format: date-time
+          type: string
+        place:
+          description: Up to 100 characters after HTML is stripped
+          examples:
+            - Library, floor 2
+          maxLength: 400
+          type: string
+        startsAt:
+          description: In the future
+          format: date-time
+          type: string
+        title:
+          description: Up to 100 characters after HTML is stripped
+          examples:
+            - Study session
+          maxLength: 400
+          minLength: 1
+          type: string
+      required:
+        - title
+        - startsAt
+      type: object
     ExchangeInputBody:
       additionalProperties: false
       properties:
@@ -2118,6 +2228,9 @@ components:
           type:
             - string
             - "null"
+        event:
+          $ref: "#/components/schemas/Event"
+          description: Set when kind is event and the message is not deleted
         id:
           format: uuid
           type: string
@@ -3566,6 +3679,9 @@ components:
           description: Up to 4000 characters after HTML is stripped; may be empty only with attachments
           maxLength: 16000
           type: string
+        event:
+          $ref: "#/components/schemas/EventRequest"
+          description: Send an event that members answer with going, maybe or no; groups only, and body and attachmentIds must then be empty
         noPreview:
           description: Do not preview the first link of the body
           type: boolean
@@ -5435,7 +5551,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Send a text message with up to 5 images, or a poll
+      summary: Send a text message with up to 5 images, a poll or an event
       tags:
         - chat
   /chat/conversations/{id}/messages/search:
@@ -5675,6 +5791,59 @@ paths:
       summary: Get one message with fresh attachment URLs
       tags:
         - chat
+  /chat/messages/{id}/event/cancel:
+    post:
+      description: Only the event's creator or the group owner may cancel it, and a canceled event stays canceled. Canceling twice succeeds.
+      operationId: cancelChatEvent
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Cancel an event message
+      tags:
+        - chat
   /chat/messages/{id}/poll/close:
     post:
       description: Only the poll's creator or the group owner may close it. Closing a closed poll succeeds.
@@ -5791,6 +5960,113 @@ paths:
       security:
         - bearer: []
       summary: Vote in a poll message, change the vote or take it back
+      tags:
+        - chat
+  /chat/messages/{id}/rsvp:
+    delete:
+      description: Works on canceled and ended events too. Taking back a missing answer succeeds.
+      operationId: deleteMyChatEventAnswer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Take back the viewer's answer to an event message
+      tags:
+        - chat
+    put:
+      description: Replaces the viewer's earlier answer; sending the same answer again changes nothing. A canceled event answers 409 event_canceled and an ended one 409 event_ended.
+      operationId: answerChatEvent
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerChatEventInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Answer an event message with going, maybe or no
       tags:
         - chat
   /chat/requests:

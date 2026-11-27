@@ -24,6 +24,8 @@ var (
 	ErrTooManyStreams    = errors.New("too many open streams")
 	ErrDraining          = errors.New("the server is shutting down")
 	ErrPollClosed        = errors.New("the poll is closed")
+	ErrEventCanceled     = errors.New("the event was canceled")
+	ErrEventEnded        = errors.New("the event has ended")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -43,5 +45,7 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrTooManyStreams, Status: http.StatusServiceUnavailable, Code: "too_many_streams"},
 	{Err: ErrDraining, Status: http.StatusTooManyRequests, Code: "shutting_down"},
 	{Err: ErrPollClosed, Status: http.StatusConflict, Code: "poll_closed"},
+	{Err: ErrEventCanceled, Status: http.StatusConflict, Code: "event_canceled"},
+	{Err: ErrEventEnded, Status: http.StatusConflict, Code: "event_ended"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

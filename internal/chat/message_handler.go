@@ -61,6 +61,7 @@ type Message struct {
 	ClientID       *uuid.UUID     `json:"clientId" format:"uuid" nullable:"true" doc:"The Idempotency-Key the sender used; null for system messages"`
 	Attachments    []Attachment   `json:"attachments"`
 	Poll           *Poll          `json:"poll,omitempty" doc:"Set when kind is poll and the message is not deleted"`
+	Event          *Event         `json:"event,omitempty" doc:"Set when kind is event and the message is not deleted"`
 	LinkPreview    *LinkPreview   `json:"linkPreview,omitempty" doc:"Preview of the first https link in the body. Omitted while it is being fetched (a message.updated event follows), when fetching failed, and when the message has no link"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	DeletedAt      *time.Time     `json:"deletedAt" nullable:"true" doc:"Set when the sender deleted the message; body, payload and attachments are then empty"`
@@ -166,10 +167,11 @@ type sendChatMessageInput struct {
 	ID             uuid.UUID `path:"id" format:"uuid"`
 	IdempotencyKey string    `header:"Idempotency-Key" required:"true" minLength:"36" maxLength:"36" doc:"A UUID, stored as the message's clientId. Repeating the request with the same key and body returns the stored message"`
 	Body           struct {
-		Body          string       `json:"body,omitempty" maxLength:"16000" doc:"Up to 4000 characters after HTML is stripped; may be empty only with attachments"`
-		AttachmentIDs []uuid.UUID  `json:"attachmentIds,omitempty" maxItems:"5" uniqueItems:"true" doc:"Uploads of kind chat, shown in this order; images only"`
-		NoPreview     bool         `json:"noPreview,omitempty" doc:"Do not preview the first link of the body"`
-		Poll          *pollRequest `json:"poll,omitempty" doc:"Send a poll instead of text; body and attachmentIds must then be empty"`
+		Body          string        `json:"body,omitempty" maxLength:"16000" doc:"Up to 4000 characters after HTML is stripped; may be empty only with attachments"`
+		AttachmentIDs []uuid.UUID   `json:"attachmentIds,omitempty" maxItems:"5" uniqueItems:"true" doc:"Uploads of kind chat, shown in this order; images only"`
+		NoPreview     bool          `json:"noPreview,omitempty" doc:"Do not preview the first link of the body"`
+		Poll          *pollRequest  `json:"poll,omitempty" doc:"Send a poll instead of text; body and attachmentIds must then be empty"`
+		Event         *eventRequest `json:"event,omitempty" doc:"Send an event that members answer with going, maybe or no; groups only, and body and attachmentIds must then be empty"`
 	}
 }
 
@@ -182,7 +184,7 @@ var sendChatMessageOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "sendChatMessage",
 	Method:        http.MethodPost,
 	Path:          "/chat/conversations/{id}/messages",
-	Summary:       "Send a text message with up to 5 images, or a poll",
+	Summary:       "Send a text message with up to 5 images, a poll or an event",
 	Description:   "Same key and body: 201 with the stored message. Same key, other body: 422. Same key after the message was deleted: 410. At most 30 messages per minute.",
 	Tags:          []string{"chat"},
 	DefaultStatus: http.StatusCreated,
@@ -201,6 +203,7 @@ func (h *messageHandler) sendMessage(ctx context.Context, in *sendChatMessageInp
 		AttachmentIDs:  in.Body.AttachmentIDs,
 		NoPreview:      in.Body.NoPreview,
 		Poll:           in.Body.Poll.change(),
+		Event:          in.Body.Event.change(),
 		Key:            in.IdempotencyKey,
 	})
 	if err != nil {
