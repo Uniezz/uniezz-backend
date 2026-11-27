@@ -38,6 +38,7 @@ type sendChange struct {
 	Poll           *pollChange
 	Event          *eventChange
 	Location       *locationChange
+	Card           *cardChange
 }
 
 type sendInput struct {
@@ -58,7 +59,7 @@ func (c sendChange) clean(now time.Time) (sendInput, error) {
 	in := sendInput{ConversationID: c.ConversationID, Kind: MessageText, Payload: []byte("{}"), MediaIDs: []uuid.UUID{}, Key: *key}
 
 	cards := 0
-	for _, set := range []bool{c.Poll != nil, c.Event != nil, c.Location != nil} {
+	for _, set := range []bool{c.Poll != nil, c.Event != nil, c.Location != nil, c.Card != nil} {
 		if set {
 			cards++
 		}
@@ -73,6 +74,8 @@ func (c sendChange) clean(now time.Time) (sendInput, error) {
 		return in.withCard(MessageEvent, now, c.Event)
 	case c.Location != nil:
 		return in.withCard(MessageLocation, now, c.Location)
+	case c.Card != nil:
+		return in.withCard(MessagePost, now, c.Card)
 	}
 
 	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
@@ -139,6 +142,9 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 		return nil, false, err
 	}
 	if err := m.checkUploads(ctx, senderID, in.MediaIDs); err != nil {
+		return nil, false, err
+	}
+	if err := m.checkCard(ctx, senderID, in); err != nil {
 		return nil, false, err
 	}
 
@@ -580,6 +586,10 @@ func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []mes
 	if err != nil {
 		return nil, err
 	}
+	cards, err := m.cardViews(ctx, viewerID, rows)
+	if err != nil {
+		return nil, err
+	}
 
 	expiresAt := m.now().Add(media.PrivateURLTTL)
 	attachments := make(map[uuid.UUID][]Attachment, len(rows))
@@ -611,6 +621,7 @@ func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []mes
 			Poll:           polls[row.ID],
 			Event:          events[row.ID],
 			Location:       locations[row.ID],
+			Card:           cards[row.ID],
 			CreatedAt:      row.CreatedAt,
 			DeletedAt:      row.DeletedAt,
 		})

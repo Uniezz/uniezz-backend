@@ -34,6 +34,13 @@ func (in sendInput) withCard(kind MessageKind, now time.Time, card any) (sendInp
 		}
 		in.Body = p.body()
 		payload = p
+	case *cardChange:
+		p, err := c.payload()
+		if err != nil {
+			return sendInput{}, err
+		}
+		in.Body = cardBodies[p.ItemType]
+		payload = p
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {

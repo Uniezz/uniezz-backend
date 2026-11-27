@@ -297,6 +297,26 @@ components:
         - level
         - age
       type: object
+    CardRequest:
+      additionalProperties: false
+      properties:
+        itemId:
+          format: uuid
+          type: string
+        itemType:
+          enum:
+            - post
+            - course
+            - notes
+          type: string
+          x-extensible-enum:
+            - post
+            - course
+            - notes
+      required:
+        - itemType
+        - itemId
+      type: object
     Challenge:
       additionalProperties: false
       properties:
@@ -2294,6 +2314,9 @@ components:
           type:
             - string
             - "null"
+        card:
+          $ref: "#/components/schemas/SharedCard"
+          description: "Set when kind is post and the message is not deleted: a live link to a post, course or notes"
         changeSeq:
           description: Sync cursor value of the message's latest change
           format: int64
@@ -3770,6 +3793,9 @@ components:
           description: Up to 4000 characters after HTML is stripped; may be empty only with attachments
           maxLength: 16000
           type: string
+        card:
+          $ref: "#/components/schemas/CardRequest"
+          description: Share a post, course or notes the sender can see (404 otherwise); body and attachmentIds must then be empty
         event:
           $ref: "#/components/schemas/EventRequest"
           description: Send an event that members answer with going, maybe or no; groups only, and body and attachmentIds must then be empty
@@ -3795,6 +3821,45 @@ components:
           type: string
       required:
         - whoCanMessage
+      type: object
+    SharedCard:
+      additionalProperties: false
+      properties:
+        available:
+          description: False when the item was deleted or the viewer may not see it, and in stream events; fetch the message to resolve it
+          type: boolean
+        imageUrl:
+          description: First image of a post; null otherwise
+          type:
+            - string
+            - "null"
+        itemId:
+          format: uuid
+          type: string
+        itemType:
+          description: More types may be added; show an unknown one as the message body
+          type: string
+          x-extensible-enum:
+            - post
+            - course
+            - notes
+        subtitle:
+          description: The post author, the course subject or the course of the notes; null when not available
+          type:
+            - string
+            - "null"
+        title:
+          description: Null when the card is not available
+          type:
+            - string
+            - "null"
+      required:
+        - itemType
+        - itemId
+        - available
+        - title
+        - subtitle
+        - imageUrl
       type: object
     Student:
       additionalProperties: false
@@ -5678,7 +5743,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Send a text message with up to 5 images, a poll, an event or a location
+      summary: Send a text message with up to 5 images, a poll, an event, a location or a card
       tags:
         - chat
   /chat/conversations/{id}/messages/search:

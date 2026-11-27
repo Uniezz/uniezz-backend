@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/safehttp"
+	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,6 +58,19 @@ type mediaService interface {
 	Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error)
 }
 
+var _ postCards = feed.Module{}
+
+type postCards interface {
+	ChatCards(ctx context.Context, viewerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]feed.ChatCard, error)
+}
+
+var _ studyCards = study.Module{}
+
+type studyCards interface {
+	CourseCards(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]study.ChatCard, error)
+	NotesCards(ctx context.Context, viewerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]study.ChatCard, error)
+}
+
 var _ pageFetcher = safehttp.Client{}
 
 type pageFetcher interface {
@@ -89,6 +104,8 @@ type Module struct {
 	events        *eventRepository
 	lives         *liveLocationRepository
 	media         mediaService
+	posts         postCards
+	study         studyCards
 	pages         pageFetcher
 	jobs          *jobs.Runner
 	push          notifier
@@ -102,7 +119,7 @@ type Module struct {
 	now           func() time.Time
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule postCards, studyModule studyCards, pushModule notifier, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:            db,
@@ -118,6 +135,8 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier, runn
 		events:        newEventRepository(db),
 		lives:         newLiveLocationRepository(db),
 		media:         mediaModule,
+		posts:         feedModule,
+		study:         studyModule,
 		pages:         safehttp.New(safehttp.Config{UserAgent: previewUserAgent}),
 		jobs:          runner,
 		push:          pushModule,

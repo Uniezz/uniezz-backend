@@ -49,6 +49,36 @@ type LinkPreview struct {
 	ImageURL    *string `json:"imageUrl" nullable:"true" doc:"A copy stored by Uniezz, presigned like attachments; null when the page has no usable image"`
 }
 
+func (CardType) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema {
+	schema.Enum = nil
+	if schema.Extensions == nil {
+		schema.Extensions = map[string]any{}
+	}
+	schema.Extensions["x-extensible-enum"] = []any{CardPost, CardCourse, CardNotes}
+	return schema
+}
+
+type SharedCard struct {
+	ItemType  CardType  `json:"itemType" doc:"More types may be added; show an unknown one as the message body"`
+	ItemID    uuid.UUID `json:"itemId" format:"uuid"`
+	Available bool      `json:"available" doc:"False when the item was deleted or the viewer may not see it, and in stream events; fetch the message to resolve it"`
+	Title     *string   `json:"title" nullable:"true" doc:"Null when the card is not available"`
+	Subtitle  *string   `json:"subtitle" nullable:"true" doc:"The post author, the course subject or the course of the notes; null when not available"`
+	ImageURL  *string   `json:"imageUrl" nullable:"true" doc:"First image of a post; null otherwise"`
+}
+
+type cardRequest struct {
+	ItemType CardType  `json:"itemType" enum:"post,course,notes"`
+	ItemID   uuid.UUID `json:"itemId" format:"uuid"`
+}
+
+func (r *cardRequest) change() *cardChange {
+	if r == nil {
+		return nil
+	}
+	return &cardChange{ItemType: r.ItemType, ItemID: r.ItemID}
+}
+
 type Message struct {
 	ID             uuid.UUID      `json:"id" format:"uuid"`
 	ConversationID uuid.UUID      `json:"conversationId" format:"uuid"`
@@ -63,6 +93,7 @@ type Message struct {
 	Poll           *Poll          `json:"poll,omitempty" doc:"Set when kind is poll and the message is not deleted"`
 	Event          *Event         `json:"event,omitempty" doc:"Set when kind is event and the message is not deleted"`
 	Location       *Location      `json:"location,omitempty" doc:"Set when kind is location and the message is not deleted"`
+	Card           *SharedCard    `json:"card,omitempty" doc:"Set when kind is post and the message is not deleted: a live link to a post, course or notes"`
 	LinkPreview    *LinkPreview   `json:"linkPreview,omitempty" doc:"Preview of the first https link in the body. Omitted while it is being fetched (a message.updated event follows), when fetching failed, and when the message has no link"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	DeletedAt      *time.Time     `json:"deletedAt" nullable:"true" doc:"Set when the sender deleted the message; body, payload and attachments are then empty"`
@@ -174,6 +205,7 @@ type sendChatMessageInput struct {
 		Poll          *pollRequest     `json:"poll,omitempty" doc:"Send a poll instead of text; body and attachmentIds must then be empty"`
 		Event         *eventRequest    `json:"event,omitempty" doc:"Send an event that members answer with going, maybe or no; groups only, and body and attachmentIds must then be empty"`
 		Location      *locationRequest `json:"location,omitempty" doc:"Send a place, or a live location for one hour; body and attachmentIds must then be empty"`
+		Card          *cardRequest     `json:"card,omitempty" doc:"Share a post, course or notes the sender can see (404 otherwise); body and attachmentIds must then be empty"`
 	}
 }
 
@@ -186,7 +218,7 @@ var sendChatMessageOperation = auth.Authenticated(huma.Operation{
 	OperationID:   "sendChatMessage",
 	Method:        http.MethodPost,
 	Path:          "/chat/conversations/{id}/messages",
-	Summary:       "Send a text message with up to 5 images, a poll, an event or a location",
+	Summary:       "Send a text message with up to 5 images, a poll, an event, a location or a card",
 	Description:   "Same key and body: 201 with the stored message. Same key, other body: 422. Same key after the message was deleted: 410. At most 30 messages per minute.",
 	Tags:          []string{"chat"},
 	DefaultStatus: http.StatusCreated,
@@ -207,6 +239,7 @@ func (h *messageHandler) sendMessage(ctx context.Context, in *sendChatMessageInp
 		Poll:           in.Body.Poll.change(),
 		Event:          in.Body.Event.change(),
 		Location:       in.Body.Location.change(),
+		Card:           in.Body.Card.change(),
 		Key:            in.IdempotencyKey,
 	})
 	if err != nil {

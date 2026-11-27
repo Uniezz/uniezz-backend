@@ -275,3 +275,8 @@ func (r *courseRepository) ratedBy(ctx context.Context, userID uuid.UUID) ([]uui
 	}
 	return ids, nil
 }
+
+func (r *courseRepository) chatCards(ctx context.Context, ids []uuid.UUID) ([]ChatCard, error) {
+	const query = `SELECT id, name, subject FROM courses WHERE id = ANY($1)`
+	return scanChatCards(ctx, r.db, "list course cards", query, ids)
+}

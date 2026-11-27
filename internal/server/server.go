@@ -66,7 +66,7 @@ func New(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) (Modules, er
 		return Modules{}, err
 	}
 
-	chatModule, err := chat.New(db, mediaModule, pushModule, runner)
+	chatModule, err := chat.New(db, mediaModule, feedModule, studyModule, pushModule, runner)
 	if err != nil {
 		return Modules{}, err
 	}

@@ -505,3 +505,39 @@ func (r *postRepository) featured(ctx context.Context, viewerID uuid.UUID, limit
 	}
 	return out, nil
 }
+
+func (r *postRepository) chatCards(ctx context.Context, viewerID uuid.UUID, ids []uuid.UUID) ([]ChatCard, error) {
+	query := `
+		SELECT p.id, p.title, a.first_name || ' ' || a.last_name, img.kind, img.object_key
+		FROM feed_posts p
+		JOIN public_profiles a ON a.id = p.author_id
+		LEFT JOIN LATERAL (
+			SELECT m.kind, m.object_key
+			FROM feed_post_media pm
+			JOIN ready_media m ON m.id = pm.media_id
+			WHERE pm.post_id = p.id
+			ORDER BY pm.position
+			LIMIT 1
+		) img ON TRUE
+		WHERE p.id = ANY($2) AND ` + notHidden("$1", "p.author_id")
+	rows, err := r.db.Conn(ctx).Query(ctx, query, viewerID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list post cards: %w", err)
+	}
+	defer rows.Close()
+
+	var cards []ChatCard
+	for rows.Next() {
+		var c ChatCard
+		var kind, objectKey *string
+		if err := rows.Scan(&c.ID, &c.Title, &c.Subtitle, &kind, &objectKey); err != nil {
+			return nil, fmt.Errorf("scan post card: %w", err)
+		}
+		c.Image = media.RefOf(kind, objectKey)
+		cards = append(cards, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list post cards: %w", err)
+	}
+	return cards, nil
+}

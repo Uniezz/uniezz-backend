@@ -13,10 +13,12 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/feed"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/push"
+	"github.com/Uniezz/uniezz-backend/internal/study"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -121,6 +123,7 @@ type testEnv struct {
 	api    humatest.TestAPI
 	auth   auth.Module
 	media  *fakeMedia
+	cards  *fakeCards
 	push   *fakePush
 	module Module
 	now    time.Time
@@ -131,7 +134,8 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	e := &testEnv{pool: pool, media: &fakeMedia{pool: pool}, push: &fakePush{}, now: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)}
-	module, err := New(pool, e.media, e.push, jobs.NewRunner(pool, 1, 0))
+	e.cards = &fakeCards{items: map[uuid.UUID]fakeCard{}}
+	module, err := New(pool, e.media, e.cards, e.cards, e.push, jobs.NewRunner(pool, 1, 0))
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
@@ -317,6 +321,79 @@ func seqs(messages []Message) []int64 {
 		out = append(out, m.Seq)
 	}
 	return out
+}
+
+type fakeCard struct {
+	itemType CardType
+	title    string
+	hidden   map[uuid.UUID]bool
+}
+
+type fakeCards struct {
+	mu    sync.Mutex
+	items map[uuid.UUID]fakeCard
+	calls int
+}
+
+func (f *fakeCards) add(itemType CardType, title string, hiddenFrom ...uuid.UUID) uuid.UUID {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := uuid.New()
+	hidden := map[uuid.UUID]bool{}
+	for _, viewer := range hiddenFrom {
+		hidden[viewer] = true
+	}
+	f.items[id] = fakeCard{itemType: itemType, title: title, hidden: hidden}
+	return id
+}
+
+func (f *fakeCards) remove(id uuid.UUID) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.items, id)
+}
+
+func (f *fakeCards) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+func (f *fakeCards) find(itemType CardType, viewerID uuid.UUID, ids []uuid.UUID) map[uuid.UUID]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	found := map[uuid.UUID]string{}
+	for _, id := range ids {
+		if item, ok := f.items[id]; ok && item.itemType == itemType && !item.hidden[viewerID] {
+			found[id] = item.title
+		}
+	}
+	return found
+}
+
+func (f *fakeCards) ChatCards(_ context.Context, viewerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]feed.ChatCard, error) {
+	cards := map[uuid.UUID]feed.ChatCard{}
+	for id, title := range f.find(CardPost, viewerID, ids) {
+		cards[id] = feed.ChatCard{ID: id, Title: title, Subtitle: "Jan Kowalski"}
+	}
+	return cards, nil
+}
+
+func (f *fakeCards) CourseCards(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]study.ChatCard, error) {
+	cards := map[uuid.UUID]study.ChatCard{}
+	for id, title := range f.find(CardCourse, uuid.Nil, ids) {
+		cards[id] = study.ChatCard{ID: id, Title: title, Subtitle: "Analysis"}
+	}
+	return cards, nil
+}
+
+func (f *fakeCards) NotesCards(_ context.Context, viewerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]study.ChatCard, error) {
+	cards := map[uuid.UUID]study.ChatCard{}
+	for id, title := range f.find(CardNotes, viewerID, ids) {
+		cards[id] = study.ChatCard{ID: id, Title: title, Subtitle: "Analysis"}
+	}
+	return cards, nil
 }
 
 type fakePush struct {
