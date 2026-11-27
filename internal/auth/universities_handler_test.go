@@ -294,6 +294,27 @@ func TestReplaceUniversity(t *testing.T) {
 		}
 	})
 
+	t.Run("a faculty that courses refer to cannot be left out", func(t *testing.T) {
+		id, domain := create(t)
+		faculty := decodeUniversity[University](t, e.api.Get("/auth/universities/"+id), http.StatusOK).Faculties[0].ID
+		var course uuid.UUID
+		err := e.pool.QueryRow(context.Background(), `
+			INSERT INTO courses (name, description, difficulty, university_id, faculty_id)
+			VALUES ('Analiza', 'Granice.', 3, $1, $2) RETURNING id`, id, faculty).Scan(&course)
+		if err != nil {
+			t.Fatalf("insert course: %v", err)
+		}
+		t.Cleanup(func() { _, _ = e.pool.Exec(context.Background(), "DELETE FROM courses WHERE id = $1", course) })
+		body := universityBody(id, domain)
+		delete(body, "id")
+		body["faculties"] = []map[string]any{{"name": "Wydział Inny", "address": "ul. Inna 1", "latitude": 51.0, "longitude": 22.0}}
+
+		expectUniversityError(t, e.api.Put("/auth/universities/"+id, e.bearer(t, RoleAdmin), body), http.StatusConflict, "faculty_in_use")
+		if got := decodeUniversity[University](t, e.api.Get("/auth/universities/"+id), http.StatusOK); len(got.Faculties) != 2 {
+			t.Errorf("faculties = %+v", got.Faculties)
+		}
+	})
+
 	t.Run("the same faculty id twice is invalid", func(t *testing.T) {
 		id, domain := create(t)
 		kept := decodeUniversity[University](t, e.api.Get("/auth/universities/"+id), http.StatusOK).Faculties[0].ID

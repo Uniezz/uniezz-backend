@@ -12,18 +12,13 @@ import (
 const (
 	minDifficulty = 1
 	maxDifficulty = 5
-	minSemester   = 1
-	maxSemester   = 10
 )
 
 type courseChange struct {
-	Name         string
-	Description  string
-	Difficulty   int
-	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	Name        string
+	Description string
+	Difficulty  int
+	FacultyID   uuid.UUID
 }
 
 func (c courseChange) fields() (courseFields, error) {
@@ -35,21 +30,11 @@ func (c courseChange) fields() (courseFields, error) {
 	if f.Description, err = cleanDescription(c.Description); err != nil {
 		return courseFields{}, err
 	}
-	if f.Faculty, err = cleanName("faculty", c.Faculty); err != nil {
-		return courseFields{}, err
-	}
-	if f.Subject, err = cleanName("subject", c.Subject); err != nil {
-		return courseFields{}, err
-	}
-	if !validDifficulty(c.Difficulty) || c.Semester < minSemester || c.Semester > maxSemester {
-		return courseFields{}, ErrInvalidInput
-	}
-	if c.UniversityID == "" {
+	if !validDifficulty(c.Difficulty) || c.FacultyID == uuid.Nil {
 		return courseFields{}, ErrInvalidInput
 	}
 	f.Difficulty = c.Difficulty
-	f.UniversityID = c.UniversityID
-	f.Semester = c.Semester
+	f.FacultyID = c.FacultyID
 	return f, nil
 }
 
@@ -87,26 +72,13 @@ func (c courseEditChange) fields() (courseEditFields, error) {
 type courseQuery struct {
 	ViewerID     uuid.UUID
 	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	FacultyID    uuid.UUID
 	Search       string
 	Cursor       string
 	Limit        int
 }
 
 func (q courseQuery) filter() (courseFilter, error) {
-	if q.Semester != 0 && (q.Semester < minSemester || q.Semester > maxSemester) {
-		return courseFilter{}, ErrInvalidInput
-	}
-	faculty, err := cleanFilterValue(q.Faculty)
-	if err != nil {
-		return courseFilter{}, err
-	}
-	subject, err := cleanFilterValue(q.Subject)
-	if err != nil {
-		return courseFilter{}, err
-	}
 	words, err := text.SearchWords(q.Search)
 	if err != nil {
 		return courseFilter{}, ErrInvalidInput
@@ -118,9 +90,7 @@ func (q courseQuery) filter() (courseFilter, error) {
 	return courseFilter{
 		ViewerID:     q.ViewerID,
 		UniversityID: q.UniversityID,
-		Faculty:      faculty,
-		Subject:      subject,
-		Semester:     q.Semester,
+		FacultyID:    q.FacultyID,
 		Words:        words,
 		After:        after,
 		Limit:        q.Limit + 1,
@@ -267,9 +237,8 @@ func toCourse(row courseRow, viewerID uuid.UUID) Course {
 		Description:   row.Description,
 		Difficulty:    row.Difficulty,
 		UniversityID:  row.UniversityID,
+		FacultyID:     row.FacultyID,
 		Faculty:       row.Faculty,
-		Subject:       row.Subject,
-		Semester:      row.Semester,
 		RatingAverage: ratingAverage(row.RatingSum, row.RatingCount),
 		RatingCount:   row.RatingCount,
 		IsMine:        row.AuthorID != nil && *row.AuthorID == viewerID,

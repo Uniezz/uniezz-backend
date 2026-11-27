@@ -112,12 +112,10 @@ func (h *fileHandler) listCourseFiles(ctx context.Context, in *listCourseFilesIn
 
 type searchFilesInput struct {
 	httpapi.PageQuery
-	Search       string `query:"q" maxLength:"200" doc:"Up to 5 words of at least 3 characters, matched against the file title and the course subject" example:"midterm algebra"`
-	UniversityID string `query:"universityId" maxLength:"32" example:"umcs"`
-	Faculty      string `query:"faculty" maxLength:"600" doc:"Exact faculty name of the course"`
-	Subject      string `query:"subject" maxLength:"600" doc:"Exact subject name of the course"`
-	Semester     int    `query:"semester" minimum:"0" maximum:"10" doc:"0 or omitted for every semester"`
-	Mine         bool   `query:"mine" doc:"Only files uploaded by the signed-in student"`
+	Search       string    `query:"q" maxLength:"200" doc:"Up to 5 words of at least 3 characters, matched against the file title and the course name" example:"midterm algebra"`
+	UniversityID string    `query:"universityId" maxLength:"32" example:"umcs"`
+	FacultyID    uuid.UUID `query:"facultyId" format:"uuid" doc:"Only files of courses of this faculty; omitted for every faculty"`
+	Mine         bool      `query:"mine" doc:"Only files uploaded by the signed-in student"`
 }
 
 type searchFilesOutput struct {
@@ -147,9 +145,7 @@ func (h *fileHandler) searchFiles(ctx context.Context, in *searchFilesInput) (*s
 		ViewerID:     viewerID,
 		Search:       in.Search,
 		UniversityID: in.UniversityID,
-		Faculty:      in.Faculty,
-		Subject:      in.Subject,
-		Semester:     in.Semester,
+		FacultyID:    in.FacultyID,
 		Mine:         in.Mine,
 		Cursor:       in.Cursor,
 		Limit:        in.Limit,

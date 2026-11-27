@@ -63,7 +63,7 @@ type SharedCard struct {
 	ItemID    uuid.UUID `json:"itemId" format:"uuid"`
 	Available bool      `json:"available" doc:"False when the item was deleted or the viewer may not see it, and in stream events; fetch the message to resolve it"`
 	Title     *string   `json:"title" nullable:"true" doc:"Null when the card is not available"`
-	Subtitle  *string   `json:"subtitle" nullable:"true" doc:"The post author, the course subject or the course of the notes; null when not available"`
+	Subtitle  *string   `json:"subtitle" nullable:"true" doc:"The post author, the faculty of the course or the course of the notes; null when not available"`
 	ImageURL  *string   `json:"imageUrl" nullable:"true" doc:"First image of a post; null otherwise"`
 }
 

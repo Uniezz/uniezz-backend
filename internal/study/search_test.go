@@ -79,27 +79,28 @@ func TestSearchCourses(t *testing.T) {
 	e := newTestEnv(t)
 	courseID := func(c Course) uuid.UUID { return c.ID }
 
-	t.Run("matches the name or the subject, newest first, page by page", func(t *testing.T) {
+	t.Run("matches the name, newest first, page by page", func(t *testing.T) {
 		author := e.student(t)
 		marker := uuid.NewString()[:8]
-		byName := e.course(t, author, map[string]any{"name": "Algebra " + marker})
-		bySubject := e.course(t, author, map[string]any{"subject": "Topology " + marker})
+		older := e.course(t, author, map[string]any{"name": "Algebra " + marker})
+		newer := e.course(t, author, map[string]any{"name": "Topology " + marker})
 		e.course(t, author, nil)
 
 		got := pageIDs(t, e, "/study/courses?q="+marker, author, courseID)
-		if len(got) != 2 || got[0] != bySubject.ID || got[1] != byName.ID {
-			t.Fatalf("ids = %v, want [%s %s]", got, bySubject.ID, byName.ID)
+		if len(got) != 2 || got[0] != newer.ID || got[1] != older.ID {
+			t.Fatalf("ids = %v, want [%s %s]", got, newer.ID, older.ID)
 		}
 	})
 
-	t.Run("every word must match and search combines with the semester filter", func(t *testing.T) {
+	t.Run("every word must match and search combines with the faculty filter", func(t *testing.T) {
 		author := e.student(t)
 		marker := uuid.NewString()[:8]
-		want := e.course(t, author, map[string]any{"name": "Linear algebra " + marker, "semester": 3})
-		e.course(t, author, map[string]any{"name": "Linear algebra " + marker, "semester": 4})
-		e.course(t, author, map[string]any{"name": "Linear logic " + marker, "semester": 3})
+		faculty := e.newFaculty(t)
+		want := e.course(t, author, map[string]any{"name": "Linear algebra " + marker, "facultyId": faculty})
+		e.course(t, author, map[string]any{"name": "Linear algebra " + marker})
+		e.course(t, author, map[string]any{"name": "Linear logic " + marker, "facultyId": faculty})
 
-		got := pageIDs(t, e, "/study/courses?semester=3&q=ALGEBRA+"+marker, author, courseID)
+		got := pageIDs(t, e, "/study/courses?facultyId="+faculty.String()+"&q=ALGEBRA+"+marker, author, courseID)
 		if len(got) != 1 || got[0] != want.ID {
 			t.Fatalf("ids = %v, want [%s]", got, want.ID)
 		}

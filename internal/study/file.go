@@ -53,26 +53,13 @@ type fileQuery struct {
 	CourseID     uuid.UUID
 	Search       string
 	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	FacultyID    uuid.UUID
 	Mine         bool
 	Cursor       string
 	Limit        int
 }
 
 func (q fileQuery) filter() (fileFilter, error) {
-	if q.Semester != 0 && (q.Semester < minSemester || q.Semester > maxSemester) {
-		return fileFilter{}, ErrInvalidInput
-	}
-	faculty, err := cleanFilterValue(q.Faculty)
-	if err != nil {
-		return fileFilter{}, err
-	}
-	subject, err := cleanFilterValue(q.Subject)
-	if err != nil {
-		return fileFilter{}, err
-	}
 	words, err := text.SearchWords(q.Search)
 	if err != nil {
 		return fileFilter{}, ErrInvalidInput
@@ -86,9 +73,7 @@ func (q fileQuery) filter() (fileFilter, error) {
 		CourseID:     q.CourseID,
 		Words:        words,
 		UniversityID: q.UniversityID,
-		Faculty:      faculty,
-		Subject:      subject,
-		Semester:     q.Semester,
+		FacultyID:    q.FacultyID,
 		After:        after,
 		Limit:        q.Limit + 1,
 	}

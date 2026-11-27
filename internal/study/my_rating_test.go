@@ -3,6 +3,7 @@ package study
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -59,7 +60,7 @@ func TestCourseMyRating(t *testing.T) {
 		other := e.student(t)
 		course := e.course(t, author, nil)
 		path := "/study/courses/" + course.ID.String()
-		listPath := "/study/courses?subject=" + course.Subject
+		listPath := "/study/courses?q=" + url.QueryEscape(course.Name)
 
 		if course.MyRating != nil {
 			t.Errorf("created course myRating = %v, want null", *course.MyRating)

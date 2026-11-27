@@ -50,14 +50,6 @@ func cleanComment(s string) (string, error) {
 	return clean, nil
 }
 
-func cleanFilterValue(s string) (string, error) {
-	clean := text.Plain(s, false)
-	if utf8.RuneCountInString(clean) > maxNameLength {
-		return "", ErrInvalidInput
-	}
-	return clean, nil
-}
-
 func cleanProfessorName(parts ...string) (string, bool) {
 	kept := make([]string, 0, len(parts))
 	for _, part := range parts {

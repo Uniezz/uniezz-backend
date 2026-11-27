@@ -11,7 +11,7 @@ func TestChatCards(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 
-	t.Run("a course gives its name and subject", func(t *testing.T) {
+	t.Run("a course gives its name and faculty", func(t *testing.T) {
 		author := e.student(t)
 		course := e.course(t, author, nil)
 
@@ -19,7 +19,7 @@ func TestChatCards(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CourseCards: %v", err)
 		}
-		if card, ok := cards[course.ID]; len(cards) != 1 || !ok || card.Title != course.Name || card.Subtitle != course.Subject {
+		if card, ok := cards[course.ID]; len(cards) != 1 || !ok || card.Title != course.Name || card.Subtitle != course.Faculty {
 			t.Errorf("cards = %+v", cards)
 		}
 	})

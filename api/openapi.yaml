@@ -633,8 +633,13 @@ components:
           minimum: 1
           type: integer
         faculty:
+          description: Name of the faculty
           examples:
-            - Faculty of Mathematics, Physics and Computer Science
+            - Wydział Matematyki, Fizyki i Informatyki
+          type: string
+        facultyId:
+          description: One of the faculties listed by getUniversities
+          format: uuid
           type: string
         id:
           format: uuid
@@ -667,17 +672,6 @@ components:
             - 17
           format: int64
           type: integer
-        semester:
-          examples:
-            - 1
-          format: int64
-          maximum: 10
-          minimum: 1
-          type: integer
-        subject:
-          examples:
-            - Computer Science
-          type: string
         universityId:
           examples:
             - umcs
@@ -688,9 +682,8 @@ components:
         - description
         - difficulty
         - universityId
+        - facultyId
         - faculty
-        - subject
-        - semester
         - ratingAverage
         - ratingCount
         - isMine
@@ -932,10 +925,9 @@ components:
           maximum: 5
           minimum: 1
           type: integer
-        faculty:
-          description: 3 to 150 characters after HTML is stripped
-          maxLength: 600
-          minLength: 1
+        facultyId:
+          description: One of the faculties listed by getUniversities; the course belongs to its university
+          format: uuid
           type: string
         name:
           description: 3 to 150 characters after HTML is stripped
@@ -944,34 +936,11 @@ components:
           maxLength: 600
           minLength: 1
           type: string
-        semester:
-          examples:
-            - 1
-          format: int64
-          maximum: 10
-          minimum: 1
-          type: integer
-        subject:
-          description: 3 to 150 characters after HTML is stripped
-          examples:
-            - Computer Science
-          maxLength: 600
-          minLength: 1
-          type: string
-        universityId:
-          examples:
-            - umcs
-          maxLength: 32
-          minLength: 1
-          type: string
       required:
         - name
         - description
         - difficulty
-        - universityId
-        - faculty
-        - subject
-        - semester
+        - facultyId
       type: object
     CreatePostInputBody:
       additionalProperties: false
@@ -3853,7 +3822,7 @@ components:
             - course
             - notes
         subtitle:
-          description: The post author, the course subject or the course of the notes; null when not available
+          description: The post author, the faculty of the course or the course of the notes; null when not available
           type:
             - string
             - "null"
@@ -11513,38 +11482,20 @@ paths:
               - umcs
             maxLength: 32
             type: string
-        - description: Exact faculty name
+        - description: Only courses of this faculty; omitted for every faculty
           explode: false
           in: query
-          name: faculty
+          name: facultyId
           schema:
-            description: Exact faculty name
-            maxLength: 600
+            description: Only courses of this faculty; omitted for every faculty
+            format: uuid
             type: string
-        - description: Exact subject name
-          explode: false
-          in: query
-          name: subject
-          schema:
-            description: Exact subject name
-            maxLength: 600
-            type: string
-        - description: 0 or omitted for every semester
-          explode: false
-          in: query
-          name: semester
-          schema:
-            description: 0 or omitted for every semester
-            format: int64
-            maximum: 10
-            minimum: 0
-            type: integer
-        - description: Up to 5 words of at least 3 characters, matched against the course name and subject
+        - description: Up to 5 words of at least 3 characters, matched against the course name
           explode: false
           in: query
           name: q
           schema:
-            description: Up to 5 words of at least 3 characters, matched against the course name and subject
+            description: Up to 5 words of at least 3 characters, matched against the course name
             examples:
               - calculus
             maxLength: 200
@@ -11586,7 +11537,7 @@ paths:
       tags:
         - study
     post:
-      description: Adds a course to the catalogue of a university. A student may create, upload and comment up to 30 times an hour in total.
+      description: Adds a course to the catalogue of a faculty; an unknown faculty is invalid input. A student may create, upload and comment up to 30 times an hour in total.
       operationId: createCourse
       requestBody:
         content:
@@ -12132,12 +12083,12 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
-        - description: Up to 5 words of at least 3 characters, matched against the file title and the course subject
+        - description: Up to 5 words of at least 3 characters, matched against the file title and the course name
           explode: false
           in: query
           name: q
           schema:
-            description: Up to 5 words of at least 3 characters, matched against the file title and the course subject
+            description: Up to 5 words of at least 3 characters, matched against the file title and the course name
             examples:
               - midterm algebra
             maxLength: 200
@@ -12150,32 +12101,14 @@ paths:
               - umcs
             maxLength: 32
             type: string
-        - description: Exact faculty name of the course
+        - description: Only files of courses of this faculty; omitted for every faculty
           explode: false
           in: query
-          name: faculty
+          name: facultyId
           schema:
-            description: Exact faculty name of the course
-            maxLength: 600
+            description: Only files of courses of this faculty; omitted for every faculty
+            format: uuid
             type: string
-        - description: Exact subject name of the course
-          explode: false
-          in: query
-          name: subject
-          schema:
-            description: Exact subject name of the course
-            maxLength: 600
-            type: string
-        - description: 0 or omitted for every semester
-          explode: false
-          in: query
-          name: semester
-          schema:
-            description: 0 or omitted for every semester
-            format: int64
-            maximum: 10
-            minimum: 0
-            type: integer
         - description: Only files uploaded by the signed-in student
           explode: false
           in: query
