@@ -29,6 +29,7 @@ var _ profiles = profile.Module{}
 type profiles interface {
 	Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]profile.ProfileSummary, error)
 	Photos(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]string, error)
+	RemoveFollowsBetween(ctx context.Context, firstID, secondID uuid.UUID) error
 }
 
 var _ rewardService = rewards.Module{}

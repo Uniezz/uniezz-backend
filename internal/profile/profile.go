@@ -27,6 +27,10 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID, roles []auth.Role
 	if err != nil {
 		return nil, err
 	}
+	followersCount, followingCount, err := m.follows.counts(ctx, userID, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	var birthDate *string
 	if connectionPreferences.BirthDate != nil {
@@ -37,27 +41,30 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID, roles []auth.Role
 	openTo := connectionPreferences.OpenTo
 
 	out := &Profile{
-		ID:           p.ID,
-		Email:        p.Email,
-		FirstName:    p.FirstName,
-		LastName:     p.LastName,
-		Gender:       p.Gender,
-		BirthDate:    birthDate,
-		OpenTo:       openTo,
-		Intent:       connectionPreferences.Intent,
-		Language:     p.Language,
-		UniversityID: p.UniversityID,
-		Programmes:   make([]Programme, 0, len(programmes)),
-		AvatarURL:    m.mediaURL(ctx, p.Avatar),
-		BannerURL:    m.mediaURL(ctx, p.Banner),
-		Bio:          p.Bio,
-		SongURL:      p.SongURL,
-		Interests:    text.NonNil(p.Interests),
-		Privacy:      p.Privacy.withDefaults(),
-		Coins:        coins,
-		Roles:        text.NonNil(roles),
-		OnboardedAt:  p.OnboardedAt,
-		CreatedAt:    p.CreatedAt,
+		ID:             p.ID,
+		Email:          p.Email,
+		FirstName:      p.FirstName,
+		LastName:       p.LastName,
+		Gender:         p.Gender,
+		BirthDate:      birthDate,
+		OpenTo:         openTo,
+		Intent:         connectionPreferences.Intent,
+		Language:       p.Language,
+		UniversityID:   p.UniversityID,
+		Programmes:     make([]Programme, 0, len(programmes)),
+		AvatarURL:      m.mediaURL(ctx, p.Avatar),
+		BannerURL:      m.mediaURL(ctx, p.Banner),
+		Bio:            p.Bio,
+		SongURL:        p.SongURL,
+		Interests:      text.NonNil(p.Interests),
+		Privacy:        p.Privacy.withDefaults(),
+		Coins:          coins,
+		Roles:          text.NonNil(roles),
+		FollowersCount: followersCount,
+		FollowingCount: followingCount,
+		FollowedByMe:   false,
+		OnboardedAt:    p.OnboardedAt,
+		CreatedAt:      p.CreatedAt,
 	}
 	for _, row := range programmes {
 		out.Programmes = append(out.Programmes, toProgramme(row))

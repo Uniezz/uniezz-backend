@@ -1754,6 +1754,24 @@ components:
         - items
         - nextCursor
       type: object
+    ListFollowsOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/ProfileSummary"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get the next page; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
     ListModeratorsOutputBody:
       additionalProperties: false
       properties:
@@ -2509,6 +2527,17 @@ components:
           type:
             - string
             - "null"
+        followedByMe:
+          description: False on the logged-in student's own profile because students cannot follow themselves
+          type: boolean
+        followersCount:
+          format: int64
+          minimum: 0
+          type: integer
+        followingCount:
+          format: int64
+          minimum: 0
+          type: integer
         gender:
           description: Set once; null until set. Visible to other students, with no privacy toggle.
           enum:
@@ -2636,6 +2665,9 @@ components:
         - privacy
         - coins
         - roles
+        - followersCount
+        - followingCount
+        - followedByMe
         - onboardedAt
         - createdAt
       type: object
@@ -2856,6 +2888,17 @@ components:
           type:
             - string
             - "null"
+        followedByMe:
+          description: True when the signed-in viewer follows this student
+          type: boolean
+        followersCount:
+          format: int64
+          minimum: 0
+          type: integer
+        followingCount:
+          format: int64
+          minimum: 0
+          type: integer
         gender:
           description: Null until set; always visible to other students, with no privacy toggle
           enum:
@@ -2917,6 +2960,9 @@ components:
         - songUrl
         - interests
         - programmes
+        - followersCount
+        - followingCount
+        - followedByMe
       type: object
     PublicProgramme:
       additionalProperties: false
@@ -3688,6 +3734,17 @@ components:
           type:
             - string
             - "null"
+        followedByMe:
+          description: False on the logged-in student's own profile because students cannot follow themselves
+          type: boolean
+        followersCount:
+          format: int64
+          minimum: 0
+          type: integer
+        followingCount:
+          format: int64
+          minimum: 0
+          type: integer
         gender:
           description: Set once; null until set. Visible to other students, with no privacy toggle.
           enum:
@@ -3816,6 +3873,9 @@ components:
         - privacy
         - coins
         - roles
+        - followersCount
+        - followingCount
+        - followedByMe
         - onboardedAt
         - createdAt
       type: object
@@ -5779,7 +5839,7 @@ paths:
       tags:
         - connections
     put:
-      description: "Each student stops seeing the other in discovery, the profile list, the profile, connections, and the feed: posts, comments and the featured list. Blocking twice changes nothing."
+      description: "Each student stops seeing the other in discovery, the profile list, the profile, connections, and the feed: posts, comments and the featured list. Blocking also removes follows in both directions and prevents new ones until unblocked. Blocking twice changes nothing."
       operationId: blockStudent
       parameters:
         - description: The blocked student's profile id
@@ -8867,6 +8927,126 @@ paths:
       summary: Update the logged-in student's profile
       tags:
         - profile
+  /profile/me/followers:
+    get:
+      description: Newest follow first, paginated by cursor.
+      operationId: listMyFollowers
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFollowsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List students who follow the logged-in student
+      tags:
+        - profile
+  /profile/me/following:
+    get:
+      description: Newest follow first, paginated by cursor.
+      operationId: listMyFollowing
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFollowsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List students followed by the logged-in student
+      tags:
+        - profile
   /profile/onboarding:
     put:
       description: Call it when the student finishes or skips onboarding; onboardedAt on the profile is set once and calling again changes nothing. Until then the student is left out of the student list.
@@ -9353,6 +9533,241 @@ paths:
       security:
         - bearer: []
       summary: Get a student's public profile
+      tags:
+        - profile
+  /profiles/{id}/follow:
+    delete:
+      description: Removes the caller's follow. Unfollowing a student who is not followed, or who no longer exists, succeeds.
+      operationId: unfollowProfile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Unfollow a student
+      tags:
+        - profile
+    put:
+      description: Creates a public, one-way follow, which is not a Connection and creates no chat or notification. Following the same student again changes nothing. A blocked profile is not found.
+      operationId: followProfile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Follow a student
+      tags:
+        - profile
+  /profiles/{id}/followers:
+    get:
+      description: Newest follow first, paginated by cursor.
+      operationId: listProfileFollowers
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFollowsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List students who follow a profile
+      tags:
+        - profile
+  /profiles/{id}/following:
+    get:
+      description: Newest follow first, paginated by cursor.
+      operationId: listProfileFollowing
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFollowsOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List profiles followed by a student
       tags:
         - profile
   /push/settings/me:

@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -47,6 +48,30 @@ func TestDeleteAccountTask(t *testing.T) {
 		}
 		if userExists(t, u.id) {
 			t.Error("the user row must be deleted")
+		}
+	})
+
+	t.Run("removes the student's follows and the counts that included them", func(t *testing.T) {
+		u := e.otpUser(t)
+		followed := e.otpUser(t)
+		follower := e.otpUser(t)
+		if rec := e.api.Put("/profiles/"+followed.id.String()+"/follow", u.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("follow: %d %s", rec.Code, rec.Body.String())
+		}
+		if rec := e.api.Put("/profiles/"+u.id.String()+"/follow", follower.bearer); rec.Code != http.StatusNoContent {
+			t.Fatalf("follow: %d %s", rec.Code, rec.Body.String())
+		}
+		markDeleting(t, u.id)
+
+		if err := e.module.deleteAccountTask(ctx, DeleteAccountArgs{UserID: u.id}); err != nil {
+			t.Fatalf("deleteAccountTask failed: %v", err)
+		}
+
+		if followers, _ := followCounts(t, e, followed.id); followers != 0 {
+			t.Errorf("followed student's followers_count = %d, want 0", followers)
+		}
+		if _, following := followCounts(t, e, follower.id); following != 0 {
+			t.Errorf("follower's following_count = %d, want 0", following)
 		}
 	})
 
