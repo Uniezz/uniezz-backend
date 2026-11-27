@@ -33,5 +33,8 @@ func (m Module) deleteAccountTask(ctx context.Context, args DeleteAccountArgs) e
 	if err := m.media.ForgetUser(ctx, args.UserID); err != nil {
 		return err
 	}
+	if err := m.forgetFollows(ctx, args.UserID); err != nil {
+		return err
+	}
 	return m.profiles.deleteDeleting(ctx, args.UserID)
 }

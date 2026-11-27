@@ -21,7 +21,7 @@ func (m Module) follow(ctx context.Context, followerID, followedID uuid.UUID) er
 	}
 
 	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		if err := m.follows.lockPair(ctx, followerID, followedID); err != nil {
+		if err := m.follows.lockUsers(ctx, followerID, followedID); err != nil {
 			return err
 		}
 		if _, err := m.profiles.get(ctx, followedID); err != nil {
@@ -34,7 +34,11 @@ func (m Module) follow(ctx context.Context, followerID, followedID uuid.UUID) er
 		if hidden {
 			return ErrNotFound
 		}
-		return m.follows.insert(ctx, followerID, followedID)
+		inserted, err := m.follows.insert(ctx, followerID, followedID)
+		if err != nil || !inserted {
+			return err
+		}
+		return m.follows.increment(ctx, followerID, followedID)
 	})
 }
 
@@ -44,13 +48,54 @@ func (m Module) unfollow(ctx context.Context, followerID, followedID uuid.UUID) 
 	}
 
 	return m.tx.WithTx(ctx, func(ctx context.Context) error {
-		if err := m.follows.lockPair(ctx, followerID, followedID); err != nil {
+		deleted, err := m.follows.delete(ctx, followerID, followedID)
+		if err != nil || !deleted {
 			return err
 		}
-		if _, err := m.profiles.get(ctx, followedID); err != nil {
+		return m.subtractFollows(ctx, []followPair{{FollowerID: followerID, FollowedID: followedID}})
+	})
+}
+
+func (m Module) subtractFollows(ctx context.Context, pairs []followPair) error {
+	if len(pairs) == 0 {
+		return nil
+	}
+
+	byUser := make(map[uuid.UUID]followCountChange)
+	for _, p := range pairs {
+		followed := byUser[p.FollowedID]
+		followed.UserID = p.FollowedID
+		followed.Followers++
+		byUser[p.FollowedID] = followed
+
+		follower := byUser[p.FollowerID]
+		follower.UserID = p.FollowerID
+		follower.Following++
+		byUser[p.FollowerID] = follower
+	}
+
+	userIDs := make([]uuid.UUID, 0, len(byUser))
+	changes := make([]followCountChange, 0, len(byUser))
+	for id, c := range byUser {
+		userIDs = append(userIDs, id)
+		changes = append(changes, c)
+	}
+	if err := m.follows.lockCounts(ctx, userIDs); err != nil {
+		return err
+	}
+	return m.follows.subtract(ctx, changes)
+}
+
+func (m Module) forgetFollows(ctx context.Context, userID uuid.UUID) error {
+	return m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := m.follows.lockUsers(ctx, userID); err != nil {
 			return err
 		}
-		return m.follows.delete(ctx, followerID, followedID)
+		pairs, err := m.follows.deleteAllOf(ctx, userID)
+		if err != nil {
+			return err
+		}
+		return m.subtractFollows(ctx, pairs)
 	})
 }
 
@@ -74,7 +119,7 @@ func (m Module) listFollows(ctx context.Context, q followListQuery) ([]ProfileSu
 		}
 		filter.After = &after
 	}
-	rows, err := m.follows.list(ctx, filter.ProfileID, filter.ViewerID, filter.Following, filter.After, filter.Limit)
+	rows, err := m.follows.list(ctx, filter)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -105,22 +150,4 @@ func (m Module) listFollows(ctx context.Context, q followListQuery) ([]ProfileSu
 		}
 	}
 	return items, next, nil
-}
-
-type followFilter struct {
-	ProfileID uuid.UUID
-	ViewerID  uuid.UUID
-	Following bool
-	After     *followCursor
-	Limit     int
-}
-
-// LockFollowPair serializes follows with a block between the same users.
-func (m Module) LockFollowPair(ctx context.Context, firstID, secondID uuid.UUID) error {
-	return m.follows.lockPair(ctx, firstID, secondID)
-}
-
-// RemoveFollowsBetween removes either direction of a follow for a blocked pair.
-func (m Module) RemoveFollowsBetween(ctx context.Context, firstID, secondID uuid.UUID) error {
-	return m.follows.removeBetween(ctx, firstID, secondID)
 }

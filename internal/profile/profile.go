@@ -27,7 +27,7 @@ func (m Module) profile(ctx context.Context, userID uuid.UUID, roles []auth.Role
 	if err != nil {
 		return nil, err
 	}
-	followersCount, followingCount, err := m.follows.counts(ctx, userID)
+	followersCount, followingCount, err := m.follows.counts(ctx, userID, userID)
 	if err != nil {
 		return nil, err
 	}

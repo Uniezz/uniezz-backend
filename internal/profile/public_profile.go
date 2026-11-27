@@ -28,7 +28,7 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	followersCount, followingCount, err := m.follows.counts(ctx, userID)
+	followersCount, followingCount, err := m.follows.counts(ctx, viewerID, userID)
 	if err != nil {
 		return nil, err
 	}

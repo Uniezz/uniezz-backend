@@ -9537,7 +9537,7 @@ paths:
         - profile
   /profiles/{id}/follow:
     delete:
-      description: Removes the caller's follow. Unfollowing a student who is not followed succeeds.
+      description: Removes the caller's follow. Unfollowing a student who is not followed, or who no longer exists, succeeds.
       operationId: unfollowProfile
       parameters:
         - in: path
@@ -9561,12 +9561,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unauthorized
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-          description: Not Found
         "422":
           content:
             application/json:
@@ -9585,7 +9579,7 @@ paths:
       tags:
         - profile
     put:
-      description: Creates a public, one-way follow. A follow is not a Connection and does not create a chat or notification. Following the same student again succeeds without creating another follow. A blocked profile is not found.
+      description: Creates a public, one-way follow, which is not a Connection and creates no chat or notification. Following the same student again changes nothing. A blocked profile is not found.
       operationId: followProfile
       parameters:
         - in: path

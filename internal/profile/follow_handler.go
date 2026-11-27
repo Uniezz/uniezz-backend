@@ -23,18 +23,19 @@ var followProfileOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPut,
 	Path:          "/profiles/{id}/follow",
 	Summary:       "Follow a student",
-	Description:   "Creates a public, one-way follow. A follow is not a Connection and does not create a chat or notification. Following the same student again succeeds without creating another follow. A blocked profile is not found.",
+	Description:   "Creates a public, one-way follow, which is not a Connection and creates no chat or notification. Following the same student again changes nothing. A blocked profile is not found.",
 	Tags:          []string{"profile"},
 	DefaultStatus: http.StatusNoContent,
 	Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
 })
 
 func (h *followHandler) follow(ctx context.Context, in *followProfileInput) (*struct{}, error) {
-	followerID, ok := auth.UserIDFrom(ctx)
+	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
-	if err := h.profile.follow(ctx, followerID, in.ID); err != nil {
+
+	if err := h.profile.follow(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -45,18 +46,19 @@ var unfollowProfileOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodDelete,
 	Path:          "/profiles/{id}/follow",
 	Summary:       "Unfollow a student",
-	Description:   "Removes the caller's follow. Unfollowing a student who is not followed succeeds.",
+	Description:   "Removes the caller's follow. Unfollowing a student who is not followed, or who no longer exists, succeeds.",
 	Tags:          []string{"profile"},
 	DefaultStatus: http.StatusNoContent,
-	Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
+	Errors:        []int{http.StatusBadRequest},
 })
 
 func (h *followHandler) unfollow(ctx context.Context, in *followProfileInput) (*struct{}, error) {
-	followerID, ok := auth.UserIDFrom(ctx)
+	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
-	if err := h.profile.unfollow(ctx, followerID, in.ID); err != nil {
+
+	if err := h.profile.unfollow(ctx, userID, in.ID); err != nil {
 		return nil, errorResponses.Error(err)
 	}
 	return nil, nil
@@ -93,6 +95,7 @@ func (h *followHandler) listMyFollowers(ctx context.Context, in *listMyFollowsIn
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
+
 	return h.list(ctx, viewerID, viewerID, false, in.Cursor, in.Limit)
 }
 
@@ -111,6 +114,7 @@ func (h *followHandler) listMyFollowing(ctx context.Context, in *listMyFollowsIn
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
+
 	return h.list(ctx, viewerID, viewerID, true, in.Cursor, in.Limit)
 }
 
@@ -129,6 +133,7 @@ func (h *followHandler) listProfileFollowers(ctx context.Context, in *listProfil
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
+
 	return h.list(ctx, viewerID, in.ID, false, in.Cursor, in.Limit)
 }
 
@@ -147,6 +152,7 @@ func (h *followHandler) listProfileFollowing(ctx context.Context, in *listProfil
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
+
 	return h.list(ctx, viewerID, in.ID, true, in.Cursor, in.Limit)
 }
 

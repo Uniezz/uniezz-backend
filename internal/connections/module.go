@@ -29,7 +29,6 @@ var _ profiles = profile.Module{}
 type profiles interface {
 	Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]profile.ProfileSummary, error)
 	Photos(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]string, error)
-	LockFollowPair(ctx context.Context, firstID, secondID uuid.UUID) error
 	RemoveFollowsBetween(ctx context.Context, firstID, secondID uuid.UUID) error
 }
 
