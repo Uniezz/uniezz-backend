@@ -37,6 +37,7 @@ type sendChange struct {
 	Key            string
 	Poll           *pollChange
 	Event          *eventChange
+	Location       *locationChange
 }
 
 type sendInput struct {
@@ -57,7 +58,7 @@ func (c sendChange) clean(now time.Time) (sendInput, error) {
 	in := sendInput{ConversationID: c.ConversationID, Kind: MessageText, Payload: []byte("{}"), MediaIDs: []uuid.UUID{}, Key: *key}
 
 	cards := 0
-	for _, set := range []bool{c.Poll != nil, c.Event != nil} {
+	for _, set := range []bool{c.Poll != nil, c.Event != nil, c.Location != nil} {
 		if set {
 			cards++
 		}
@@ -70,6 +71,8 @@ func (c sendChange) clean(now time.Time) (sendInput, error) {
 		return in.withCard(MessagePoll, now, c.Poll)
 	case c.Event != nil:
 		return in.withCard(MessageEvent, now, c.Event)
+	case c.Location != nil:
+		return in.withCard(MessageLocation, now, c.Location)
 	}
 
 	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
@@ -186,12 +189,18 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 	if in.Kind == MessageEvent && a.Kind != KindGroup {
 		return nil, nil, ErrInvalidInput
 	}
+	if err := m.startLive(ctx, &in); err != nil {
+		return nil, nil, err
+	}
 
 	created, err := m.insertMessage(ctx, senderID, in, locked)
 	if err != nil {
 		return nil, nil, err
 	}
 	if err := m.queuePreview(ctx, created.ID, in.Link); err != nil {
+		return nil, nil, err
+	}
+	if err := m.storeLive(ctx, senderID, created); err != nil {
 		return nil, nil, err
 	}
 	recipients, err := m.members.recipients(ctx, in.ConversationID, senderID)
@@ -567,6 +576,10 @@ func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []mes
 	if err != nil {
 		return nil, err
 	}
+	locations, err := m.locationViews(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
 
 	expiresAt := m.now().Add(media.PrivateURLTTL)
 	attachments := make(map[uuid.UUID][]Attachment, len(rows))
@@ -597,6 +610,7 @@ func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []mes
 			LinkPreview:    previews[row.ID],
 			Poll:           polls[row.ID],
 			Event:          events[row.ID],
+			Location:       locations[row.ID],
 			CreatedAt:      row.CreatedAt,
 			DeletedAt:      row.DeletedAt,
 		})

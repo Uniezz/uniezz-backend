@@ -27,6 +27,13 @@ func (in sendInput) withCard(kind MessageKind, now time.Time, card any) (sendInp
 		}
 		in.Body = p.Title
 		payload = p
+	case *locationChange:
+		p, err := c.payload()
+		if err != nil {
+			return sendInput{}, err
+		}
+		in.Body = p.body()
+		payload = p
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -82,6 +89,8 @@ func (m Module) clearCard(ctx context.Context, row *messageRow) error {
 		return m.polls.deleteVotes(ctx, row.ID)
 	case MessageEvent:
 		return m.events.deleteAnswers(ctx, row.ID)
+	case MessageLocation:
+		return m.lives.delete(ctx, row.ID)
 	}
 	return nil
 }

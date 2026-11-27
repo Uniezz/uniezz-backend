@@ -26,6 +26,7 @@ var (
 	ErrPollClosed        = errors.New("the poll is closed")
 	ErrEventCanceled     = errors.New("the event was canceled")
 	ErrEventEnded        = errors.New("the event has ended")
+	ErrLocationNotLive   = errors.New("the location is not shared live any more")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -47,5 +48,6 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrPollClosed, Status: http.StatusConflict, Code: "poll_closed"},
 	{Err: ErrEventCanceled, Status: http.StatusConflict, Code: "event_canceled"},
 	{Err: ErrEventEnded, Status: http.StatusConflict, Code: "event_ended"},
+	{Err: ErrLocationNotLive, Status: http.StatusConflict, Code: "location_not_live"},
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 }

@@ -40,6 +40,9 @@ const (
 	previewPruneTime   = time.Minute
 	previewPruneEvery  = 24 * time.Hour
 	previewPruneTrials = 3
+	liveFinishTime     = time.Minute
+	liveFinishEvery    = 5 * time.Minute
+	liveFinishTrials   = 3
 )
 
 var _ mediaService = media.Module{}
@@ -84,6 +87,7 @@ type Module struct {
 	previews      *linkPreviewRepository
 	polls         *pollRepository
 	events        *eventRepository
+	lives         *liveLocationRepository
 	media         mediaService
 	pages         pageFetcher
 	jobs          *jobs.Runner
@@ -112,6 +116,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier, runn
 		previews:      newLinkPreviewRepository(db),
 		polls:         newPollRepository(db),
 		events:        newEventRepository(db),
+		lives:         newLiveLocationRepository(db),
 		media:         mediaModule,
 		pages:         safehttp.New(safehttp.Config{UserAgent: previewUserAgent}),
 		jobs:          runner,
@@ -135,6 +140,12 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier, runn
 	if err := jobs.Schedule(runner, "chat-prune-link-previews", PruneLinkPreviewsArgs{}, previewPruneEvery); err != nil {
 		return Module{}, fmt.Errorf("chat: %w", err)
 	}
+	if err := jobs.Register(runner, m.finishLiveLocations, jobs.Options{Timeout: liveFinishTime, MaxAttempts: liveFinishTrials}); err != nil {
+		return Module{}, fmt.Errorf("chat: %w", err)
+	}
+	if err := jobs.Schedule(runner, "chat-finish-live-locations", FinishLiveLocationsArgs{}, liveFinishEvery); err != nil {
+		return Module{}, fmt.Errorf("chat: %w", err)
+	}
 	return m, nil
 }
 
@@ -147,6 +158,7 @@ func (m Module) Register(api huma.API) {
 	settings := &settingsHandler{chat: m}
 	polls := &pollHandler{chat: m}
 	events := &eventHandler{chat: m}
+	locations := &locationHandler{chat: m}
 
 	huma.Register(api, openDirectConversationOperation, conversations.openDirectConversation)
 	huma.Register(api, createGroupConversationOperation, conversations.createGroupConversation)
@@ -169,6 +181,8 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, answerChatEventOperation, events.answer)
 	huma.Register(api, deleteMyChatEventAnswerOperation, events.deleteAnswer)
 	huma.Register(api, cancelChatEventOperation, events.cancel)
+	huma.Register(api, updateChatLocationOperation, locations.update)
+	huma.Register(api, stopChatLocationOperation, locations.stop)
 	huma.Register(api, openChatStreamOperation, stream.openStream)
 	huma.Register(api, listChatRequestsOperation, requests.listRequests)
 	huma.Register(api, createChatRequestOperation, requests.createRequest)

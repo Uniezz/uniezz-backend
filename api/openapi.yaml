@@ -2150,6 +2150,94 @@ components:
         - items
         - nextCursor
       type: object
+    LiveLocation:
+      additionalProperties: false
+      properties:
+        accuracy:
+          description: Radius in meters; omitted when unknown or after sharing ended
+          format: int64
+          type: integer
+        heading:
+          description: Direction in degrees, 1 to 360; omitted when unknown or after sharing ended
+          format: int64
+          type: integer
+        stoppedAt:
+          description: When sharing ended, by the sender or at until; null while it runs
+          format: date-time
+          type:
+            - string
+            - "null"
+        until:
+          description: Sharing ends by itself at this time, one hour after it started
+          format: date-time
+          type: string
+        updatedAt:
+          description: Time of the current position
+          format: date-time
+          type: string
+      required:
+        - until
+        - stoppedAt
+        - updatedAt
+      type: object
+    Location:
+      additionalProperties: false
+      properties:
+        label:
+          description: Null when no label was given
+          examples:
+            - UMCS main gate
+          type:
+            - string
+            - "null"
+        lat:
+          examples:
+            - 51.2465
+          format: double
+          type: number
+        live:
+          $ref: "#/components/schemas/LiveLocation"
+          description: Set for a live location; lat and lng are then its latest position. Live positions arrive as location.updated stream events
+        lng:
+          examples:
+            - 22.5684
+          format: double
+          type: number
+      required:
+        - lat
+        - lng
+        - label
+      type: object
+    LocationRequest:
+      additionalProperties: false
+      properties:
+        label:
+          description: Up to 100 characters after HTML is stripped
+          examples:
+            - UMCS main gate
+          maxLength: 400
+          type: string
+        lat:
+          examples:
+            - 51.2465
+          format: double
+          maximum: 90
+          minimum: -90
+          type: number
+        live:
+          description: Share the live position for one hour with updateChatLocation
+          type: boolean
+        lng:
+          examples:
+            - 22.5684
+          format: double
+          maximum: 180
+          minimum: -180
+          type: number
+      required:
+        - lat
+        - lng
+      type: object
     MarkChatReadInputBody:
       additionalProperties: false
       properties:
@@ -2247,6 +2335,9 @@ components:
         linkPreview:
           $ref: "#/components/schemas/LinkPreview"
           description: Preview of the first https link in the body. Omitted while it is being fetched (a message.updated event follows), when fetching failed, and when the message has no link
+        location:
+          $ref: "#/components/schemas/Location"
+          description: Set when kind is location and the message is not deleted
         payload:
           additionalProperties: {}
           description: "System messages: {event, actorId, params}; empty for others. Clients translate the event code"
@@ -3682,6 +3773,9 @@ components:
         event:
           $ref: "#/components/schemas/EventRequest"
           description: Send an event that members answer with going, maybe or no; groups only, and body and attachmentIds must then be empty
+        location:
+          $ref: "#/components/schemas/LocationRequest"
+          description: Send a place, or a live location for one hour; body and attachmentIds must then be empty
         noPreview:
           description: Do not preview the first link of the body
           type: boolean
@@ -3886,6 +3980,39 @@ components:
           type: string
       required:
         - name
+      type: object
+    UpdateChatLocationInputBody:
+      additionalProperties: false
+      properties:
+        accuracy:
+          description: Radius in meters
+          format: int64
+          maximum: 1500
+          minimum: 0
+          type: integer
+        heading:
+          description: Direction in degrees
+          format: int64
+          maximum: 360
+          minimum: 1
+          type: integer
+        lat:
+          examples:
+            - 51.2465
+          format: double
+          maximum: 90
+          minimum: -90
+          type: number
+        lng:
+          examples:
+            - 22.5684
+          format: double
+          maximum: 180
+          minimum: -180
+          type: number
+      required:
+        - lat
+        - lng
       type: object
     UpdateCommentInputBody:
       additionalProperties: false
@@ -5551,7 +5678,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Send a text message with up to 5 images, a poll or an event
+      summary: Send a text message with up to 5 images, a poll, an event or a location
       tags:
         - chat
   /chat/conversations/{id}/messages/search:
@@ -5842,6 +5969,132 @@ paths:
       security:
         - bearer: []
       summary: Cancel an event message
+      tags:
+        - chat
+  /chat/messages/{id}/location:
+    post:
+      description: At most one update per 10 seconds (429 rate_limited); only the latest position is kept. Members get it as a location.updated stream event, not as message.updated. After sharing ended the answer is 409 location_not_live.
+      operationId: updateChatLocation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChatLocationInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Send a new position for the sender's live location message
+      tags:
+        - chat
+  /chat/messages/{id}/location/stop:
+    post:
+      description: The message keeps the last position. Stopping a location that is not live any more succeeds.
+      operationId: stopChatLocation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Stop sharing the sender's live location
       tags:
         - chat
   /chat/messages/{id}/poll/close:
