@@ -18,7 +18,7 @@ const (
 )
 
 func cleanName(field, s string) (string, error) {
-	clean := text.Plain(s, false)
+	clean := strings.Join(strings.Fields(text.Plain(s, false)), " ")
 	if n := utf8.RuneCountInString(clean); n < minNameLength || n > maxNameLength {
 		return "", ErrInvalidInput
 	}
@@ -46,14 +46,6 @@ func cleanComment(s string) (string, error) {
 	}
 	if err := text.Allowed("content", clean); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
-	}
-	return clean, nil
-}
-
-func cleanFilterValue(s string) (string, error) {
-	clean := text.Plain(s, false)
-	if utf8.RuneCountInString(clean) > maxNameLength {
-		return "", ErrInvalidInput
 	}
 	return clean, nil
 }

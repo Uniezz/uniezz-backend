@@ -87,7 +87,7 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 
 	for _, row := range programmes {
 		out.Programmes = append(out.Programmes, PublicProgramme{
-			Faculty:       &row.Faculty,
+			Faculty:       row.Faculty,
 			Programme:     row.Programme,
 			Level:         row.Level,
 			ModeOfStudies: row.ModeOfStudies,

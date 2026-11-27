@@ -10,20 +10,18 @@ import (
 )
 
 const (
-	minDifficulty = 1
-	maxDifficulty = 5
-	minSemester   = 1
-	maxSemester   = 10
+	minDifficulty     = 1
+	maxDifficulty     = 5
+	similarNameScore  = 0.45
+	maxSimilarCourses = 5
 )
 
 type courseChange struct {
-	Name         string
-	Description  string
-	Difficulty   int
-	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	Name        string
+	Description string
+	Difficulty  int
+	FacultyID   uuid.UUID
+	ConfirmNew  bool
 }
 
 func (c courseChange) fields() (courseFields, error) {
@@ -35,21 +33,11 @@ func (c courseChange) fields() (courseFields, error) {
 	if f.Description, err = cleanDescription(c.Description); err != nil {
 		return courseFields{}, err
 	}
-	if f.Faculty, err = cleanName("faculty", c.Faculty); err != nil {
-		return courseFields{}, err
-	}
-	if f.Subject, err = cleanName("subject", c.Subject); err != nil {
-		return courseFields{}, err
-	}
-	if !validDifficulty(c.Difficulty) || c.Semester < minSemester || c.Semester > maxSemester {
-		return courseFields{}, ErrInvalidInput
-	}
-	if c.UniversityID == "" {
+	if !validDifficulty(c.Difficulty) || c.FacultyID == uuid.Nil {
 		return courseFields{}, ErrInvalidInput
 	}
 	f.Difficulty = c.Difficulty
-	f.UniversityID = c.UniversityID
-	f.Semester = c.Semester
+	f.FacultyID = c.FacultyID
 	return f, nil
 }
 
@@ -87,26 +75,33 @@ func (c courseEditChange) fields() (courseEditFields, error) {
 type courseQuery struct {
 	ViewerID     uuid.UUID
 	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	FacultyID    uuid.UUID
 	Search       string
 	Cursor       string
 	Limit        int
 }
 
+type similarCoursesQuery struct {
+	ViewerID  uuid.UUID
+	FacultyID uuid.UUID
+	Name      string
+}
+
+func (q similarCoursesQuery) filter() (similarCoursesFilter, error) {
+	name, err := cleanName("name", q.Name)
+	if err != nil {
+		return similarCoursesFilter{}, err
+	}
+	return similarCoursesFilter{
+		ViewerID:  q.ViewerID,
+		FacultyID: q.FacultyID,
+		Name:      name,
+		MinScore:  similarNameScore,
+		Limit:     maxSimilarCourses,
+	}, nil
+}
+
 func (q courseQuery) filter() (courseFilter, error) {
-	if q.Semester != 0 && (q.Semester < minSemester || q.Semester > maxSemester) {
-		return courseFilter{}, ErrInvalidInput
-	}
-	faculty, err := cleanFilterValue(q.Faculty)
-	if err != nil {
-		return courseFilter{}, err
-	}
-	subject, err := cleanFilterValue(q.Subject)
-	if err != nil {
-		return courseFilter{}, err
-	}
 	words, err := text.SearchWords(q.Search)
 	if err != nil {
 		return courseFilter{}, ErrInvalidInput
@@ -118,9 +113,7 @@ func (q courseQuery) filter() (courseFilter, error) {
 	return courseFilter{
 		ViewerID:     q.ViewerID,
 		UniversityID: q.UniversityID,
-		Faculty:      faculty,
-		Subject:      subject,
-		Semester:     q.Semester,
+		FacultyID:    q.FacultyID,
 		Words:        words,
 		After:        after,
 		Limit:        q.Limit + 1,
@@ -131,6 +124,15 @@ func (m Module) createCourse(ctx context.Context, authorID uuid.UUID, change cou
 	fields, err := change.fields()
 	if err != nil {
 		return nil, err
+	}
+	if !change.ConfirmNew {
+		similar, err := m.courses.hasSimilar(ctx, fields.FacultyID, fields.Name, similarNameScore)
+		if err != nil {
+			return nil, err
+		}
+		if similar {
+			return nil, ErrSimilarCourses
+		}
 	}
 
 	var row *courseRow
@@ -155,6 +157,22 @@ func (m Module) getCourse(ctx context.Context, viewerID, id uuid.UUID) (*Course,
 	}
 	course := toCourse(*row, viewerID)
 	return &course, nil
+}
+
+func (m Module) similarCourses(ctx context.Context, q similarCoursesQuery) ([]Course, error) {
+	filter, err := q.filter()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := m.courses.similar(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	courses := make([]Course, 0, len(rows))
+	for _, row := range rows {
+		courses = append(courses, toCourse(row, q.ViewerID))
+	}
+	return courses, nil
 }
 
 func (m Module) listCourses(ctx context.Context, q courseQuery) ([]Course, *string, error) {
@@ -267,9 +285,8 @@ func toCourse(row courseRow, viewerID uuid.UUID) Course {
 		Description:   row.Description,
 		Difficulty:    row.Difficulty,
 		UniversityID:  row.UniversityID,
+		FacultyID:     row.FacultyID,
 		Faculty:       row.Faculty,
-		Subject:       row.Subject,
-		Semester:      row.Semester,
 		RatingAverage: ratingAverage(row.RatingSum, row.RatingCount),
 		RatingCount:   row.RatingCount,
 		IsMine:        row.AuthorID != nil && *row.AuthorID == viewerID,

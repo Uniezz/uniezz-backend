@@ -1,6 +1,6 @@
 // Package study owns what students share about their courses: the course
-// catalogue with ratings, files and comments, and the professors imported from
-// POL-on that students rate.
+// catalogue with ratings, files and comments, the professors imported from
+// POL-on that students rate, and the programmes imported from POL-on.
 package study
 
 import (
@@ -53,6 +53,7 @@ type Module struct {
 	comments   *commentRepository
 	professors *professorRepository
 	reviews    *professorReviewRepository
+	programmes *programmeRepository
 	media      mediaService
 	rewards    rewardService
 	limiter    limiter
@@ -69,10 +70,11 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardServi
 		comments:   newCommentRepository(db),
 		professors: newProfessorRepository(db),
 		reviews:    newProfessorReviewRepository(db),
+		programmes: newProgrammeRepository(db),
 		media:      mediaModule,
 		rewards:    rewardsModule,
 		limiter:    ratelimit.New(pool, "study-create", createLimit, createWindow),
-		radon:      newRadonClient(radonEmployeesURL),
+		radon:      newRadonClient(radonURL),
 		jobs:       runner,
 	}
 
@@ -85,6 +87,15 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, rewardsModule rewardServi
 	if err := jobs.Schedule(runner, importAllSchedule, ImportAllProfessorsArgs{}, importInterval); err != nil {
 		return Module{}, fmt.Errorf("study: %w", err)
 	}
+	if err := jobs.Register(runner, m.importProgrammes, jobs.Options{Timeout: importTimeout, MaxAttempts: importAttempts}); err != nil {
+		return Module{}, fmt.Errorf("study: %w", err)
+	}
+	if err := jobs.Register(runner, m.importAllProgrammes, jobs.Options{Timeout: importAllTimeout, MaxAttempts: importAttempts}); err != nil {
+		return Module{}, fmt.Errorf("study: %w", err)
+	}
+	if err := jobs.Schedule(runner, importProgrammesSchedule, ImportAllProgrammesArgs{}, importProgrammesInterval); err != nil {
+		return Module{}, fmt.Errorf("study: %w", err)
+	}
 	return m, nil
 }
 
@@ -94,9 +105,11 @@ func (m Module) Register(api huma.API) {
 	comments := &commentHandler{study: m}
 	professors := &professorHandler{study: m}
 	reviews := &professorReviewHandler{study: m}
+	programmes := &programmeHandler{study: m}
 
 	huma.Register(api, createCourseOperation, courses.createCourse)
 	huma.Register(api, listCoursesOperation, courses.listCourses)
+	huma.Register(api, listSimilarCoursesOperation, courses.listSimilarCourses)
 	huma.Register(api, getCourseOperation, courses.getCourse)
 	huma.Register(api, updateCourseOperation, courses.updateCourse)
 	huma.Register(api, deleteCourseOperation, courses.deleteCourse)
@@ -115,4 +128,5 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, reviewProfessorOperation, reviews.reviewProfessor)
 	huma.Register(api, listProfessorReviewsOperation, reviews.listProfessorReviews)
 	huma.Register(api, deleteMyProfessorReviewOperation, reviews.deleteMyProfessorReview)
+	huma.Register(api, listProgrammesOperation, programmes.listProgrammes)
 }

@@ -2,12 +2,10 @@ package profile
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
-	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -17,14 +15,15 @@ type programmeHandler struct {
 }
 
 type Programme struct {
-	ID            uuid.UUID `json:"id" format:"uuid"`
-	Faculty       string    `json:"faculty" example:"Wydział Matematyki, Fizyki i Informatyki"`
-	Programme     string    `json:"programme" example:"Informatyka"`
-	Level         *string   `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
-	ModeOfStudies *string   `json:"modeOfStudies" nullable:"true" enum:"full_time,part_time"`
-	YearOfStudy   *int      `json:"yearOfStudy" nullable:"true" minimum:"1" maximum:"6" example:"2"`
-	Status        string    `json:"status" enum:"active,graduated,suspended,cancelled"`
-	IsPrimary     bool      `json:"isPrimary"`
+	ID            uuid.UUID  `json:"id" format:"uuid"`
+	ProgrammeID   *uuid.UUID `json:"programmeId" format:"uuid" nullable:"true" doc:"The programme from listProgrammes; null for a programme imported from USOS that the catalogue does not have, or typed before the catalogue existed"`
+	Faculty       *string    `json:"faculty" nullable:"true" doc:"Null when the faculty is unknown" example:"Wydział Matematyki, Fizyki i Informatyki"`
+	Programme     string     `json:"programme" example:"Informatyka"`
+	Level         *string    `json:"level" nullable:"true" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
+	ModeOfStudies *string    `json:"modeOfStudies" nullable:"true" enum:"full_time,part_time"`
+	YearOfStudy   *int       `json:"yearOfStudy" nullable:"true" minimum:"1" maximum:"6" example:"2"`
+	Status        string     `json:"status" enum:"active,graduated,suspended,cancelled"`
+	IsPrimary     bool       `json:"isPrimary"`
 }
 
 func toProgramme(row programmeRow) Programme {
@@ -32,33 +31,17 @@ func toProgramme(row programmeRow) Programme {
 }
 
 type programmeRequest struct {
-	Faculty       string  `json:"faculty" minLength:"1" maxLength:"255"`
-	Programme     string  `json:"programme" minLength:"1" maxLength:"255"`
-	Level         *string `json:"level,omitempty" enum:"first_cycle,second_cycle,long_cycle,third_cycle,phd_school"`
-	ModeOfStudies *string `json:"modeOfStudies,omitempty" enum:"full_time,part_time"`
-	YearOfStudy   *int    `json:"yearOfStudy,omitempty" minimum:"1" maximum:"6"`
-	Status        string  `json:"status,omitempty" enum:"active,graduated,suspended,cancelled" default:"active"`
-	IsPrimary     bool    `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"`
+	ProgrammeID   uuid.UUID `json:"programmeId" format:"uuid" doc:"A programme of the student's university from listProgrammes; its name, faculty and level are copied"`
+	ModeOfStudies *string   `json:"modeOfStudies,omitempty" enum:"full_time,part_time"`
+	YearOfStudy   *int      `json:"yearOfStudy,omitempty" minimum:"1" maximum:"6"`
+	Status        string    `json:"status,omitempty" enum:"active,graduated,suspended,cancelled" default:"active"`
+	IsPrimary     bool      `json:"isPrimary,omitempty" doc:"Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"`
 }
 
 func (r programmeRequest) fields() (programmeFields, error) {
-	f := programmeFields{
-		Faculty:       text.Plain(r.Faculty, false),
-		Programme:     text.Plain(r.Programme, false),
-		Level:         r.Level,
-		ModeOfStudies: r.ModeOfStudies,
-		YearOfStudy:   r.YearOfStudy,
-		Status:        r.Status,
-		IsPrimary:     r.IsPrimary,
-	}
-	if f.Faculty == "" || f.Programme == "" {
+	f := programmeFields(r)
+	if f.ProgrammeID == uuid.Nil {
 		return programmeFields{}, ErrInvalidInput
-	}
-	if err := text.Allowed("faculty", f.Faculty); err != nil {
-		return programmeFields{}, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
-	}
-	if err := text.Allowed("programme", f.Programme); err != nil {
-		return programmeFields{}, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	if f.Status == "" {
 		f.Status = "active"
@@ -112,6 +95,7 @@ var createProgrammeOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/profile/programmes",
 	Summary:       "Add a study programme",
+	Description:   "The programme must be one of the student's university in listProgrammes; any other id is invalid input.",
 	Tags:          []string{"profile"},
 	DefaultStatus: http.StatusCreated,
 	Errors:        []int{http.StatusBadRequest},
@@ -148,7 +132,7 @@ var replaceProgrammeOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodPut,
 	Path:        "/profile/programmes/{id}",
 	Summary:     "Replace a study programme",
-	Description: "Overwrites every field; omitted optional fields become null.",
+	Description: "Overwrites every field; omitted optional fields become null. The programme must be one of the student's university in listProgrammes.",
 	Tags:        []string{"profile"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })

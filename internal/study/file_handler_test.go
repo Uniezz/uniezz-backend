@@ -73,17 +73,17 @@ func TestSearchFiles(t *testing.T) {
 	author := e.student(t)
 	other := e.student(t)
 	marker := "zq" + uuid.NewString()[:6]
-	course := e.course(t, author, map[string]any{"subject": "Algebra " + marker})
+	course := e.course(t, author, map[string]any{"name": "Algebra " + marker})
 	file := e.file(t, author, course.ID, "Midterm "+marker)
 
-	t.Run("matches the title or the course subject", func(t *testing.T) {
+	t.Run("matches the title or the course name", func(t *testing.T) {
 		byTitle := decode[itemPage[CourseFile]](t, e.api.Get("/study/files?q=midterm+"+marker, other.bearer), http.StatusOK)
 		if len(byTitle.Items) != 1 || byTitle.Items[0].ID != file.ID {
 			t.Fatalf("by title = %#v", byTitle.Items)
 		}
-		bySubject := decode[itemPage[CourseFile]](t, e.api.Get("/study/files?q=algebra+"+marker, other.bearer), http.StatusOK)
-		if len(bySubject.Items) != 1 || bySubject.Items[0].ID != file.ID {
-			t.Fatalf("by subject = %#v", bySubject.Items)
+		byCourse := decode[itemPage[CourseFile]](t, e.api.Get("/study/files?q=algebra+"+marker, other.bearer), http.StatusOK)
+		if len(byCourse.Items) != 1 || byCourse.Items[0].ID != file.ID {
+			t.Fatalf("by course name = %#v", byCourse.Items)
 		}
 	})
 
@@ -91,6 +91,14 @@ func TestSearchFiles(t *testing.T) {
 		miss := decode[itemPage[CourseFile]](t, e.api.Get("/study/files?q="+marker+"&universityId=kul", other.bearer), http.StatusOK)
 		if len(miss.Items) != 0 {
 			t.Fatalf("filtered = %#v", miss.Items)
+		}
+		byFaculty := decode[itemPage[CourseFile]](t, e.api.Get("/study/files?q="+marker+"&facultyId="+course.FacultyID.String(), other.bearer), http.StatusOK)
+		if len(byFaculty.Items) != 1 || byFaculty.Items[0].ID != file.ID {
+			t.Fatalf("by faculty = %#v", byFaculty.Items)
+		}
+		otherFaculty := decode[itemPage[CourseFile]](t, e.api.Get("/study/files?q="+marker+"&facultyId="+uuid.NewString(), other.bearer), http.StatusOK)
+		if len(otherFaculty.Items) != 0 {
+			t.Fatalf("other faculty = %#v", otherFaculty.Items)
 		}
 	})
 

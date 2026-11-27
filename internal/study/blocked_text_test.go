@@ -25,17 +25,12 @@ func TestBlockedText(t *testing.T) {
 		for field, value := range map[string]string{
 			"name":        "Kurwa analiza",
 			"description": "Limits, k u r w a, derivatives.",
-			"faculty":     "Wydział sh1t",
-			"subject":     "Analiza хуйня",
 		} {
 			body := map[string]any{
-				"name":         "Calculus " + uuid.NewString()[:8],
-				"description":  "Limits and derivatives.",
-				"difficulty":   3,
-				"universityId": "umcs",
-				"faculty":      "Mathematics",
-				"subject":      "Analysis " + uuid.NewString()[:8],
-				"semester":     2,
+				"name":        "Calculus " + uuid.NewString()[:8],
+				"description": "Limits and derivatives.",
+				"difficulty":  3,
+				"facultyId":   e.faculty,
 			}
 			body[field] = value
 			expectError(t, e.api.Post("/study/courses", author.bearer, body), http.StatusBadRequest, "content_not_allowed")

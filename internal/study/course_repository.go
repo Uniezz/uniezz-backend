@@ -10,6 +10,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type courseRow struct {
@@ -19,9 +20,8 @@ type courseRow struct {
 	Description  string
 	Difficulty   int
 	UniversityID string
+	FacultyID    uuid.UUID
 	Faculty      string
-	Subject      string
-	Semester     int
 	RatingCount  int
 	RatingSum    int
 	CreatedAt    time.Time
@@ -29,13 +29,10 @@ type courseRow struct {
 }
 
 type courseFields struct {
-	Name         string
-	Description  string
-	Difficulty   int
-	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	Name        string
+	Description string
+	Difficulty  int
+	FacultyID   uuid.UUID
 }
 
 type courseEditFields struct {
@@ -47,12 +44,18 @@ type courseEditFields struct {
 type courseFilter struct {
 	ViewerID     uuid.UUID
 	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	FacultyID    uuid.UUID
 	Words        []string
 	After        *pageCursor
 	Limit        int
+}
+
+type similarCoursesFilter struct {
+	ViewerID  uuid.UUID
+	FacultyID uuid.UUID
+	Name      string
+	MinScore  float64
+	Limit     int
 }
 
 type pageCursor struct {
@@ -68,16 +71,19 @@ func newCourseRepository(db database.DB) *courseRepository {
 	return &courseRepository{db: db}
 }
 
-const courseColumns = `id, author_id, name, description, difficulty, university_id, faculty, subject, semester, rating_count, rating_sum, created_at`
+const courseColumns = `c.id, c.author_id, c.name, c.description, c.difficulty, c.university_id, c.faculty_id, f.name,
+	c.rating_count, c.rating_sum, c.created_at`
+
+const courseFaculty = ` JOIN supported_faculties f ON f.id = c.faculty_id`
 
 func courseRatingOf(viewer string) string {
-	return `(SELECT rating FROM course_ratings WHERE course_id = courses.id AND user_id = ` + viewer + `)`
+	return `(SELECT rating FROM course_ratings WHERE course_id = c.id AND user_id = ` + viewer + `)`
 }
 
 func scanCourse(row pgx.Row) (*courseRow, error) {
 	var c courseRow
 	err := row.Scan(&c.ID, &c.AuthorID, &c.Name, &c.Description, &c.Difficulty, &c.UniversityID,
-		&c.Faculty, &c.Subject, &c.Semester, &c.RatingCount, &c.RatingSum, &c.CreatedAt, &c.MyRating)
+		&c.FacultyID, &c.Faculty, &c.RatingCount, &c.RatingSum, &c.CreatedAt, &c.MyRating)
 	if err != nil {
 		return nil, err
 	}
@@ -86,14 +92,21 @@ func scanCourse(row pgx.Row) (*courseRow, error) {
 
 func (r *courseRepository) create(ctx context.Context, authorID uuid.UUID, f courseFields) (*courseRow, error) {
 	const query = `
-		INSERT INTO courses (author_id, name, description, difficulty, university_id, faculty, subject, semester)
-		SELECT $1, $2, $3, $4, $5::text, $6, $7, $8
-		WHERE EXISTS (SELECT 1 FROM supported_universities WHERE id = $5::text)
-		RETURNING ` + courseColumns + `, NULL::smallint`
+		WITH c AS (
+			INSERT INTO courses (author_id, name, description, difficulty, university_id, faculty_id)
+			SELECT $1, $2, $3, $4, sf.university_id, sf.id
+			FROM supported_faculties sf WHERE sf.id = $5
+			RETURNING *
+		)
+		SELECT ` + courseColumns + `, NULL::smallint FROM c` + courseFaculty
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query,
-		authorID, f.Name, f.Description, f.Difficulty, f.UniversityID, f.Faculty, f.Subject, f.Semester))
+		authorID, f.Name, f.Description, f.Difficulty, f.FacultyID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrInvalidInput
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+		return nil, ErrCourseExists
 	}
 	if err != nil {
 		return nil, fmt.Errorf("create course: %w", err)
@@ -104,7 +117,7 @@ func (r *courseRepository) create(ctx context.Context, authorID uuid.UUID, f cou
 func (r *courseRepository) get(ctx context.Context, viewerID, id uuid.UUID) (*courseRow, error) {
 	var args database.Args
 	arg := args.Add
-	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(viewerID)) + ` FROM courses WHERE id = ` + arg(id)
+	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(viewerID)) + ` FROM courses c` + courseFaculty + ` WHERE c.id = ` + arg(id)
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -119,33 +132,26 @@ func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRo
 	var args database.Args
 	arg := args.Add
 
-	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(f.ViewerID)) + ` FROM courses`
+	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(f.ViewerID)) + ` FROM courses c` + courseFaculty
 
 	var where []string
 	if f.UniversityID != "" {
-		where = append(where, "university_id = "+arg(f.UniversityID))
+		where = append(where, "c.university_id = "+arg(f.UniversityID))
 	}
-	if f.Faculty != "" {
-		where = append(where, "faculty = "+arg(f.Faculty))
-	}
-	if f.Subject != "" {
-		where = append(where, "subject = "+arg(f.Subject))
-	}
-	if f.Semester != 0 {
-		where = append(where, "semester = "+arg(f.Semester))
+	if f.FacultyID != uuid.Nil {
+		where = append(where, "c.faculty_id = "+arg(f.FacultyID))
 	}
 	for _, word := range f.Words {
-		pattern := database.SearchPattern(arg(word))
-		where = append(where, "(public.search_text(name) LIKE "+pattern+" OR public.search_text(subject) LIKE "+pattern+")")
+		where = append(where, "public.search_text(c.name) LIKE "+database.SearchPattern(arg(word)))
 	}
 	if f.After != nil {
-		where = append(where, "(created_at, id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
+		where = append(where, "(c.created_at, c.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
 	}
 
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY created_at DESC, id DESC LIMIT " + arg(f.Limit)
+	query += " ORDER BY c.created_at DESC, c.id DESC LIMIT " + arg(f.Limit)
 
 	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -167,17 +173,68 @@ func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRo
 	return courses, nil
 }
 
+func (r *courseRepository) hasSimilar(ctx context.Context, facultyID uuid.UUID, name string, minScore float64) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1 FROM courses
+			WHERE faculty_id = $1
+				AND public.search_text(name) <> public.search_text($2)
+				AND public.similarity(public.search_text(name), public.search_text($2)) >= $3
+		)`
+	var found bool
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, facultyID, name, minScore).Scan(&found); err != nil {
+		return false, fmt.Errorf("find similar courses: %w", err)
+	}
+	return found, nil
+}
+
+func (r *courseRepository) similar(ctx context.Context, f similarCoursesFilter) ([]courseRow, error) {
+	var args database.Args
+	arg := args.Add
+	score := "public.similarity(public.search_text(c.name), public.search_text(" + arg(f.Name) + "))"
+	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(f.ViewerID)) + ` FROM courses c` + courseFaculty + `
+		WHERE c.faculty_id = ` + arg(f.FacultyID) + ` AND ` + score + ` >= ` + arg(f.MinScore) + `
+		ORDER BY ` + score + ` DESC, c.name, c.id
+		LIMIT ` + arg(f.Limit)
+
+	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list similar courses: %w", err)
+	}
+	defer rows.Close()
+
+	var courses []courseRow
+	for rows.Next() {
+		course, err := scanCourse(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan course: %w", err)
+		}
+		courses = append(courses, *course)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list similar courses: %w", err)
+	}
+	return courses, nil
+}
+
 func (r *courseRepository) update(ctx context.Context, id, authorID uuid.UUID, f courseEditFields) (*courseRow, error) {
 	query := `
-		UPDATE courses SET
-			name = COALESCE($3, name),
-			description = COALESCE($4, description),
-			difficulty = COALESCE($5, difficulty)
-		WHERE id = $1 AND author_id = $2
-		RETURNING ` + courseColumns + `, ` + courseRatingOf("$2")
+		WITH c AS (
+			UPDATE courses SET
+				name = COALESCE($3, name),
+				description = COALESCE($4, description),
+				difficulty = COALESCE($5, difficulty)
+			WHERE id = $1 AND author_id = $2
+			RETURNING *
+		)
+		SELECT ` + courseColumns + `, ` + courseRatingOf("$2") + ` FROM c` + courseFaculty
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query, id, authorID, f.Name, f.Description, f.Difficulty))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+		return nil, ErrCourseExists
 	}
 	if err != nil {
 		return nil, fmt.Errorf("update course: %w", err)
@@ -277,6 +334,6 @@ func (r *courseRepository) ratedBy(ctx context.Context, userID uuid.UUID) ([]uui
 }
 
 func (r *courseRepository) chatCards(ctx context.Context, ids []uuid.UUID) ([]ChatCard, error) {
-	const query = `SELECT id, name, subject FROM courses WHERE id = ANY($1)`
+	const query = `SELECT c.id, c.name, f.name FROM courses c` + courseFaculty + ` WHERE c.id = ANY($1)`
 	return scanChatCards(ctx, r.db, "list course cards", query, ids)
 }

@@ -3,7 +3,7 @@ package study
 import (
 	"context"
 	"net/http"
-	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
@@ -20,6 +20,7 @@ func TestCourseEndpointsNeedSession(t *testing.T) {
 	}{
 		{"create course", http.MethodPost, "/study/courses"},
 		{"list courses", http.MethodGet, "/study/courses"},
+		{"list similar courses", http.MethodGet, "/study/courses/similar?facultyId=" + id + "&name=Analiza"},
 		{"get course", http.MethodGet, "/study/courses/" + id},
 		{"update course", http.MethodPatch, "/study/courses/" + id},
 		{"delete course", http.MethodDelete, "/study/courses/" + id},
@@ -54,7 +55,7 @@ func TestCreateCourse(t *testing.T) {
 	t.Run("stores clean text and reads back the same", func(t *testing.T) {
 		author := e.student(t)
 		created := e.course(t, author, map[string]any{"name": "<b>Calculus</b> I"})
-		if created.Name != "Calculus I" || created.Difficulty != 3 || created.UniversityID != "umcs" || !created.IsMine {
+		if created.Name != "Calculus I" || created.Difficulty != 3 || created.UniversityID != e.university || created.FacultyID != e.faculty || !strings.HasPrefix(created.Faculty, "Wydział Testowy") || !created.IsMine {
 			t.Fatalf("created = %#v", created)
 		}
 		got := decode[Course](t, e.api.Get("/study/courses/"+created.ID.String(), author.bearer), http.StatusOK)
@@ -68,9 +69,9 @@ func TestCreateCourse(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a short name, a bad difficulty and an unknown university", func(t *testing.T) {
+	t.Run("rejects a short name, a bad difficulty and an unknown faculty", func(t *testing.T) {
 		author := e.student(t)
-		base := map[string]any{"name": "Calculus", "description": "x", "difficulty": 3, "universityId": "umcs", "faculty": "Maths", "subject": "Analysis", "semester": 1}
+		base := map[string]any{"name": "Calculus " + uuid.NewString()[:8], "description": "x", "difficulty": 3, "facultyId": e.faculty}
 		cases := []struct {
 			name  string
 			field string
@@ -78,7 +79,7 @@ func TestCreateCourse(t *testing.T) {
 		}{
 			{"name under 3 characters after cleaning", "name", "<i>AB</i>"},
 			{"difficulty above 5", "difficulty", 6},
-			{"unknown university", "universityId", "nowhere"},
+			{"unknown faculty", "facultyId", uuid.NewString()},
 		}
 		for _, tc := range cases {
 			body := map[string]any{}
@@ -110,29 +111,33 @@ func TestCreateCourse(t *testing.T) {
 func TestListCourses(t *testing.T) {
 	e := newTestEnv(t)
 
-	t.Run("filters combine and short filter values work", func(t *testing.T) {
+	t.Run("filters combine", func(t *testing.T) {
 		author := e.student(t)
-		subject := "AI " + uuid.NewString()[:6]
-		match := e.course(t, author, map[string]any{"subject": subject, "semester": 2})
-		e.course(t, author, map[string]any{"subject": subject, "semester": 3})
+		faculty := e.newFaculty(t)
+		match := e.course(t, author, map[string]any{"facultyId": faculty})
+		e.course(t, author, nil)
 
-		page := decode[itemPage[Course]](t, e.api.Get("/study/courses?universityId=umcs&subject="+url.QueryEscape(subject)+"&semester=2", author.bearer), http.StatusOK)
-		if len(page.Items) != 1 || page.Items[0].ID != match.ID {
+		page := decode[itemPage[Course]](t, e.api.Get("/study/courses?universityId="+e.university+"&facultyId="+faculty.String(), author.bearer), http.StatusOK)
+		if len(page.Items) != 1 || page.Items[0].ID != match.ID || page.Items[0].FacultyID != faculty || page.Items[0].UniversityID != e.university {
 			t.Fatalf("courses = %#v", page.Items)
+		}
+		other := decode[itemPage[Course]](t, e.api.Get("/study/courses?universityId=kul&facultyId="+faculty.String(), author.bearer), http.StatusOK)
+		if len(other.Items) != 0 {
+			t.Fatalf("courses of another university = %#v", other.Items)
 		}
 	})
 
 	t.Run("pages follow the cursor without repeats", func(t *testing.T) {
 		author := e.student(t)
-		subject := "Paged " + uuid.NewString()[:6]
+		faculty := e.newFaculty(t)
 		for range 3 {
-			e.course(t, author, map[string]any{"subject": subject})
+			e.course(t, author, map[string]any{"facultyId": faculty})
 		}
-		first := decode[itemPage[Course]](t, e.api.Get("/study/courses?limit=2&subject="+url.QueryEscape(subject), author.bearer), http.StatusOK)
+		first := decode[itemPage[Course]](t, e.api.Get("/study/courses?limit=2&facultyId="+faculty.String(), author.bearer), http.StatusOK)
 		if len(first.Items) != 2 || first.NextCursor == nil {
 			t.Fatalf("first page = %#v", first)
 		}
-		second := decode[itemPage[Course]](t, e.api.Get("/study/courses?limit=2&subject="+url.QueryEscape(subject)+"&cursor="+*first.NextCursor, author.bearer), http.StatusOK)
+		second := decode[itemPage[Course]](t, e.api.Get("/study/courses?limit=2&facultyId="+faculty.String()+"&cursor="+*first.NextCursor, author.bearer), http.StatusOK)
 		if len(second.Items) != 1 || second.NextCursor != nil || second.Items[0].ID == first.Items[0].ID || second.Items[0].ID == first.Items[1].ID {
 			t.Fatalf("second page = %#v", second)
 		}

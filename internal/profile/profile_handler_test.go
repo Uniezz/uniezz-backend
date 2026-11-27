@@ -97,7 +97,7 @@ func TestGetMe(t *testing.T) {
 			t.Fatalf("expected two programmes with Informatyka primary first, got %+v", body.Programmes)
 		}
 		second := body.Programmes[1]
-		if second.Faculty != "Wydział Prawa" || second.Level == nil || *second.Level != "long_cycle" || second.Status != "active" || second.YearOfStudy != nil {
+		if second.Faculty == nil || *second.Faculty != "Wydział Prawa" || second.Level == nil || *second.Level != "long_cycle" || second.Status != "active" || second.YearOfStudy != nil {
 			t.Errorf("unexpected second programme %+v", second)
 		}
 		if body.AvatarURL == nil || *body.AvatarURL != avatarURL(avatarID) {

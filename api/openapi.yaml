@@ -317,6 +317,48 @@ components:
         - itemType
         - itemId
       type: object
+    CatalogueProgramme:
+      additionalProperties: false
+      properties:
+        faculty:
+          description: Name of the faculty; null when facultyId is null
+          examples:
+            - Wydział Matematyki, Fizyki i Informatyki
+          type:
+            - string
+            - "null"
+        facultyId:
+          description: One of the faculties listed by getUniversities; null when POL-on names none of them
+          format: uuid
+          type:
+            - string
+            - "null"
+        id:
+          format: uuid
+          type: string
+        level:
+          description: First-cycle (licencjat, inżynier), second-cycle (magister) or long-cycle (jednolite magisterskie) studies
+          enum:
+            - first_cycle
+            - second_cycle
+            - long_cycle
+          type: string
+        name:
+          examples:
+            - Informatyka
+          type: string
+        universityId:
+          examples:
+            - umcs
+          type: string
+      required:
+        - id
+        - universityId
+        - facultyId
+        - faculty
+        - name
+        - level
+      type: object
     Challenge:
       additionalProperties: false
       properties:
@@ -633,8 +675,13 @@ components:
           minimum: 1
           type: integer
         faculty:
+          description: Name of the faculty
           examples:
-            - Faculty of Mathematics, Physics and Computer Science
+            - Wydział Matematyki, Fizyki i Informatyki
+          type: string
+        facultyId:
+          description: One of the faculties listed by getUniversities
+          format: uuid
           type: string
         id:
           format: uuid
@@ -667,17 +714,6 @@ components:
             - 17
           format: int64
           type: integer
-        semester:
-          examples:
-            - 1
-          format: int64
-          maximum: 10
-          minimum: 1
-          type: integer
-        subject:
-          examples:
-            - Computer Science
-          type: string
         universityId:
           examples:
             - umcs
@@ -688,9 +724,8 @@ components:
         - description
         - difficulty
         - universityId
+        - facultyId
         - faculty
-        - subject
-        - semester
         - ratingAverage
         - ratingCount
         - isMine
@@ -920,6 +955,9 @@ components:
     CreateCourseInputBody:
       additionalProperties: false
       properties:
+        confirmNew:
+          description: Create the course even when the faculty has courses with similar names, as listed by listSimilarCourses
+          type: boolean
         description:
           description: Up to 5000 characters after HTML is stripped
           maxLength: 20000
@@ -932,10 +970,9 @@ components:
           maximum: 5
           minimum: 1
           type: integer
-        faculty:
-          description: 3 to 150 characters after HTML is stripped
-          maxLength: 600
-          minLength: 1
+        facultyId:
+          description: One of the faculties listed by getUniversities; the course belongs to its university
+          format: uuid
           type: string
         name:
           description: 3 to 150 characters after HTML is stripped
@@ -944,34 +981,11 @@ components:
           maxLength: 600
           minLength: 1
           type: string
-        semester:
-          examples:
-            - 1
-          format: int64
-          maximum: 10
-          minimum: 1
-          type: integer
-        subject:
-          description: 3 to 150 characters after HTML is stripped
-          examples:
-            - Computer Science
-          maxLength: 600
-          minLength: 1
-          type: string
-        universityId:
-          examples:
-            - umcs
-          maxLength: 32
-          minLength: 1
-          type: string
       required:
         - name
         - description
         - difficulty
-        - universityId
-        - faculty
-        - subject
-        - semester
+        - facultyId
       type: object
     CreatePostInputBody:
       additionalProperties: false
@@ -1465,6 +1479,10 @@ components:
           examples:
             - pl. Marii Curie-Skłodowskiej 2
           type: string
+        id:
+          description: Stable identifier of the faculty; courses refer to it
+          format: uuid
+          type: string
         location:
           $ref: "#/components/schemas/GeoPoint"
           description: Geographic location of the faculty building
@@ -1474,6 +1492,7 @@ components:
             - Wydział Chemii
           type: string
       required:
+        - id
         - name
         - address
         - location
@@ -1487,6 +1506,10 @@ components:
             - pl. Marii Curie-Skłodowskiej 2
           maxLength: 500
           minLength: 1
+          type: string
+        id:
+          description: On replace, an existing faculty of this university to keep and update; omit to add a new faculty
+          format: uuid
           type: string
         latitude:
           description: Latitude in decimal degrees (WGS 84)
@@ -2163,6 +2186,24 @@ components:
       required:
         - programmes
       type: object
+    ListProgrammesOutputBody1:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/CatalogueProgramme"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      type: object
     ListQueueOutputBody:
       additionalProperties: false
       properties:
@@ -2180,6 +2221,18 @@ components:
       required:
         - items
         - nextCursor
+      type: object
+    ListSimilarCoursesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Course"
+          type:
+            - array
+            - "null"
+      required:
+        - items
       type: object
     ListUnreviewedImagesOutputBody:
       additionalProperties: false
@@ -3180,9 +3233,12 @@ components:
       additionalProperties: false
       properties:
         faculty:
+          description: Null when the faculty is unknown
           examples:
             - Wydział Matematyki, Fizyki i Informatyki
-          type: string
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -3209,6 +3265,12 @@ components:
           examples:
             - Informatyka
           type: string
+        programmeId:
+          description: The programme from listProgrammes; null for a programme imported from USOS that the catalogue does not have, or typed before the catalogue existed
+          format: uuid
+          type:
+            - string
+            - "null"
         status:
           enum:
             - active
@@ -3227,6 +3289,7 @@ components:
             - "null"
       required:
         - id
+        - programmeId
         - faculty
         - programme
         - level
@@ -3238,29 +3301,17 @@ components:
     ProgrammeRequest:
       additionalProperties: false
       properties:
-        faculty:
-          maxLength: 255
-          minLength: 1
-          type: string
         isPrimary:
           description: "Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"
           type: boolean
-        level:
-          enum:
-            - first_cycle
-            - second_cycle
-            - long_cycle
-            - third_cycle
-            - phd_school
-          type: string
         modeOfStudies:
           enum:
             - full_time
             - part_time
           type: string
-        programme:
-          maxLength: 255
-          minLength: 1
+        programmeId:
+          description: A programme of the student's university from listProgrammes; its name, faculty and level are copied
+          format: uuid
           type: string
         status:
           default: active
@@ -3276,8 +3327,7 @@ components:
           minimum: 1
           type: integer
       required:
-        - faculty
-        - programme
+        - programmeId
       type: object
     ProposalRequest:
       additionalProperties: false
@@ -3884,7 +3934,7 @@ components:
             - course
             - notes
         subtitle:
-          description: The post author, the course subject or the course of the notes; null when not available
+          description: The post author, the faculty of the course or the course of the notes; null when not available
           type:
             - string
             - "null"
@@ -4900,7 +4950,7 @@ paths:
       tags:
         - auth
     put:
-      description: Every field is replaced, so send the full lists of domains and faculties. Students who already signed up keep their accounts. Admins only.
+      description: Every field is replaced, so send the full lists of domains and faculties. A faculty sent with its id keeps the id; one left out is removed, which fails with 409 faculty_in_use while courses refer to it. Admins only.
       operationId: replaceUniversity
       parameters:
         - in: path
@@ -10377,6 +10427,7 @@ paths:
       tags:
         - profile
     post:
+      description: The programme must be one of the student's university in listProgrammes; any other id is invalid input.
       operationId: createMyProgramme
       requestBody:
         content:
@@ -10464,7 +10515,7 @@ paths:
       tags:
         - profile
     put:
-      description: Overwrites every field; omitted optional fields become null.
+      description: Overwrites every field; omitted optional fields become null. The programme must be one of the student's university in listProgrammes.
       operationId: replaceMyProgramme
       parameters:
         - in: path
@@ -11582,38 +11633,20 @@ paths:
               - umcs
             maxLength: 32
             type: string
-        - description: Exact faculty name
+        - description: Only courses of this faculty; omitted for every faculty
           explode: false
           in: query
-          name: faculty
+          name: facultyId
           schema:
-            description: Exact faculty name
-            maxLength: 600
+            description: Only courses of this faculty; omitted for every faculty
+            format: uuid
             type: string
-        - description: Exact subject name
-          explode: false
-          in: query
-          name: subject
-          schema:
-            description: Exact subject name
-            maxLength: 600
-            type: string
-        - description: 0 or omitted for every semester
-          explode: false
-          in: query
-          name: semester
-          schema:
-            description: 0 or omitted for every semester
-            format: int64
-            maximum: 10
-            minimum: 0
-            type: integer
-        - description: Up to 5 words of at least 3 characters, matched against the course name and subject
+        - description: Up to 5 words of at least 3 characters, matched against the course name
           explode: false
           in: query
           name: q
           schema:
-            description: Up to 5 words of at least 3 characters, matched against the course name and subject
+            description: Up to 5 words of at least 3 characters, matched against the course name
             examples:
               - calculus
             maxLength: 200
@@ -11655,7 +11688,7 @@ paths:
       tags:
         - study
     post:
-      description: Adds a course to the catalogue of a university. A student may create, upload and comment up to 30 times an hour in total.
+      description: Adds a course to the catalogue of a faculty; an unknown faculty is invalid input. A name the faculty already has, ignoring case and accents, is 409 course_exists; a similar name is 409 similar_courses unless confirmNew is true. A student may create, upload and comment up to 30 times an hour in total.
       operationId: createCourse
       requestBody:
         content:
@@ -11682,6 +11715,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unauthorized
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
         "422":
           content:
             application/json:
@@ -11703,6 +11742,66 @@ paths:
       security:
         - bearer: []
       summary: Create a course
+      tags:
+        - study
+  /study/courses/similar:
+    get:
+      description: "Up to 5 courses, most similar first, ignoring case, accents and small typos. Not paginated by design: it suggests existing courses before a student creates a new one."
+      operationId: listSimilarCourses
+      parameters:
+        - explode: false
+          in: query
+          name: facultyId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: The name a student is typing, 3 to 150 characters after HTML is stripped
+          explode: false
+          in: query
+          name: name
+          required: true
+          schema:
+            description: The name a student is typing, 3 to 150 characters after HTML is stripped
+            examples:
+              - Analiza matematyczna
+            maxLength: 600
+            minLength: 1
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSimilarCoursesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List courses of a faculty whose names are similar to a given name
       tags:
         - study
   /study/courses/{id}:
@@ -12201,12 +12300,12 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
-        - description: Up to 5 words of at least 3 characters, matched against the file title and the course subject
+        - description: Up to 5 words of at least 3 characters, matched against the file title and the course name
           explode: false
           in: query
           name: q
           schema:
-            description: Up to 5 words of at least 3 characters, matched against the file title and the course subject
+            description: Up to 5 words of at least 3 characters, matched against the file title and the course name
             examples:
               - midterm algebra
             maxLength: 200
@@ -12219,32 +12318,14 @@ paths:
               - umcs
             maxLength: 32
             type: string
-        - description: Exact faculty name of the course
+        - description: Only files of courses of this faculty; omitted for every faculty
           explode: false
           in: query
-          name: faculty
+          name: facultyId
           schema:
-            description: Exact faculty name of the course
-            maxLength: 600
+            description: Only files of courses of this faculty; omitted for every faculty
+            format: uuid
             type: string
-        - description: Exact subject name of the course
-          explode: false
-          in: query
-          name: subject
-          schema:
-            description: Exact subject name of the course
-            maxLength: 600
-            type: string
-        - description: 0 or omitted for every semester
-          explode: false
-          in: query
-          name: semester
-          schema:
-            description: 0 or omitted for every semester
-            format: int64
-            maximum: 10
-            minimum: 0
-            type: integer
         - description: Only files uploaded by the signed-in student
           explode: false
           in: query
@@ -12726,5 +12807,93 @@ paths:
       security:
         - bearer: []
       summary: List the reviews of a professor
+      tags:
+        - study
+  /study/programmes:
+    get:
+      description: Programmes (kierunki) that the university runs or is closing, as listed in POL-on, ordered by name. The list is refreshed monthly; a programme POL-on no longer lists drops out.
+      operationId: listProgrammes
+      parameters:
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: universityId
+          required: true
+          schema:
+            examples:
+              - umcs
+            maxLength: 32
+            minLength: 1
+            type: string
+        - description: Only programmes of this faculty; omitted for every faculty
+          explode: false
+          in: query
+          name: facultyId
+          schema:
+            description: Only programmes of this faculty; omitted for every faculty
+            format: uuid
+            type: string
+        - description: Up to 5 words of at least 3 characters, matched against the programme name
+          explode: false
+          in: query
+          name: q
+          schema:
+            description: Up to 5 words of at least 3 characters, matched against the programme name
+            examples:
+              - informatyka
+            maxLength: 200
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListProgrammesOutputBody1"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the study programmes of a university
       tags:
         - study

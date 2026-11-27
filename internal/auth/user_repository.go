@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	inviteCodeLength = 7
-	inviteAlphabet   = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	uniqueViolation  = "23505"
+	inviteCodeLength    = 7
+	inviteAlphabet      = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	uniqueViolation     = "23505"
+	foreignKeyViolation = "23503"
 )
 
 type User struct {

@@ -30,10 +30,11 @@ type universityRow struct {
 }
 
 type facultyRow struct {
-	Name      string  `json:"name"`
-	Address   string  `json:"address"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Address   string    `json:"address"`
+	Latitude  float64   `json:"latitude"`
+	Longitude float64   `json:"longitude"`
 }
 
 type universityFields struct {
@@ -43,13 +44,22 @@ type universityFields struct {
 	Position           int
 	RadonInstitutionID *uuid.UUID
 	Domains            []string
-	Faculties          []facultyRow
+	Faculties          []facultyFields
+}
+
+type facultyFields struct {
+	ID        *uuid.UUID
+	Name      string
+	Address   string
+	Latitude  float64
+	Longitude float64
+	Position  int
 }
 
 const universityColumns = `u.id, u.name, u.auth_type, u.position, u.radon_institution_id,
 	COALESCE((SELECT array_agg(d.domain ORDER BY d.domain) FROM university_domains d WHERE d.university_id = u.id), '{}'),
 	COALESCE((
-		SELECT json_agg(json_build_object('name', f.name, 'address', f.address, 'latitude', f.latitude, 'longitude', f.longitude) ORDER BY f.position)
+		SELECT json_agg(json_build_object('id', f.id, 'name', f.name, 'address', f.address, 'latitude', f.latitude, 'longitude', f.longitude) ORDER BY f.position)
 		FROM university_faculties f WHERE f.university_id = u.id
 	), '[]')`
 
@@ -145,31 +155,68 @@ func (r *universityRepository) addDomains(ctx context.Context, id UniversityID, 
 	return nil
 }
 
-func (r *universityRepository) clearFaculties(ctx context.Context, id UniversityID) error {
-	const query = `DELETE FROM university_faculties WHERE university_id = $1`
-	if _, err := r.db.Conn(ctx).Exec(ctx, query, id); err != nil {
-		return fmt.Errorf("clear university faculties: %w", err)
+func (r *universityRepository) deleteFacultiesExcept(ctx context.Context, id UniversityID, keep []uuid.UUID) error {
+	const query = `DELETE FROM university_faculties WHERE university_id = $1 AND NOT (id = ANY($2))`
+	_, err := r.db.Conn(ctx).Exec(ctx, query, id, keep)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+		return ErrFacultyInUse
+	}
+	if err != nil {
+		return fmt.Errorf("delete university faculties: %w", err)
 	}
 	return nil
 }
 
-func (r *universityRepository) addFaculties(ctx context.Context, id UniversityID, faculties []facultyRow) error {
-	names := make([]string, 0, len(faculties))
-	addresses := make([]string, 0, len(faculties))
-	latitudes := make([]float64, 0, len(faculties))
-	longitudes := make([]float64, 0, len(faculties))
+func (r *universityRepository) updateFaculties(ctx context.Context, id UniversityID, faculties []facultyFields) (int64, error) {
+	var ids []uuid.UUID
+	var names, addresses []string
+	var latitudes, longitudes []float64
+	var positions []int32
 	for _, f := range faculties {
+		if f.ID == nil {
+			continue
+		}
+		ids = append(ids, *f.ID)
 		names = append(names, f.Name)
 		addresses = append(addresses, f.Address)
 		latitudes = append(latitudes, f.Latitude)
 		longitudes = append(longitudes, f.Longitude)
+		positions = append(positions, int32(f.Position))
+	}
+	const query = `
+		UPDATE university_faculties AS uf SET
+			name = f.name, address = f.address, latitude = f.latitude, longitude = f.longitude, position = f.position
+		FROM unnest($2::uuid[], $3::text[], $4::text[], $5::float8[], $6::float8[], $7::int[])
+			AS f(id, name, address, latitude, longitude, position)
+		WHERE uf.id = f.id AND uf.university_id = $1`
+	tag, err := r.db.Conn(ctx).Exec(ctx, query, id, ids, names, addresses, latitudes, longitudes, positions)
+	if err != nil {
+		return 0, fmt.Errorf("update university faculties: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+func (r *universityRepository) addFaculties(ctx context.Context, id UniversityID, faculties []facultyFields) error {
+	var names, addresses []string
+	var latitudes, longitudes []float64
+	var positions []int32
+	for _, f := range faculties {
+		if f.ID != nil {
+			continue
+		}
+		names = append(names, f.Name)
+		addresses = append(addresses, f.Address)
+		latitudes = append(latitudes, f.Latitude)
+		longitudes = append(longitudes, f.Longitude)
+		positions = append(positions, int32(f.Position))
 	}
 	const query = `
 		INSERT INTO university_faculties (university_id, name, address, latitude, longitude, position)
 		SELECT $1, f.name, f.address, f.latitude, f.longitude, f.position
-		FROM unnest($2::text[], $3::text[], $4::float8[], $5::float8[]) WITH ORDINALITY
+		FROM unnest($2::text[], $3::text[], $4::float8[], $5::float8[], $6::int[])
 			AS f(name, address, latitude, longitude, position)`
-	if _, err := r.db.Conn(ctx).Exec(ctx, query, id, names, addresses, latitudes, longitudes); err != nil {
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, id, names, addresses, latitudes, longitudes, positions); err != nil {
 		return fmt.Errorf("add university faculties: %w", err)
 	}
 	return nil

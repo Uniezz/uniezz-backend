@@ -16,6 +16,7 @@ import (
 
 const (
 	foreignKeyViolation  = "23503"
+	uniqueViolation      = "23505"
 	fileCourseForeignKey = "course_files_course_id_fkey"
 )
 
@@ -43,9 +44,7 @@ type fileFilter struct {
 	AuthorID     uuid.UUID
 	Words        []string
 	UniversityID string
-	Faculty      string
-	Subject      string
-	Semester     int
+	FacultyID    uuid.UUID
 	After        *pageCursor
 	Limit        int
 }
@@ -124,19 +123,13 @@ func (r *fileRepository) list(ctx context.Context, f fileFilter) ([]fileRow, err
 			SELECT id FROM course_files WHERE public.search_text(title) LIKE `+pattern+`
 			UNION ALL
 			SELECT cf.id FROM course_files cf JOIN courses sc ON sc.id = cf.course_id
-			WHERE public.search_text(sc.subject) LIKE `+pattern+`)`)
+			WHERE public.search_text(sc.name) LIKE `+pattern+`)`)
 	}
 	if f.UniversityID != "" {
 		where = append(where, "c.university_id = "+arg(f.UniversityID))
 	}
-	if f.Faculty != "" {
-		where = append(where, "c.faculty = "+arg(f.Faculty))
-	}
-	if f.Subject != "" {
-		where = append(where, "c.subject = "+arg(f.Subject))
-	}
-	if f.Semester != 0 {
-		where = append(where, "c.semester = "+arg(f.Semester))
+	if f.FacultyID != uuid.Nil {
+		where = append(where, "c.faculty_id = "+arg(f.FacultyID))
 	}
 	if f.After != nil {
 		where = append(where, "(f.created_at, f.id) < ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")

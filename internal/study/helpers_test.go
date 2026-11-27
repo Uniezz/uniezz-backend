@@ -40,10 +40,12 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 }
 
 type testEnv struct {
-	pool   *pgxpool.Pool
-	api    humatest.TestAPI
-	module Module
-	media  *fakeMedia
+	pool       *pgxpool.Pool
+	api        humatest.TestAPI
+	module     Module
+	media      *fakeMedia
+	university string
+	faculty    uuid.UUID
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -66,7 +68,34 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("New failed: %v", err)
 	}
 	module.Register(api)
-	return &testEnv{pool: pool, api: api, module: module, media: fake}
+	e := &testEnv{pool: pool, api: api, module: module, media: fake}
+	e.university = "t-" + uuid.NewString()[:8]
+	_, err = pool.Exec(context.Background(),
+		"INSERT INTO universities (id, name, auth_type, position) VALUES ($1, 'Uczelnia Testowa', 'OTP', 1000)", e.university)
+	if err != nil {
+		t.Fatalf("create university: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM universities WHERE id = $1", e.university)
+	})
+	e.faculty = e.newFaculty(t)
+	return e
+}
+
+func (e *testEnv) newFaculty(t *testing.T) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	err := e.pool.QueryRow(context.Background(), `
+		INSERT INTO university_faculties (university_id, name, address, latitude, longitude, position)
+		VALUES ($1, $2, 'ul. Testowa 1', 51.2, 22.5, 1000) RETURNING id`,
+		e.university, "Wydział Testowy "+uuid.NewString()[:8]).Scan(&id)
+	if err != nil {
+		t.Fatalf("create faculty: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = e.pool.Exec(context.Background(), "DELETE FROM university_faculties WHERE id = $1", id)
+	})
+	return id
 }
 
 type student struct {
@@ -117,13 +146,11 @@ func (e *testEnv) block(t *testing.T, blocker, blocked uuid.UUID) {
 func (e *testEnv) course(t *testing.T, author student, overrides map[string]any) Course {
 	t.Helper()
 	body := map[string]any{
-		"name":         "Calculus " + uuid.NewString()[:8],
-		"description":  "Limits and derivatives.",
-		"difficulty":   3,
-		"universityId": "umcs",
-		"faculty":      "Mathematics",
-		"subject":      "Analysis " + uuid.NewString()[:8],
-		"semester":     2,
+		"name":        "Calculus " + uuid.NewString()[:8],
+		"description": "Limits and derivatives.",
+		"difficulty":  3,
+		"facultyId":   e.faculty,
+		"confirmNew":  true,
 	}
 	for k, v := range overrides {
 		body[k] = v
