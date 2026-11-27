@@ -913,6 +913,9 @@ components:
     CreateCourseInputBody:
       additionalProperties: false
       properties:
+        confirmNew:
+          description: Create the course even when the faculty has courses with similar names, as listed by listSimilarCourses
+          type: boolean
         description:
           description: Up to 5000 characters after HTML is stripped
           maxLength: 20000
@@ -2129,6 +2132,18 @@ components:
       required:
         - items
         - nextCursor
+      type: object
+    ListSimilarCoursesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Course"
+          type:
+            - array
+            - "null"
+      required:
+        - items
       type: object
     ListUnreviewedImagesOutputBody:
       additionalProperties: false
@@ -11537,7 +11552,7 @@ paths:
       tags:
         - study
     post:
-      description: Adds a course to the catalogue of a faculty; an unknown faculty is invalid input. A student may create, upload and comment up to 30 times an hour in total.
+      description: Adds a course to the catalogue of a faculty; an unknown faculty is invalid input. A name the faculty already has, ignoring case and accents, is 409 course_exists; a similar name is 409 similar_courses unless confirmNew is true. A student may create, upload and comment up to 30 times an hour in total.
       operationId: createCourse
       requestBody:
         content:
@@ -11564,6 +11579,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unauthorized
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
         "422":
           content:
             application/json:
@@ -11585,6 +11606,66 @@ paths:
       security:
         - bearer: []
       summary: Create a course
+      tags:
+        - study
+  /study/courses/similar:
+    get:
+      description: "Up to 5 courses, most similar first, ignoring case, accents and small typos. Not paginated by design: it suggests existing courses before a student creates a new one."
+      operationId: listSimilarCourses
+      parameters:
+        - explode: false
+          in: query
+          name: facultyId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: The name a student is typing, 3 to 150 characters after HTML is stripped
+          explode: false
+          in: query
+          name: name
+          required: true
+          schema:
+            description: The name a student is typing, 3 to 150 characters after HTML is stripped
+            examples:
+              - Analiza matematyczna
+            maxLength: 600
+            minLength: 1
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSimilarCoursesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List courses of a faculty whose names are similar to a given name
       tags:
         - study
   /study/courses/{id}:

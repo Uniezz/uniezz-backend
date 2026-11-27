@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	minDifficulty = 1
-	maxDifficulty = 5
+	minDifficulty     = 1
+	maxDifficulty     = 5
+	similarNameScore  = 0.45
+	maxSimilarCourses = 5
 )
 
 type courseChange struct {
@@ -19,6 +21,7 @@ type courseChange struct {
 	Description string
 	Difficulty  int
 	FacultyID   uuid.UUID
+	ConfirmNew  bool
 }
 
 func (c courseChange) fields() (courseFields, error) {
@@ -78,6 +81,26 @@ type courseQuery struct {
 	Limit        int
 }
 
+type similarCoursesQuery struct {
+	ViewerID  uuid.UUID
+	FacultyID uuid.UUID
+	Name      string
+}
+
+func (q similarCoursesQuery) filter() (similarCoursesFilter, error) {
+	name, err := cleanName("name", q.Name)
+	if err != nil {
+		return similarCoursesFilter{}, err
+	}
+	return similarCoursesFilter{
+		ViewerID:  q.ViewerID,
+		FacultyID: q.FacultyID,
+		Name:      name,
+		MinScore:  similarNameScore,
+		Limit:     maxSimilarCourses,
+	}, nil
+}
+
 func (q courseQuery) filter() (courseFilter, error) {
 	words, err := text.SearchWords(q.Search)
 	if err != nil {
@@ -102,6 +125,15 @@ func (m Module) createCourse(ctx context.Context, authorID uuid.UUID, change cou
 	if err != nil {
 		return nil, err
 	}
+	if !change.ConfirmNew {
+		similar, err := m.courses.hasSimilar(ctx, fields.FacultyID, fields.Name, similarNameScore)
+		if err != nil {
+			return nil, err
+		}
+		if similar {
+			return nil, ErrSimilarCourses
+		}
+	}
 
 	var row *courseRow
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
@@ -125,6 +157,22 @@ func (m Module) getCourse(ctx context.Context, viewerID, id uuid.UUID) (*Course,
 	}
 	course := toCourse(*row, viewerID)
 	return &course, nil
+}
+
+func (m Module) similarCourses(ctx context.Context, q similarCoursesQuery) ([]Course, error) {
+	filter, err := q.filter()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := m.courses.similar(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	courses := make([]Course, 0, len(rows))
+	for _, row := range rows {
+		courses = append(courses, toCourse(row, q.ViewerID))
+	}
+	return courses, nil
 }
 
 func (m Module) listCourses(ctx context.Context, q courseQuery) ([]Course, *string, error) {

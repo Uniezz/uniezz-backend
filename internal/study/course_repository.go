@@ -10,6 +10,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type courseRow struct {
@@ -47,6 +48,14 @@ type courseFilter struct {
 	Words        []string
 	After        *pageCursor
 	Limit        int
+}
+
+type similarCoursesFilter struct {
+	ViewerID  uuid.UUID
+	FacultyID uuid.UUID
+	Name      string
+	MinScore  float64
+	Limit     int
 }
 
 type pageCursor struct {
@@ -94,6 +103,10 @@ func (r *courseRepository) create(ctx context.Context, authorID uuid.UUID, f cou
 		authorID, f.Name, f.Description, f.Difficulty, f.FacultyID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrInvalidInput
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+		return nil, ErrCourseExists
 	}
 	if err != nil {
 		return nil, fmt.Errorf("create course: %w", err)
@@ -160,6 +173,50 @@ func (r *courseRepository) list(ctx context.Context, f courseFilter) ([]courseRo
 	return courses, nil
 }
 
+func (r *courseRepository) hasSimilar(ctx context.Context, facultyID uuid.UUID, name string, minScore float64) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1 FROM courses
+			WHERE faculty_id = $1
+				AND public.search_text(name) <> public.search_text($2)
+				AND public.similarity(public.search_text(name), public.search_text($2)) >= $3
+		)`
+	var found bool
+	if err := r.db.Conn(ctx).QueryRow(ctx, query, facultyID, name, minScore).Scan(&found); err != nil {
+		return false, fmt.Errorf("find similar courses: %w", err)
+	}
+	return found, nil
+}
+
+func (r *courseRepository) similar(ctx context.Context, f similarCoursesFilter) ([]courseRow, error) {
+	var args database.Args
+	arg := args.Add
+	score := "public.similarity(public.search_text(c.name), public.search_text(" + arg(f.Name) + "))"
+	query := `SELECT ` + courseColumns + `, ` + courseRatingOf(arg(f.ViewerID)) + ` FROM courses c` + courseFaculty + `
+		WHERE c.faculty_id = ` + arg(f.FacultyID) + ` AND ` + score + ` >= ` + arg(f.MinScore) + `
+		ORDER BY ` + score + ` DESC, c.name, c.id
+		LIMIT ` + arg(f.Limit)
+
+	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list similar courses: %w", err)
+	}
+	defer rows.Close()
+
+	var courses []courseRow
+	for rows.Next() {
+		course, err := scanCourse(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan course: %w", err)
+		}
+		courses = append(courses, *course)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list similar courses: %w", err)
+	}
+	return courses, nil
+}
+
 func (r *courseRepository) update(ctx context.Context, id, authorID uuid.UUID, f courseEditFields) (*courseRow, error) {
 	query := `
 		WITH c AS (
@@ -174,6 +231,10 @@ func (r *courseRepository) update(ctx context.Context, id, authorID uuid.UUID, f
 	row, err := scanCourse(r.db.Conn(ctx).QueryRow(ctx, query, id, authorID, f.Name, f.Description, f.Difficulty))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+		return nil, ErrCourseExists
 	}
 	if err != nil {
 		return nil, fmt.Errorf("update course: %w", err)

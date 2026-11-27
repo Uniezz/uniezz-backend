@@ -20,6 +20,7 @@ func TestCourseEndpointsNeedSession(t *testing.T) {
 	}{
 		{"create course", http.MethodPost, "/study/courses"},
 		{"list courses", http.MethodGet, "/study/courses"},
+		{"list similar courses", http.MethodGet, "/study/courses/similar?facultyId=" + id + "&name=Analiza"},
 		{"get course", http.MethodGet, "/study/courses/" + id},
 		{"update course", http.MethodPatch, "/study/courses/" + id},
 		{"delete course", http.MethodDelete, "/study/courses/" + id},

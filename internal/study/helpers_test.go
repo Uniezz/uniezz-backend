@@ -150,6 +150,7 @@ func (e *testEnv) course(t *testing.T, author student, overrides map[string]any)
 		"description": "Limits and derivatives.",
 		"difficulty":  3,
 		"facultyId":   e.faculty,
+		"confirmNew":  true,
 	}
 	for k, v := range overrides {
 		body[k] = v

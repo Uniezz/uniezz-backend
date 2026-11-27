@@ -97,6 +97,7 @@ func (m Module) Register(api huma.API) {
 
 	huma.Register(api, createCourseOperation, courses.createCourse)
 	huma.Register(api, listCoursesOperation, courses.listCourses)
+	huma.Register(api, listSimilarCoursesOperation, courses.listSimilarCourses)
 	huma.Register(api, getCourseOperation, courses.getCourse)
 	huma.Register(api, updateCourseOperation, courses.updateCourse)
 	huma.Register(api, deleteCourseOperation, courses.deleteCourse)

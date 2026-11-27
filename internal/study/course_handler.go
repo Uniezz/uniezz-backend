@@ -34,6 +34,7 @@ type createCourseInput struct {
 		Description string    `json:"description" minLength:"1" maxLength:"20000" doc:"Up to 5000 characters after HTML is stripped"`
 		Difficulty  int       `json:"difficulty" minimum:"1" maximum:"5" example:"4"`
 		FacultyID   uuid.UUID `json:"facultyId" format:"uuid" doc:"One of the faculties listed by getUniversities; the course belongs to its university"`
+		ConfirmNew  bool      `json:"confirmNew,omitempty" doc:"Create the course even when the faculty has courses with similar names, as listed by listSimilarCourses"`
 	}
 }
 
@@ -46,10 +47,10 @@ var createCourseOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/study/courses",
 	Summary:       "Create a course",
-	Description:   "Adds a course to the catalogue of a faculty; an unknown faculty is invalid input. A student may create, upload and comment up to 30 times an hour in total.",
+	Description:   "Adds a course to the catalogue of a faculty; an unknown faculty is invalid input. A name the faculty already has, ignoring case and accents, is 409 course_exists; a similar name is 409 similar_courses unless confirmNew is true. A student may create, upload and comment up to 30 times an hour in total.",
 	Tags:          []string{"study"},
 	DefaultStatus: http.StatusCreated,
-	Errors:        []int{http.StatusBadRequest, http.StatusTooManyRequests},
+	Errors:        []int{http.StatusBadRequest, http.StatusConflict, http.StatusTooManyRequests},
 })
 
 func (h *courseHandler) createCourse(ctx context.Context, in *createCourseInput) (*createCourseOutput, error) {
@@ -63,6 +64,7 @@ func (h *courseHandler) createCourse(ctx context.Context, in *createCourseInput)
 		Description: in.Body.Description,
 		Difficulty:  in.Body.Difficulty,
 		FacultyID:   in.Body.FacultyID,
+		ConfirmNew:  in.Body.ConfirmNew,
 	})
 	if err != nil {
 		return nil, errorResponses.Error(err)
@@ -114,6 +116,46 @@ func (h *courseHandler) listCourses(ctx context.Context, in *listCoursesInput) (
 	out := &listCoursesOutput{}
 	out.Body.Items = items
 	out.Body.NextCursor = next
+	return out, nil
+}
+
+type listSimilarCoursesInput struct {
+	FacultyID uuid.UUID `query:"facultyId" format:"uuid" required:"true"`
+	Name      string    `query:"name" required:"true" minLength:"1" maxLength:"600" doc:"The name a student is typing, 3 to 150 characters after HTML is stripped" example:"Analiza matematyczna"`
+}
+
+type listSimilarCoursesOutput struct {
+	Body struct {
+		Items []Course `json:"items"`
+	}
+}
+
+var listSimilarCoursesOperation = auth.Authenticated(huma.Operation{
+	OperationID: "listSimilarCourses",
+	Method:      http.MethodGet,
+	Path:        "/study/courses/similar",
+	Summary:     "List courses of a faculty whose names are similar to a given name",
+	Description: "Up to 5 courses, most similar first, ignoring case, accents and small typos. Not paginated by design: it suggests existing courses before a student creates a new one.",
+	Tags:        []string{"study"},
+	Errors:      []int{http.StatusBadRequest},
+})
+
+func (h *courseHandler) listSimilarCourses(ctx context.Context, in *listSimilarCoursesInput) (*listSimilarCoursesOutput, error) {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	items, err := h.study.similarCourses(ctx, similarCoursesQuery{
+		ViewerID:  viewerID,
+		FacultyID: in.FacultyID,
+		Name:      in.Name,
+	})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+	out := &listSimilarCoursesOutput{}
+	out.Body.Items = items
 	return out, nil
 }
 

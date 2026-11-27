@@ -16,6 +16,7 @@ import (
 
 const (
 	foreignKeyViolation  = "23503"
+	uniqueViolation      = "23505"
 	fileCourseForeignKey = "course_files_course_id_fkey"
 )
 
