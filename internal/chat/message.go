@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
@@ -34,35 +35,45 @@ type sendChange struct {
 	AttachmentIDs  []uuid.UUID
 	NoPreview      bool
 	Key            string
+	Poll           *pollChange
 }
 
 type sendInput struct {
 	ConversationID uuid.UUID
+	Kind           MessageKind
 	Body           string
+	Payload        []byte
 	MediaIDs       []uuid.UUID
 	Link           *messageLink
 	Key            uuid.UUID
 }
 
-func (c sendChange) clean() (sendInput, error) {
-	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
-		return sendInput{}, ErrInvalidInput
-	}
-	body, err := cleanBody(c.Body, len(c.AttachmentIDs))
-	if err != nil {
-		return sendInput{}, err
-	}
+func (c sendChange) clean(now time.Time) (sendInput, error) {
 	key, err := parseKey(c.Key)
 	if err != nil || key == nil {
 		return sendInput{}, ErrInvalidInput
 	}
-	mediaIDs := c.AttachmentIDs
-	if mediaIDs == nil {
-		mediaIDs = []uuid.UUID{}
+	in := sendInput{ConversationID: c.ConversationID, Kind: MessageText, Payload: []byte("{}"), MediaIDs: []uuid.UUID{}, Key: *key}
+
+	if c.Poll != nil {
+		if c.Body != "" || len(c.AttachmentIDs) > 0 {
+			return sendInput{}, ErrInvalidInput
+		}
+		return in.withCard(MessagePoll, now, c.Poll)
 	}
-	in := sendInput{ConversationID: c.ConversationID, Body: body, MediaIDs: mediaIDs, Key: *key}
+
+	if len(c.AttachmentIDs) > maxAttachments || hasDuplicates(c.AttachmentIDs) {
+		return sendInput{}, ErrInvalidInput
+	}
+	in.Body, err = cleanBody(c.Body, len(c.AttachmentIDs))
+	if err != nil {
+		return sendInput{}, err
+	}
+	if c.AttachmentIDs != nil {
+		in.MediaIDs = c.AttachmentIDs
+	}
 	if !c.NoPreview {
-		in.Link = firstLink(body)
+		in.Link = firstLink(in.Body)
 	}
 	return in, nil
 }
@@ -102,7 +113,7 @@ func (m Module) checkUploads(ctx context.Context, userID uuid.UUID, ids []uuid.U
 }
 
 func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChange) (*Message, bool, error) {
-	in, err := c.clean()
+	in, err := c.clean(m.now())
 	if err != nil {
 		return nil, false, err
 	}
@@ -163,7 +174,7 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 		return nil, nil, err
 	}
 
-	created, err := m.insertText(ctx, senderID, in, locked)
+	created, err := m.insertMessage(ctx, senderID, in, locked)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,7 +190,7 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 }
 
 func (m Module) deliverMessage(ctx context.Context, created *messageRow, notes []notification) (*Message, error) {
-	views, err := m.messageViews(ctx, []messageRow{*created})
+	views, err := m.messageViews(ctx, uuid.Nil, []messageRow{*created})
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +220,7 @@ func (m Module) notifyMessage(ctx context.Context, senderID uuid.UUID, a *access
 	})
 }
 
-func (m Module) insertText(ctx context.Context, senderID uuid.UUID, in sendInput, conversation *lockedRow) (*messageRow, error) {
+func (m Module) insertMessage(ctx context.Context, senderID uuid.UUID, in sendInput, conversation *lockedRow) (*messageRow, error) {
 	var body *string
 	if in.Body != "" {
 		body = &in.Body
@@ -219,9 +230,9 @@ func (m Module) insertText(ctx context.Context, senderID uuid.UUID, in sendInput
 		Seq:            conversation.LastSeq,
 		ChangeSeq:      conversation.ChangeSeq,
 		SenderID:       &senderID,
-		Kind:           MessageText,
+		Kind:           in.Kind,
 		Body:           body,
-		Payload:        []byte("{}"),
+		Payload:        in.Payload,
 		ClientID:       &in.Key,
 	})
 	if err != nil {
@@ -252,7 +263,7 @@ func (m Module) replayMessage(ctx context.Context, senderID uuid.UUID, in sendIn
 	if err != nil {
 		return nil, err
 	}
-	if row.ConversationID != in.ConversationID || row.Kind != MessageText {
+	if row.ConversationID != in.ConversationID || row.Kind != in.Kind {
 		return nil, ErrKeyReused
 	}
 	if row.DeletedAt != nil {
@@ -267,11 +278,11 @@ func (m Module) replayMessage(ctx context.Context, senderID uuid.UUID, in sendIn
 	if row.Body != nil {
 		body = *row.Body
 	}
-	if body != in.Body || !slices.Equal(mediaIDs, in.MediaIDs) {
+	if body != in.Body || !slices.Equal(mediaIDs, in.MediaIDs) || !sameCard(row.Payload, in.Payload) {
 		return nil, ErrKeyReused
 	}
 
-	views, err := m.messageViews(ctx, []messageRow{*row})
+	views, err := m.messageViews(ctx, senderID, []messageRow{*row})
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +354,7 @@ func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *s
 		slices.Reverse(rows)
 	}
 
-	items, err := m.messageViews(ctx, rows)
+	items, err := m.messageViews(ctx, q.ViewerID, rows)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -399,7 +410,7 @@ func (m Module) listAround(ctx context.Context, q messageQuery) ([]Message, *str
 	}
 	slices.Reverse(newerRows)
 
-	items, err := m.messageViews(ctx, append(newerRows, older...))
+	items, err := m.messageViews(ctx, q.ViewerID, append(newerRows, older...))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -411,7 +422,7 @@ func (m Module) getMessage(ctx context.Context, viewerID, id uuid.UUID) (*Messag
 	if err != nil {
 		return nil, err
 	}
-	views, err := m.messageViews(ctx, []messageRow{*row})
+	views, err := m.messageViews(ctx, viewerID, []messageRow{*row})
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +465,7 @@ func (m Module) tombstone(ctx context.Context, id uuid.UUID, owner *uuid.UUID) (
 	if err != nil {
 		return nil, nil, err
 	}
-	if owner != nil && (row.SenderID == nil || *row.SenderID != *owner || row.Kind != MessageText) {
+	if owner != nil && (row.SenderID == nil || *row.SenderID != *owner || row.Kind == MessageSystem) {
 		return nil, nil, ErrForbidden
 	}
 	if row.DeletedAt != nil {
@@ -469,6 +480,9 @@ func (m Module) tombstone(ctx context.Context, id uuid.UUID, owner *uuid.UUID) (
 		return nil, nil, err
 	}
 	if err := m.previews.deleteLink(ctx, id); err != nil {
+		return nil, nil, err
+	}
+	if err := m.clearCard(ctx, row); err != nil {
 		return nil, nil, err
 	}
 	released, err := m.messages.detachMedia(ctx, id)
@@ -506,7 +520,7 @@ func (m Module) releaseMedia(ctx context.Context, ids []uuid.UUID) {
 	}
 }
 
-func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message, error) {
+func (m Module) messageViews(ctx context.Context, viewerID uuid.UUID, rows []messageRow) ([]Message, error) {
 	items := make([]Message, 0, len(rows))
 	if len(rows) == 0 {
 		return items, nil
@@ -529,6 +543,10 @@ func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message,
 		return nil, err
 	}
 	previews, err := m.previewViews(ctx, messageIDs)
+	if err != nil {
+		return nil, err
+	}
+	polls, err := m.pollViews(ctx, viewerID, rows, m.now())
 	if err != nil {
 		return nil, err
 	}
@@ -560,6 +578,7 @@ func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message,
 			ClientID:       row.ClientID,
 			Attachments:    nonNilAttachments(attachments[row.ID]),
 			LinkPreview:    previews[row.ID],
+			Poll:           polls[row.ID],
 			CreatedAt:      row.CreatedAt,
 			DeletedAt:      row.DeletedAt,
 		})

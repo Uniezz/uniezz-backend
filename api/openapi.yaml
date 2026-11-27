@@ -1506,6 +1506,19 @@ components:
         - token
         - expiresAt
       type: object
+    Item:
+      additionalProperties: false
+      properties:
+        text:
+          description: Up to 100 characters after HTML is stripped
+          examples:
+            - Library
+          maxLength: 400
+          minLength: 1
+          type: string
+      required:
+        - text
+      type: object
     LikePostOutputBody:
       additionalProperties: false
       properties:
@@ -2125,6 +2138,9 @@ components:
           additionalProperties: {}
           description: "System messages: {event, actorId, params}; empty for others. Clients translate the event code"
           type: object
+        poll:
+          $ref: "#/components/schemas/Poll"
+          description: Set when kind is poll and the message is not deleted
         sender:
           $ref: "#/components/schemas/Student"
         seq:
@@ -2320,6 +2336,122 @@ components:
         - university
         - email
         - code
+      type: object
+    Poll:
+      additionalProperties: false
+      properties:
+        anonymous:
+          description: When true, voters are never listed
+          type: boolean
+        closed:
+          description: True once closedAt is set or closesAt has passed; votes are then refused
+          type: boolean
+        closedAt:
+          description: When the creator or the group owner closed it; null otherwise
+          format: date-time
+          type:
+            - string
+            - "null"
+        closesAt:
+          description: When the poll closes by itself; null when it stays open until closed
+          format: date-time
+          type:
+            - string
+            - "null"
+        multipleChoice:
+          type: boolean
+        myVote:
+          description: Option ids the viewer chose; empty before voting and in stream events, so keep the value from your own vote
+          items:
+            format: int64
+            type: integer
+          type:
+            - array
+            - "null"
+        options:
+          items:
+            $ref: "#/components/schemas/PollOption"
+          type:
+            - array
+            - "null"
+        question:
+          examples:
+            - Where do we study on Friday?
+          type: string
+        totalVoters:
+          format: int64
+          type: integer
+        voters:
+          description: Up to 5 latest voters of a public poll; empty for anonymous polls and in stream events, so fetch the message to show them
+          items:
+            $ref: "#/components/schemas/Student"
+          type:
+            - array
+            - "null"
+      required:
+        - question
+        - options
+        - multipleChoice
+        - anonymous
+        - closesAt
+        - closedAt
+        - closed
+        - totalVoters
+        - voters
+        - myVote
+      type: object
+    PollOption:
+      additionalProperties: false
+      properties:
+        id:
+          format: int64
+          maximum: 10
+          minimum: 1
+          type: integer
+        text:
+          examples:
+            - Library
+          type: string
+        votes:
+          description: Students who chose this option
+          format: int64
+          type: integer
+      required:
+        - id
+        - text
+        - votes
+      type: object
+    PollRequest:
+      additionalProperties: false
+      properties:
+        anonymous:
+          description: Hide who voted for what
+          type: boolean
+        closesAt:
+          description: Closes the poll at this time, at most 30 days ahead
+          format: date-time
+          type: string
+        multipleChoice:
+          type: boolean
+        options:
+          description: Options get ids 1 to n in this order
+          items:
+            $ref: "#/components/schemas/Item"
+          maxItems: 10
+          minItems: 2
+          type:
+            - array
+            - "null"
+        question:
+          description: Up to 300 characters after HTML is stripped
+          examples:
+            - Where do we study on Friday?
+          maxLength: 1200
+          minLength: 1
+          type: string
+      required:
+        - question
+        - options
       type: object
     Post:
       additionalProperties: false
@@ -3437,6 +3569,9 @@ components:
         noPreview:
           description: Do not preview the first link of the body
           type: boolean
+        poll:
+          $ref: "#/components/schemas/PollRequest"
+          description: Send a poll instead of text; body and attachmentIds must then be empty
       type: object
     Settings:
       additionalProperties: false
@@ -4025,6 +4160,22 @@ components:
         - uploadUrl
         - expiresAt
         - headers
+      type: object
+    VoteChatPollInputBody:
+      additionalProperties: false
+      properties:
+        optionIds:
+          description: The viewer's whole choice, replacing an earlier vote; one id unless the poll is multipleChoice. An empty list takes the vote back
+          items:
+            format: int64
+            type: integer
+          maxItems: 10
+          type:
+            - array
+            - "null"
+          uniqueItems: true
+      required:
+        - optionIds
       type: object
   securitySchemes:
     bearer:
@@ -5284,7 +5435,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Send a message with up to 5 images
+      summary: Send a text message with up to 5 images, or a poll
       tags:
         - chat
   /chat/conversations/{id}/messages/search:
@@ -5522,6 +5673,124 @@ paths:
       security:
         - bearer: []
       summary: Get one message with fresh attachment URLs
+      tags:
+        - chat
+  /chat/messages/{id}/poll/close:
+    post:
+      description: Only the poll's creator or the group owner may close it. Closing a closed poll succeeds.
+      operationId: closeChatPoll
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Close a poll message
+      tags:
+        - chat
+  /chat/messages/{id}/poll/vote:
+    put:
+      description: Sending the current choice again changes nothing. A closed poll refuses votes with 409 poll_closed.
+      operationId: voteChatPoll
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoteChatPollInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Vote in a poll message, change the vote or take it back
       tags:
         - chat
   /chat/requests:

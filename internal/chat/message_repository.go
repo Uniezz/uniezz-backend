@@ -321,9 +321,9 @@ func (r *messageRepository) setChange(ctx context.Context, id uuid.UUID, changeS
 func (r *messageRepository) liveIDsBySender(ctx context.Context, senderID uuid.UUID) ([]uuid.UUID, error) {
 	const query = `
 		SELECT id FROM chat_messages
-		WHERE sender_id = $1 AND kind = $2 AND deleted_at IS NULL
+		WHERE sender_id = $1 AND kind <> $2 AND deleted_at IS NULL
 		ORDER BY id`
-	return scanUUIDs(ctx, r.db, "list sender messages", query, senderID, MessageText)
+	return scanUUIDs(ctx, r.db, "list sender messages", query, senderID, MessageSystem)
 }
 
 func scanUUIDs(ctx context.Context, db database.DB, what, query string, args ...any) ([]uuid.UUID, error) {

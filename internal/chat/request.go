@@ -22,7 +22,7 @@ type requestChange struct {
 }
 
 func (m Module) createRequest(ctx context.Context, senderID uuid.UUID, c requestChange) (*Conversation, bool, error) {
-	in, err := sendChange{Body: c.Body, Key: c.Key}.clean()
+	in, err := sendChange{Body: c.Body, Key: c.Key}.clean(m.now())
 	if err != nil {
 		return nil, false, err
 	}
@@ -122,7 +122,7 @@ func (m Module) checkRequest(ctx context.Context, senderID uuid.UUID, a *accessR
 	if a.Connected || a.StartedBy == nil || *a.StartedBy != senderID {
 		return m.conversations.approve(ctx, in.ConversationID)
 	}
-	if seq > 1 || len(in.MediaIDs) > 0 || hasLink(in.Body) {
+	if seq > 1 || in.Kind != MessageText || len(in.MediaIDs) > 0 || hasLink(in.Body) {
 		return ErrRequestPending
 	}
 

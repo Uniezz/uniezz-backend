@@ -50,7 +50,7 @@ func (m Module) hydrate(ctx context.Context, notes []notification) (map[uuid.UUI
 		return views, nil
 	}
 
-	hydrated, err := m.messageViews(ctx, rows)
+	hydrated, err := m.messageViews(ctx, uuid.Nil, rows)
 	if err != nil {
 		return views, err
 	}

@@ -56,7 +56,7 @@ func (m Module) searchMessages(ctx context.Context, q searchQuery) ([]Message, *
 		return nil, nil, err
 	}
 
-	items, err := m.messageViews(ctx, rows)
+	items, err := m.messageViews(ctx, q.ViewerID, rows)
 	if err != nil {
 		return nil, nil, err
 	}

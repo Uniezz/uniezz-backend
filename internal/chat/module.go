@@ -82,6 +82,7 @@ type Module struct {
 	settings      *settingsRepository
 	sessions      *sessionRepository
 	previews      *linkPreviewRepository
+	polls         *pollRepository
 	media         mediaService
 	pages         pageFetcher
 	jobs          *jobs.Runner
@@ -108,6 +109,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier, runn
 		settings:      newSettingsRepository(db),
 		sessions:      newSessionRepository(db),
 		previews:      newLinkPreviewRepository(db),
+		polls:         newPollRepository(db),
 		media:         mediaModule,
 		pages:         safehttp.New(safehttp.Config{UserAgent: previewUserAgent}),
 		jobs:          runner,
@@ -141,6 +143,7 @@ func (m Module) Register(api huma.API) {
 	stream := &streamHandler{chat: m}
 	requests := &requestHandler{chat: m}
 	settings := &settingsHandler{chat: m}
+	polls := &pollHandler{chat: m}
 
 	huma.Register(api, openDirectConversationOperation, conversations.openDirectConversation)
 	huma.Register(api, createGroupConversationOperation, conversations.createGroupConversation)
@@ -158,6 +161,8 @@ func (m Module) Register(api huma.API) {
 	huma.Register(api, searchChatMessagesOperation, messages.searchMessages)
 	huma.Register(api, getChatMessageOperation, messages.getMessage)
 	huma.Register(api, deleteChatMessageOperation, messages.deleteMessage)
+	huma.Register(api, voteChatPollOperation, polls.vote)
+	huma.Register(api, closeChatPollOperation, polls.close)
 	huma.Register(api, openChatStreamOperation, stream.openStream)
 	huma.Register(api, listChatRequestsOperation, requests.listRequests)
 	huma.Register(api, createChatRequestOperation, requests.createRequest)

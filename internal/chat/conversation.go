@@ -83,7 +83,7 @@ func (m Module) conversationViews(ctx context.Context, viewerID uuid.UUID, rows 
 	if err != nil {
 		return nil, err
 	}
-	lastMessages, err := m.messageViews(ctx, lastRows)
+	lastMessages, err := m.messageViews(ctx, viewerID, lastRows)
 	if err != nil {
 		return nil, err
 	}
