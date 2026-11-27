@@ -2,11 +2,12 @@ package profile
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -42,8 +43,8 @@ type programmeRequest struct {
 
 func (r programmeRequest) fields() (programmeFields, error) {
 	f := programmeFields{
-		Faculty:       strings.TrimSpace(r.Faculty),
-		Programme:     strings.TrimSpace(r.Programme),
+		Faculty:       text.Plain(r.Faculty, false),
+		Programme:     text.Plain(r.Programme, false),
 		Level:         r.Level,
 		ModeOfStudies: r.ModeOfStudies,
 		YearOfStudy:   r.YearOfStudy,
@@ -52,6 +53,12 @@ func (r programmeRequest) fields() (programmeFields, error) {
 	}
 	if f.Faculty == "" || f.Programme == "" {
 		return programmeFields{}, ErrInvalidInput
+	}
+	if err := text.Allowed("faculty", f.Faculty); err != nil {
+		return programmeFields{}, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	if err := text.Allowed("programme", f.Programme); err != nil {
+		return programmeFields{}, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	if f.Status == "" {
 		f.Status = "active"

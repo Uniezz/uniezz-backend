@@ -69,6 +69,34 @@ func TestBlockedText(t *testing.T) {
 		}
 	})
 
+	t.Run("a retried message stored before its words were blocked is replayed", func(t *testing.T) {
+		a, b := e.friends(t)
+		c := e.direct(t, a, b)
+		key := uuid.New()
+		sent := decode[Message](t, e.rawSend(a, c.ID, key, map[string]any{"body": "Do jutra"}), http.StatusCreated)
+		if _, err := e.pool.Exec(context.Background(), "UPDATE chat_messages SET body = 'kurwa' WHERE id = $1", sent.ID); err != nil {
+			t.Fatalf("change body: %v", err)
+		}
+
+		replayed := decode[Message](t, e.rawSend(a, c.ID, key, map[string]any{"body": "kurwa"}), http.StatusCreated)
+		if replayed.ID != sent.ID {
+			t.Errorf("replayed message %s, want %s", replayed.ID, sent.ID)
+		}
+	})
+
+	t.Run("renaming a group to the name it already has is accepted", func(t *testing.T) {
+		owner, friend := e.friends(t)
+		g := e.group(t, owner, "Informatyka rok 3", friend)
+		if _, err := e.pool.Exec(context.Background(), "UPDATE chat_conversations SET name = 'Kurwy z roku 3' WHERE id = $1", g.ID); err != nil {
+			t.Fatalf("change name: %v", err)
+		}
+
+		rec := e.api.Patch("/chat/conversations/"+g.ID.String(), owner.bearer, map[string]any{"name": "Kurwy z roku 3"})
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
 	t.Run("ordinary messages in several languages are sent", func(t *testing.T) {
 		a, b := e.friends(t)
 		c := e.direct(t, a, b)

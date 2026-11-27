@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
-	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -65,13 +64,10 @@ func (m Module) checkPublisher(ctx context.Context, userID uuid.UUID) error {
 func (m Module) create(ctx context.Context, authorID uuid.UUID, question, answer, status string) (*Entry, error) {
 	question, err := cleanText("question", question, false, minQuestionLength, maxQuestionLength)
 	if err != nil {
-		text.ReportNotAllowed(ctx, authorID, err)
 		return nil, err
 	}
-
 	answer, err = cleanText("answer", answer, true, minAnswerLength, maxAnswerLength)
 	if err != nil {
-		text.ReportNotAllowed(ctx, authorID, err)
 		return nil, err
 	}
 	row, err := m.entries.insert(ctx, authorID, question, answer, status)

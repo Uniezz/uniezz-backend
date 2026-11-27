@@ -14,9 +14,13 @@ const leetSymbols = "@$!|"
 
 var letterFixes = strings.NewReplacer("ß", "ss", "ł", "l")
 
+const maxShortWordLength = 3
+
 var latinLookalikes = map[rune]rune{
 	'0': 'o', '1': 'i', 'l': 'i', '!': 'i', '|': 'i',
 	'3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '7': 't', '8': 'b',
+	'а': 'a', 'в': 'b', 'с': 'c', 'е': 'e', 'н': 'h', 'і': 'i', 'ј': 'j', 'к': 'k',
+	'м': 'm', 'о': 'o', 'р': 'p', 'ѕ': 's', 'т': 't', 'х': 'x', 'у': 'y',
 }
 
 var cyrillicLookalikes = map[rune]rune{
@@ -57,10 +61,18 @@ func isSeparator(r rune) bool {
 }
 
 func joinLetters(tokens []string) []string {
+	return joinRuns(tokens, 1)
+}
+
+func joinShortWords(tokens []string) []string {
+	return joinRuns(tokens, maxShortWordLength)
+}
+
+func joinRuns(tokens []string, maxLength int) []string {
 	joined := make([]string, 0, len(tokens))
 	run := ""
 	for _, token := range tokens {
-		if utf8.RuneCountInString(token) == 1 {
+		if utf8.RuneCountInString(token) <= maxLength {
 			run += token
 			continue
 		}
@@ -78,7 +90,7 @@ func joinLetters(tokens []string) []string {
 
 func fold(word string) string {
 	lookalikes := latinLookalikes
-	if strings.ContainsFunc(word, isCyrillic) {
+	if mostlyCyrillic(word) {
 		lookalikes = cyrillicLookalikes
 	}
 	return strings.Map(func(r rune) rune {
@@ -89,6 +101,15 @@ func fold(word string) string {
 	}, word)
 }
 
-func isCyrillic(r rune) bool {
-	return unicode.Is(unicode.Cyrillic, r)
+func mostlyCyrillic(word string) bool {
+	cyrillic, latin := 0, 0
+	for _, r := range word {
+		switch {
+		case unicode.Is(unicode.Cyrillic, r):
+			cyrillic++
+		case unicode.Is(unicode.Latin, r):
+			latin++
+		}
+	}
+	return cyrillic > 0 && cyrillic >= latin
 }

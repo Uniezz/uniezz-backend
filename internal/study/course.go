@@ -130,7 +130,6 @@ func (q courseQuery) filter() (courseFilter, error) {
 func (m Module) createCourse(ctx context.Context, authorID uuid.UUID, change courseChange) (*Course, error) {
 	fields, err := change.fields()
 	if err != nil {
-		text.ReportNotAllowed(ctx, authorID, err)
 		return nil, err
 	}
 
@@ -183,7 +182,6 @@ func (m Module) listCourses(ctx context.Context, q courseQuery) ([]Course, *stri
 func (m Module) updateCourse(ctx context.Context, userID, id uuid.UUID, change courseEditChange) (*Course, error) {
 	fields, err := change.fields()
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 	row, err := m.courses.update(ctx, id, userID, fields)

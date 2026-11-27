@@ -1,18 +1,10 @@
 package text
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"regexp"
-	"strings"
 	"testing"
 	"testing/fstest"
-
-	"github.com/google/uuid"
 )
 
 func fixtureBlocklist(t *testing.T) *blocklist {
@@ -21,7 +13,7 @@ func fixtureBlocklist(t *testing.T) *blocklist {
 		"en.txt": {Data: []byte("# English\n*fuck*\nshit\nass\nkill yourself\n")},
 		"es.txt": {Data: []byte("puta\nhijo de puta\n")},
 		"pl.txt": {Data: []byte("*pierdal*\r\nkurwa\r\n")},
-		"ru.txt": {Data: []byte("*хуй*\n*пизд*\n")},
+		"ru.txt": {Data: []byte("*хуй*\n!страху\n*пизд*\n")},
 	})
 	if err != nil {
 		t.Fatalf("parseBlocklist: %v", err)
@@ -54,6 +46,16 @@ func TestBlocklistBlocks(t *testing.T) {
 		{name: "a cyrillic root with a digit", in: "п1здец"},
 		{name: "cyrillic letters spaced out", in: "п и з д а"},
 		{name: "a stretched cyrillic root", in: "хууууй"},
+		{name: "a cyrillic lookalike in a latin root", in: "fuсk"},
+		{name: "a cyrillic lookalike in a latin word", in: "kurwа"},
+		{name: "a cyrillic first letter in a latin word", in: "кurwa"},
+		{name: "a ukrainian i in a latin word", in: "shіt"},
+		{name: "one letter doubled", in: "shiit"},
+		{name: "one letter of a root doubled", in: "fuuck"},
+		{name: "a root split into short chunks", in: "fu ck off"},
+		{name: "a root split by a hyphen", in: "pi-er-da-la-j"},
+		{name: "a cyrillic root split into short chunks", in: "ху й"},
+		{name: "a blocked root next to an exception", in: "страх хуй"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if !b.blocks(tc.in) {
@@ -80,6 +82,11 @@ func TestBlocklistAllows(t *testing.T) {
 		{name: "russian student text", in: "Привет, кто идёт на пару по матанализу?"},
 		{name: "ukrainian student text", in: "Привіт, хто має конспект з історії України?"},
 		{name: "belarusian student text", in: "Добры дзень, хто ідзе на лекцыю па праву?"},
+		{name: "russian words for insuring", in: "Страхуйте квартиру, я застрахую машину"},
+		{name: "ukrainian word for insuring", in: "Підстрахуй мене на іспиті"},
+		{name: "doubled letters in ordinary words", in: "Pass the class, see you at noon"},
+		{name: "short words next to each other", in: "I am a fan of it, so be it"},
+		{name: "short polish words next to each other", in: "Dzięki ci, pa! Ku temu nie ma racji"},
 		{name: "empty text", in: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,6 +109,9 @@ func TestParseBlocklistRejectsInvalidEntries(t *testing.T) {
 		{name: "two stars", entry: "**"},
 		{name: "a root of several words", entry: "*hijo de*"},
 		{name: "no letters", entry: "?!"},
+		{name: "an exception with a star", entry: "!*страху*"},
+		{name: "an exception of several words", entry: "!hijo de"},
+		{name: "an empty exception", entry: "!"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseBlocklist(fstest.MapFS{"xx.txt": {Data: []byte("shit\n" + tc.entry + "\n")}})
@@ -117,30 +127,8 @@ func TestParseBlocklistSkipsCommentsAndBlankLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseBlocklist: %v", err)
 	}
-	if len(b.phrases) != 1 || len(b.roots) != 0 {
-		t.Errorf("got %d phrases and %d roots, want 1 and 0", len(b.phrases), len(b.roots))
-	}
-}
-
-func TestBlocklistVersion(t *testing.T) {
-	version := func(data string) string {
-		t.Helper()
-		b, err := parseBlocklist(fstest.MapFS{"xx.txt": {Data: []byte(data)}})
-		if err != nil {
-			t.Fatalf("parseBlocklist: %v", err)
-		}
-		return b.version
-	}
-
-	lf := version("shit\n*fuck*\n")
-	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(lf) {
-		t.Errorf("version = %q, want 12 hex characters", lf)
-	}
-	if crlf := version("shit\r\n*fuck*\r\n"); crlf != lf {
-		t.Errorf("version with CRLF = %q, with LF = %q, want the same", crlf, lf)
-	}
-	if other := version("shit\n"); other == lf {
-		t.Errorf("version did not change when an entry was removed: %q", other)
+	if len(b.phrases) != 1 || len(b.roots) != 0 || len(b.exceptions) != 0 {
+		t.Errorf("got %d phrases, %d roots and %d exceptions, want 1, 0 and 0", len(b.phrases), len(b.roots), len(b.exceptions))
 	}
 }
 
@@ -152,56 +140,14 @@ func TestEmbeddedBlocklist(t *testing.T) {
 	if err := Allowed("bio", "Cześć, ktoś ma notatki z analizy?"); err != nil {
 		t.Errorf("Allowed(student text) = %v, want nil", err)
 	}
-	if v := BlocklistVersion(); len(v) != blocklistVersionLength {
-		t.Errorf("BlocklistVersion() = %q, want %d characters", v, blocklistVersionLength)
+	for _, in := range []string{"страхуйте квартиру", "застрахуй машину", "укроп и петрушка", "Nalej ukropu do garnka"} {
+		if err := Allowed("bio", in); err != nil {
+			t.Errorf("Allowed(%q) = %v, want nil", in, err)
+		}
 	}
-}
-
-func captureLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &buf
-}
-
-func TestReportNotAllowed(t *testing.T) {
-	t.Run("a blocked write logs who, where and which list but not the text", func(t *testing.T) {
-		buf := captureLog(t)
-		userID := uuid.New()
-		err := fmt.Errorf("%w: %w", errors.New("module error"), Allowed("title", "kurwa"))
-
-		ReportNotAllowed(context.Background(), userID, err)
-
-		if strings.Contains(buf.String(), "kurwa") {
-			t.Errorf("log contains the blocked text: %s", buf)
+	for _, in := range []string{"fuсk", "кurwa", "shіt", "kurrwa", "ku-rwa"} {
+		if err := Allowed("bio", in); !errors.Is(err, ErrNotAllowed) {
+			t.Errorf("Allowed(%q) = %v, want ErrNotAllowed", in, err)
 		}
-		var line map[string]any
-		if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
-			t.Fatalf("decode log line %q: %v", buf, err)
-		}
-		want := map[string]string{
-			"msg":               "text not allowed",
-			"user_id":           userID.String(),
-			"field":             "title",
-			"blocklist_version": BlocklistVersion(),
-		}
-		for key, value := range want {
-			if line[key] != value {
-				t.Errorf("log %s = %v, want %q", key, line[key], value)
-			}
-		}
-	})
-
-	t.Run("any other error logs nothing", func(t *testing.T) {
-		buf := captureLog(t)
-
-		ReportNotAllowed(context.Background(), uuid.New(), errors.New("invalid input"))
-		ReportNotAllowed(context.Background(), uuid.New(), nil)
-
-		if buf.Len() != 0 {
-			t.Errorf("log = %s, want nothing", buf)
-		}
-	})
+	}
 }

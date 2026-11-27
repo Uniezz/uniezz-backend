@@ -1,23 +1,14 @@
 package text
 
 import (
-	"context"
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
-const (
-	blocklistVersionLength = 12
-	minRepeat              = 3
-)
+const exceptionPrefix = "!"
 
 var (
 	ErrNotAllowed   = errors.New("text not allowed")
@@ -48,22 +39,6 @@ func Allowed(field, s string) error {
 	return nil
 }
 
-func ReportNotAllowed(ctx context.Context, userID uuid.UUID, err error) {
-	var notAllowed notAllowedError
-	if !errors.As(err, &notAllowed) {
-		return
-	}
-	slog.InfoContext(ctx, "text not allowed",
-		slog.String("user_id", userID.String()),
-		slog.String("field", notAllowed.field),
-		slog.String("blocklist_version", BlocklistVersion()),
-	)
-}
-
-func BlocklistVersion() string {
-	return defaultBlocklist.version
-}
-
 func mustLoadBlocklist() *blocklist {
 	files, err := fs.Sub(blocklistFiles, "blocklist")
 	if err != nil {
@@ -77,9 +52,9 @@ func mustLoadBlocklist() *blocklist {
 }
 
 type blocklist struct {
-	version       string
 	phrases       []string
 	roots         []string
+	exceptions    []string
 	squeezedWords map[string]bool
 	squeezedRoots []string
 }
@@ -90,27 +65,27 @@ func parseBlocklist(files fs.FS) (*blocklist, error) {
 		return nil, fmt.Errorf("list blocklist files: %w", err)
 	}
 	b := &blocklist{squeezedWords: map[string]bool{}}
-	hash := sha256.New()
 	for _, name := range names {
 		data, err := fs.ReadFile(files, name)
 		if err != nil {
 			return nil, fmt.Errorf("read blocklist %s: %w", name, err)
 		}
 		for n, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			hash.Write([]byte(line + "\n"))
 			if err := b.add(line); err != nil {
 				return nil, fmt.Errorf("parse blocklist %s line %d: %w", name, n+1, err)
 			}
 		}
 	}
-	b.version = hex.EncodeToString(hash.Sum(nil))[:blocklistVersionLength]
 	return b, nil
 }
 
 func (b *blocklist) add(line string) error {
+	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {
 		return nil
+	}
+	if exception, ok := strings.CutPrefix(line, exceptionPrefix); ok {
+		return b.addException(line, exception)
 	}
 	root := len(line) > 2 && strings.HasPrefix(line, "*") && strings.HasSuffix(line, "*")
 	entry := line
@@ -138,6 +113,18 @@ func (b *blocklist) add(line string) error {
 	return nil
 }
 
+func (b *blocklist) addException(line, exception string) error {
+	if strings.Contains(exception, "*") {
+		return fmt.Errorf("%w: exception %q cannot have a *", errInvalidEntry, line)
+	}
+	words := normalize(exception)
+	if len(words) != 1 {
+		return fmt.Errorf("%w: exception %q must be one word", errInvalidEntry, line)
+	}
+	b.exceptions = append(b.exceptions, words[0])
+	return nil
+}
+
 func (b *blocklist) blocks(s string) bool {
 	words := normalize(s)
 	padded := " " + strings.Join(words, " ") + " "
@@ -146,38 +133,36 @@ func (b *blocklist) blocks(s string) bool {
 			return true
 		}
 	}
-	for _, root := range b.roots {
-		if strings.Contains(padded, root) {
+	for _, word := range words {
+		if squeezed := squeeze(word); squeezed != word && b.squeezedWords[squeezed] {
 			return true
 		}
 	}
+	if b.hasRoot(words) {
+		return true
+	}
+	joined := joinShortWords(words)
+	return len(joined) < len(words) && b.hasRoot(joined)
+}
+
+func (b *blocklist) hasRoot(words []string) bool {
 	for _, word := range words {
-		if !hasRepeat(word) {
-			continue
+		for _, exception := range b.exceptions {
+			word = strings.ReplaceAll(word, exception, " ")
+		}
+		for _, root := range b.roots {
+			if strings.Contains(word, root) {
+				return true
+			}
 		}
 		squeezed := squeeze(word)
-		if b.squeezedWords[squeezed] {
-			return true
+		if squeezed == word {
+			continue
 		}
 		for _, root := range b.squeezedRoots {
 			if strings.Contains(squeezed, root) {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func hasRepeat(word string) bool {
-	run, last := 0, rune(-1)
-	for _, r := range word {
-		if r == last {
-			run++
-		} else {
-			run, last = 1, r
-		}
-		if run >= minRepeat {
-			return true
 		}
 	}
 	return false

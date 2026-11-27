@@ -101,7 +101,6 @@ func (q fileQuery) filter() (fileFilter, error) {
 func (m Module) addFile(ctx context.Context, userID uuid.UUID, change fileChange) (*CourseFile, error) {
 	fields, err := change.fields()
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 	if err := m.media.CheckUpload(ctx, fields.MediaID, userID, media.KindExam); err != nil {

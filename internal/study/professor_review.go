@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
-	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -31,7 +30,6 @@ func (q professorReviewQuery) filter() (professorReviewFilter, error) {
 func (m Module) reviewProfessor(ctx context.Context, userID uuid.UUID, change professorReviewChange) (*ProfessorReview, error) {
 	content, err := cleanComment(change.Content)
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 

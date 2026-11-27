@@ -8,7 +8,6 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
-	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -214,7 +213,6 @@ func parseKey(key string) (*uuid.UUID, error) {
 func (m Module) createGroup(ctx context.Context, creatorID uuid.UUID, c groupChange) (*Conversation, bool, error) {
 	name, err := cleanName(c.Name)
 	if err != nil {
-		text.ReportNotAllowed(ctx, creatorID, err)
 		return nil, false, err
 	}
 	memberIDs, err := cleanMemberIDs(creatorID, c.MemberIDs)
@@ -231,6 +229,9 @@ func (m Module) createGroup(ctx context.Context, creatorID uuid.UUID, c groupCha
 		if !errors.Is(err, ErrNotFound) {
 			return conversation, err == nil, err
 		}
+	}
+	if err := allowedText("name", name); err != nil {
+		return nil, false, err
 	}
 
 	connected, err := m.members.connected(ctx, creatorID, memberIDs)
@@ -318,7 +319,6 @@ func (m Module) replayGroup(ctx context.Context, creatorID, key uuid.UUID, name 
 func (m Module) renameConversation(ctx context.Context, userID uuid.UUID, c renameChange) (*Conversation, error) {
 	name, err := cleanName(c.Name)
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 
@@ -340,6 +340,9 @@ func (m Module) renameConversation(ctx context.Context, userID uuid.UUID, c rena
 		}
 		if locked.Name != nil && *locked.Name == name {
 			return nil
+		}
+		if err := allowedText("name", name); err != nil {
+			return err
 		}
 
 		if err := m.conversations.rename(ctx, c.ConversationID, name); err != nil {

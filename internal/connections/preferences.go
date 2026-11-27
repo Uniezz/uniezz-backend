@@ -8,7 +8,6 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/profile"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
-	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
 )
 
@@ -96,7 +95,6 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 	today := m.now().UTC()
 	f, err := c.fields(today)
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, 0, err
 	}
 
@@ -105,6 +103,9 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		current, err := m.preferences.lockOrCreate(ctx, userID)
 		if err != nil {
+			return err
+		}
+		if err := allowedIntent(f.Intent, current.Intent); err != nil {
 			return err
 		}
 		if c.BirthDatePresent && c.BirthDate == nil && current.BirthDate != nil {

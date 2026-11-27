@@ -21,6 +21,8 @@ func TestNormalize(t *testing.T) {
 		{name: "a trailing dollar stays leetspeak", in: "a$$", want: []string{"ass"}},
 		{name: "a latin lookalike in a cyrillic word becomes cyrillic", in: "xуй", want: []string{"хуи"}},
 		{name: "spaced mixed-script letters are judged together", in: "x у й", want: []string{"хуи"}},
+		{name: "a cyrillic lookalike in a latin word becomes latin", in: "fuсk", want: []string{"fuck"}},
+		{name: "a ukrainian i in a latin word becomes latin", in: "shіt", want: []string{"shit"}},
 		{name: "digits in a cyrillic word fold to cyrillic", in: "п1здец", want: []string{"пиздец"}},
 		{name: "ukrainian i folds to и", in: "Привіт", want: []string{"привит"}},
 		{name: "belarusian short u loses its breve", in: "праўда", want: []string{"прауда"}},

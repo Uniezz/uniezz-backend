@@ -17,14 +17,11 @@ const (
 	maxTagLength     = 30
 )
 
-func cleanText(field, s string, keepNewlines bool, minLength, maxLength int) (string, error) {
+func cleanText(s string, keepNewlines bool, minLength, maxLength int) (string, error) {
 	clean := text.Plain(s, keepNewlines)
 	n := utf8.RuneCountInString(clean)
 	if n < minLength || n > maxLength {
 		return "", ErrInvalidInput
-	}
-	if err := text.Allowed(field, clean); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return clean, nil
 }
@@ -34,10 +31,21 @@ func cleanTags(tags []string) ([]string, error) {
 	if err != nil {
 		return nil, ErrInvalidInput
 	}
-	for _, tag := range clean {
-		if err := text.Allowed("tags", tag); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	return clean, nil
+}
+
+func allowedText(field, s string) error {
+	if err := text.Allowed(field, s); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
+}
+
+func allowedTags(tags []string) error {
+	for _, tag := range tags {
+		if err := allowedText("tags", tag); err != nil {
+			return err
 		}
 	}
-	return clean, nil
+	return nil
 }

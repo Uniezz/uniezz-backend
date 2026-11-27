@@ -35,10 +35,10 @@ type postInput struct {
 
 func (in postInput) clean() (postInput, error) {
 	var err error
-	if in.Title, err = cleanText("title", in.Title, false, minTitleLength, maxTitleLength); err != nil {
+	if in.Title, err = cleanText(in.Title, false, minTitleLength, maxTitleLength); err != nil {
 		return postInput{}, err
 	}
-	if in.Content, err = cleanText("content", in.Content, true, minContentLength, maxContentLength); err != nil {
+	if in.Content, err = cleanText(in.Content, true, minContentLength, maxContentLength); err != nil {
 		return postInput{}, err
 	}
 	if in.Tags, err = cleanTags(in.Tags); err != nil {
@@ -58,6 +58,16 @@ func (in postInput) clean() (postInput, error) {
 		in.MediaIDs = []uuid.UUID{}
 	}
 	return in, nil
+}
+
+func (in postInput) allowed() error {
+	if err := allowedText("title", in.Title); err != nil {
+		return err
+	}
+	if err := allowedText("content", in.Content); err != nil {
+		return err
+	}
+	return allowedTags(in.Tags)
 }
 
 func sortedIDs(ids []uuid.UUID) []uuid.UUID {
@@ -80,7 +90,6 @@ func hasDuplicates(ids []uuid.UUID) bool {
 func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, key string) (*Post, int, bool, error) {
 	in, err := in.clean()
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, 0, false, err
 	}
 	fp, err := fingerprint(in)
@@ -93,6 +102,9 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 		if !errors.Is(err, ErrNotFound) {
 			return post, 0, err == nil, err
 		}
+	}
+	if err := in.allowed(); err != nil {
+		return nil, 0, false, err
 	}
 
 	if err := m.checkUniversity(ctx, userID, in.University); err != nil {
@@ -411,15 +423,21 @@ type postEdit struct {
 func (e postEdit) clean() (postChange, error) {
 	var c postChange
 	if e.Title != nil {
-		title, err := cleanText("title", *e.Title, false, minTitleLength, maxTitleLength)
+		title, err := cleanText(*e.Title, false, minTitleLength, maxTitleLength)
 		if err != nil {
+			return postChange{}, err
+		}
+		if err := allowedText("title", title); err != nil {
 			return postChange{}, err
 		}
 		c.Title = &title
 	}
 	if e.Content != nil {
-		content, err := cleanText("content", *e.Content, true, minContentLength, maxContentLength)
+		content, err := cleanText(*e.Content, true, minContentLength, maxContentLength)
 		if err != nil {
+			return postChange{}, err
+		}
+		if err := allowedText("content", content); err != nil {
 			return postChange{}, err
 		}
 		c.Content = &content
@@ -427,6 +445,9 @@ func (e postEdit) clean() (postChange, error) {
 	if e.Tags != nil {
 		tags, err := cleanTags(*e.Tags)
 		if err != nil {
+			return postChange{}, err
+		}
+		if err := allowedTags(tags); err != nil {
 			return postChange{}, err
 		}
 		c.Tags = tags
@@ -441,7 +462,6 @@ func (e postEdit) clean() (postChange, error) {
 func (m Module) updatePost(ctx context.Context, userID, postID uuid.UUID, edit postEdit) (*Post, error) {
 	change, err := edit.clean()
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
 		return nil, err
 	}
 

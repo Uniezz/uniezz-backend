@@ -38,6 +38,41 @@ func TestBlockedText(t *testing.T) {
 		})
 	}
 
+	t.Run("a real surname that contains a blocked root can be sent again", func(t *testing.T) {
+		u := e.otpUser(t)
+		if _, err := e.pool.Exec(context.Background(), "UPDATE users SET last_name = 'Murzyński', interests = '{kurwa}' WHERE id = $1", u.id); err != nil {
+			t.Fatalf("set surname: %v", err)
+		}
+
+		body := map[string]any{"firstName": "Jan", "lastName": "Murzyński", "bio": "Lubię matematykę", "interests": []string{"kurwa", "szachy"}}
+		got := decode[Profile](t, e.api.Patch("/profile/me", u.bearer, body), http.StatusOK)
+		if got.LastName == nil || *got.LastName != "Murzyński" || got.Bio == nil || len(got.Interests) != 2 {
+			t.Errorf("profile = %+v", got)
+		}
+	})
+
+	t.Run("a blocked surname that is not the current one is rejected", func(t *testing.T) {
+		u := e.otpUser(t)
+		expectError(t, e.api.Patch("/profile/me", u.bearer, map[string]any{"lastName": "Murzyński"}), http.StatusBadRequest, "content_not_allowed")
+	})
+
+	t.Run("a blocked programme or faculty is rejected", func(t *testing.T) {
+		u := e.otpUser(t)
+		for _, body := range []map[string]any{
+			{"faculty": "Wydział", "programme": "kurwa"},
+			{"faculty": "Wydział c.h.u.j", "programme": "Informatyka"},
+		} {
+			expectError(t, e.api.Post("/profile/programmes", u.bearer, body), http.StatusBadRequest, "content_not_allowed")
+		}
+		var n int
+		if err := e.pool.QueryRow(context.Background(), "SELECT count(*) FROM student_programmes WHERE user_id = $1", u.id).Scan(&n); err != nil {
+			t.Fatalf("count programmes: %v", err)
+		}
+		if n != 0 {
+			t.Errorf("stored %d programmes, want 0", n)
+		}
+	})
+
 	t.Run("an ordinary profile in several languages is accepted", func(t *testing.T) {
 		u := e.otpUser(t)
 		body := map[string]any{

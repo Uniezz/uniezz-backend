@@ -38,6 +38,24 @@ func TestBlockedText(t *testing.T) {
 		}
 	})
 
+	t.Run("sending an intent stored before its words were blocked again is accepted on both endpoints", func(t *testing.T) {
+		u := e.user(t)
+		rec := e.api.Patch("/connections/me", u.bearer, map[string]any{"intent": "Szukam partnera"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("connections: expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if _, err := e.pool.Exec(context.Background(), "UPDATE connection_profiles SET intent = 'Szukam kurwy' WHERE user_id = $1", u.id); err != nil {
+			t.Fatalf("change intent: %v", err)
+		}
+
+		for _, path := range []string{"/connections/me", "/profile/me"} {
+			rec := e.api.Patch(path, u.bearer, map[string]any{"intent": "Szukam kurwy"})
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: expected 200, got %d: %s", path, rec.Code, rec.Body.String())
+			}
+		}
+	})
+
 	t.Run("an ordinary intent is accepted on both endpoints", func(t *testing.T) {
 		u := e.user(t)
 		rec := e.api.Patch("/connections/me", u.bearer, map[string]any{"intent": "Szukam partnera do wspinaczki"})

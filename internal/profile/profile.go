@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
@@ -105,10 +106,10 @@ type profileChange struct {
 func (c profileChange) fields() (profileFields, error) {
 	var f profileFields
 	var err error
-	if f.FirstName, err = trimmedName("firstName", c.FirstName); err != nil {
+	if f.FirstName, err = trimmedName(c.FirstName); err != nil {
 		return profileFields{}, err
 	}
-	if f.LastName, err = trimmedName("lastName", c.LastName); err != nil {
+	if f.LastName, err = trimmedName(c.LastName); err != nil {
 		return profileFields{}, err
 	}
 	if f.Bio, f.SetBio, err = cleanBio(c.Bio); err != nil {
@@ -133,7 +134,9 @@ func (c profileChange) fields() (profileFields, error) {
 func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change profileChange) (int, error) {
 	fields, err := change.fields()
 	if err != nil {
-		text.ReportNotAllowed(ctx, userID, err)
+		return 0, err
+	}
+	if err := m.checkText(ctx, userID, change, fields); err != nil {
 		return 0, err
 	}
 
@@ -208,7 +211,7 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 	return earned, nil
 }
 
-func trimmedName(field string, name *string) (*string, error) {
+func trimmedName(name *string) (*string, error) {
 	if name == nil {
 		return nil, nil
 	}
@@ -216,8 +219,48 @@ func trimmedName(field string, name *string) (*string, error) {
 	if trimmed == "" {
 		return nil, ErrInvalidInput
 	}
-	if err := text.Allowed(field, trimmed); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
-	}
 	return &trimmed, nil
+}
+
+func (m Module) checkText(ctx context.Context, userID uuid.UUID, change profileChange, f profileFields) error {
+	current, err := m.profiles.get(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if err := allowedChange("firstName", f.FirstName, current.FirstName); err != nil {
+		return err
+	}
+	if err := allowedChange("lastName", f.LastName, current.LastName); err != nil {
+		return err
+	}
+	if err := allowedChange("bio", f.Bio, current.Bio); err != nil {
+		return err
+	}
+	for _, interest := range f.Interests {
+		if slices.Contains(current.Interests, interest) {
+			continue
+		}
+		if err := allowedChange("interests", &interest, nil); err != nil {
+			return err
+		}
+	}
+	if change.Intent == nil {
+		return nil
+	}
+	preferences, err := m.profiles.getConnectionPreferences(ctx, userID)
+	if err != nil {
+		return err
+	}
+	intent := text.Plain(*change.Intent, false)
+	return allowedChange("intent", &intent, preferences.Intent)
+}
+
+func allowedChange(field string, value, current *string) error {
+	if value == nil || *value == "" || (current != nil && *value == *current) {
+		return nil
+	}
+	if err := text.Allowed(field, *value); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
 }

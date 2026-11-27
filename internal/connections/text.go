@@ -26,10 +26,17 @@ func cleanIntent(intent *string) (*string, error) {
 	if clean == "" {
 		return nil, nil
 	}
-	if err := text.Allowed("intent", clean); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
-	}
 	return &clean, nil
+}
+
+func allowedIntent(intent, current *string) error {
+	if intent == nil || (current != nil && *intent == *current) {
+		return nil
+	}
+	if err := text.Allowed("intent", *intent); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
 }
 
 func parseBirthDate(value string, today time.Time) (*time.Time, error) {
