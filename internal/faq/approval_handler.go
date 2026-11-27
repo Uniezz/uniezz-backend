@@ -30,7 +30,7 @@ var listPendingProposalsOperation = auth.Authorized(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/faq/proposals/pending",
 	Summary:     "List FAQ proposals waiting for a moderator",
-	Description: "Every student's proposals that are not published yet, newest first. Moderators and admins only; everyone else gets 403.",
+	Description: "Every student's proposals that are not published yet, newest first, each in the language its author wrote it in. Moderators and admins only; everyone else gets 403.",
 	Tags:        []string{"faq"},
 	Errors:      []int{http.StatusBadRequest},
 }, auth.RoleModerator, auth.RoleAdmin)
@@ -47,7 +47,8 @@ func (h *approvalHandler) listPendingProposals(ctx context.Context, in *listPend
 }
 
 type approveProposalInput struct {
-	ID uuid.UUID `path:"id" format:"uuid"`
+	ID   uuid.UUID `path:"id" format:"uuid"`
+	Body textsRequest
 }
 
 type approveProposalOutput struct {
@@ -59,9 +60,9 @@ var approveProposalOperation = auth.Authorized(huma.Operation{
 	Method:      http.MethodPut,
 	Path:        "/faq/proposals/{id}/approval",
 	Summary:     "Approve an FAQ proposal and publish it",
-	Description: "Moderators and admins only. Approving pays the author 5 Uniezz coins once, unless the moderator approves their own proposal; approving an entry that is already published changes nothing. A rejected or unknown entry is 404.",
+	Description: "Moderators and admins only. The body carries the question and answer in every interface language; a missing language is 400. Approving pays the author 5 Uniezz coins once, unless the moderator approves their own proposal; approving an entry that is already published replaces its texts. A rejected or unknown entry is 404.",
 	Tags:        []string{"faq"},
-	Errors:      []int{http.StatusNotFound},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 }, auth.RoleModerator, auth.RoleAdmin)
 
 func (h *approvalHandler) approveProposal(ctx context.Context, in *approveProposalInput) (*approveProposalOutput, error) {
@@ -70,7 +71,7 @@ func (h *approvalHandler) approveProposal(ctx context.Context, in *approvePropos
 		return nil, httpapi.Unauthorized()
 	}
 
-	entry, err := h.faq.approve(ctx, userID, in.ID)
+	entry, err := h.faq.approve(ctx, approvalChange{ModeratorID: userID, EntryID: in.ID, Texts: in.Body.Texts})
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}

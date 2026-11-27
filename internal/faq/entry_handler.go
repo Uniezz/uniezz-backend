@@ -17,6 +17,11 @@ type listEntriesInput struct {
 	httpapi.PageQuery
 }
 
+type listPublishedEntriesInput struct {
+	httpapi.PageQuery
+	Lang string `query:"lang" enum:"en,pl,uk,ru,be,de,es" doc:"Language to read the entries in; defaults to the caller's profile language"`
+}
+
 type listEntriesOutput struct {
 	Body struct {
 		Items      []Entry `json:"items"`
@@ -29,7 +34,7 @@ var listEntriesOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/faq",
 	Summary:     "List published FAQ entries",
-	Description: "Published entries only, newest first. A proposal or a rejected entry is never returned. An empty FAQ is an empty list.",
+	Description: "Published entries only, newest first, in the lang query language or else the caller's profile language (an entry published before translations existed comes in its original language). A proposal or a rejected entry is never returned. An empty FAQ is an empty list.",
 	Tags:        []string{"faq"},
 	Errors:      []int{http.StatusBadRequest},
 })
@@ -39,36 +44,51 @@ var publishEntryOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/faq",
 	Summary:       "Publish an FAQ entry",
-	Description:   "Stores the question and answer as published. Only one hardcoded address may call this. Everyone else gets 403.",
+	Description:   "Stores the question and answer in every interface language as published; a missing language is 400. Only one hardcoded address may call this. Everyone else gets 403.",
 	Tags:          []string{"faq"},
 	DefaultStatus: http.StatusCreated,
 	Errors:        []int{http.StatusBadRequest, http.StatusForbidden},
 })
 
-func (h *entryHandler) publishEntry(ctx context.Context, in *createProposalInput) (*createProposalOutput, error) {
+type textsRequest struct {
+	Texts map[string]EntryText `json:"texts" doc:"By two-letter language code; en, pl, uk, ru, be, de and es are all required"`
+}
+
+type publishEntryInput struct {
+	Body textsRequest
+}
+
+type publishEntryOutput struct {
+	Body Entry
+}
+
+func (h *entryHandler) publishEntry(ctx context.Context, in *publishEntryInput) (*publishEntryOutput, error) {
 	userID, ok := auth.UserIDFrom(ctx)
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
-	entry, err := h.faq.publish(ctx, userID, in.Body.Question, in.Body.Answer)
+
+	entry, err := h.faq.publish(ctx, userID, in.Body.Texts)
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
-	return &createProposalOutput{Body: *entry}, nil
+	return &publishEntryOutput{Body: *entry}, nil
 }
 
-func (h *entryHandler) listEntries(ctx context.Context, in *listEntriesInput) (*listEntriesOutput, error) {
-	if _, ok := auth.UserIDFrom(ctx); !ok {
+func (h *entryHandler) listEntries(ctx context.Context, in *listPublishedEntriesInput) (*listEntriesOutput, error) {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
+
 	return h.list(func() ([]Entry, *string, error) {
-		return h.faq.listPublished(ctx, in.Cursor, in.Limit)
+		return h.faq.listPublished(ctx, entryQuery{ViewerID: viewerID, Language: in.Lang, Cursor: in.Cursor, Limit: in.Limit})
 	})
 }
 
 type proposalRequest struct {
-	Question string `json:"question" minLength:"1" maxLength:"1000" doc:"3 to 200 characters after HTML is stripped"`
-	Answer   string `json:"answer" minLength:"1" maxLength:"8000" doc:"1 to 2000 characters after HTML is stripped"`
+	EntryText
+	Language string `json:"language,omitempty" enum:"en,pl,uk,ru,be,de,es" doc:"Language the proposal is written in; defaults to the author's profile language"`
 }
 
 type createProposalInput struct {
@@ -84,7 +104,7 @@ var createProposalOperation = auth.Authenticated(huma.Operation{
 	Method:        http.MethodPost,
 	Path:          "/faq/proposals",
 	Summary:       "Propose an FAQ entry",
-	Description:   "Stores the question and answer as proposed. It stays out of the published list until a moderator decides.",
+	Description:   "Stores the question and answer as proposed, in one language. It stays out of the published list until a moderator translates and approves it.",
 	Tags:          []string{"faq"},
 	DefaultStatus: http.StatusCreated,
 	Errors:        []int{http.StatusBadRequest},
@@ -95,7 +115,7 @@ func (h *entryHandler) createProposal(ctx context.Context, in *createProposalInp
 	if !ok {
 		return nil, httpapi.Unauthorized()
 	}
-	entry, err := h.faq.propose(ctx, userID, in.Body.Question, in.Body.Answer)
+	entry, err := h.faq.propose(ctx, proposalChange{AuthorID: userID, Language: in.Body.Language, Text: in.Body.EntryText})
 	if err != nil {
 		return nil, errorResponses.Error(err)
 	}
@@ -107,7 +127,7 @@ var listProposalsOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/faq/proposals",
 	Summary:     "List the signed-in student's FAQ proposals",
-	Description: "The caller's proposals only, newest first, including proposed, published and rejected. Other students' proposals are absent.",
+	Description: "The caller's proposals only, newest first, including proposed, published and rejected, in the caller's profile language when the entry has it. Other students' proposals are absent.",
 	Tags:        []string{"faq"},
 	Errors:      []int{http.StatusBadRequest},
 })

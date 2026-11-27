@@ -1293,6 +1293,17 @@ components:
         id:
           format: uuid
           type: string
+        language:
+          description: Language of question and answer
+          enum:
+            - en
+            - pl
+            - uk
+            - ru
+            - be
+            - de
+            - es
+          type: string
         question:
           type: string
         status:
@@ -1305,8 +1316,26 @@ components:
         - id
         - question
         - answer
+        - language
         - status
         - createdAt
+      type: object
+    EntryText:
+      additionalProperties: false
+      properties:
+        answer:
+          description: 1 to 2000 characters after HTML is stripped
+          maxLength: 8000
+          minLength: 1
+          type: string
+        question:
+          description: 3 to 200 characters after HTML is stripped
+          maxLength: 1000
+          minLength: 1
+          type: string
+      required:
+        - question
+        - answer
       type: object
     ErrorBody:
       additionalProperties: false
@@ -3258,6 +3287,17 @@ components:
           maxLength: 8000
           minLength: 1
           type: string
+        language:
+          description: Language the proposal is written in; defaults to the author's profile language
+          enum:
+            - en
+            - pl
+            - uk
+            - ru
+            - be
+            - de
+            - es
+          type: string
         question:
           description: 3 to 200 characters after HTML is stripped
           maxLength: 1000
@@ -3902,6 +3942,17 @@ components:
         - lastName
         - universityId
         - avatarUrl
+      type: object
+    TextsRequest:
+      additionalProperties: false
+      properties:
+        texts:
+          additionalProperties:
+            $ref: "#/components/schemas/EntryText"
+          description: By two-letter language code; en, pl, uk, ru, be, de and es are all required
+          type: object
+      required:
+        - texts
       type: object
     University:
       additionalProperties: false
@@ -7219,7 +7270,7 @@ paths:
         - connections
   /faq:
     get:
-      description: Published entries only, newest first. A proposal or a rejected entry is never returned. An empty FAQ is an empty list.
+      description: Published entries only, newest first, in the lang query language or else the caller's profile language (an entry published before translations existed comes in its original language). A proposal or a rejected entry is never returned. An empty FAQ is an empty list.
       operationId: listFaqEntries
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -7241,6 +7292,21 @@ paths:
             maximum: 50
             minimum: 1
             type: integer
+        - description: Language to read the entries in; defaults to the caller's profile language
+          explode: false
+          in: query
+          name: lang
+          schema:
+            description: Language to read the entries in; defaults to the caller's profile language
+            enum:
+              - en
+              - pl
+              - uk
+              - ru
+              - be
+              - de
+              - es
+            type: string
       responses:
         "200":
           content:
@@ -7278,13 +7344,13 @@ paths:
       tags:
         - faq
     post:
-      description: Stores the question and answer as published. Only one hardcoded address may call this. Everyone else gets 403.
+      description: Stores the question and answer in every interface language as published; a missing language is 400. Only one hardcoded address may call this. Everyone else gets 403.
       operationId: publishFaqEntry
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProposalRequest"
+              $ref: "#/components/schemas/TextsRequest"
         required: true
       responses:
         "201":
@@ -7330,7 +7396,7 @@ paths:
         - faq
   /faq/proposals:
     get:
-      description: The caller's proposals only, newest first, including proposed, published and rejected. Other students' proposals are absent.
+      description: The caller's proposals only, newest first, including proposed, published and rejected, in the caller's profile language when the entry has it. Other students' proposals are absent.
       operationId: listMyFaqProposals
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -7389,7 +7455,7 @@ paths:
       tags:
         - faq
     post:
-      description: Stores the question and answer as proposed. It stays out of the published list until a moderator decides.
+      description: Stores the question and answer as proposed, in one language. It stays out of the published list until a moderator translates and approves it.
       operationId: createFaqProposal
       requestBody:
         content:
@@ -7435,7 +7501,7 @@ paths:
         - faq
   /faq/proposals/pending:
     get:
-      description: Every student's proposals that are not published yet, newest first. Moderators and admins only; everyone else gets 403.
+      description: Every student's proposals that are not published yet, newest first, each in the language its author wrote it in. Moderators and admins only; everyone else gets 403.
       operationId: listPendingFaqProposals
       parameters:
         - description: nextCursor from the previous page; omit for the first page
@@ -7503,7 +7569,7 @@ paths:
         - faq
   /faq/proposals/{id}/approval:
     put:
-      description: Moderators and admins only. Approving pays the author 5 Uniezz coins once, unless the moderator approves their own proposal; approving an entry that is already published changes nothing. A rejected or unknown entry is 404.
+      description: Moderators and admins only. The body carries the question and answer in every interface language; a missing language is 400. Approving pays the author 5 Uniezz coins once, unless the moderator approves their own proposal; approving an entry that is already published replaces its texts. A rejected or unknown entry is 404.
       operationId: approveFaqProposal
       parameters:
         - in: path
@@ -7512,6 +7578,12 @@ paths:
           schema:
             format: uuid
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TextsRequest"
+        required: true
       responses:
         "200":
           content:
@@ -7519,6 +7591,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Entry"
           description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
         "401":
           content:
             application/json:

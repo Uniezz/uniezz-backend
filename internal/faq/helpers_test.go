@@ -117,11 +117,27 @@ func (e *testEnv) userEmail(t *testing.T, email string) testUser {
 func (e *testEnv) insert(t *testing.T, author uuid.UUID, status string, createdAt time.Time) {
 	t.Helper()
 	_, err := e.pool.Exec(context.Background(), `
-		INSERT INTO faq_entries (author_id, question, answer, status, created_at)
-		VALUES ($1, 'How do I sign in?', 'Use your university account.', $2, $3)`,
+		INSERT INTO faq_entries (author_id, texts, status, created_at)
+		VALUES ($1, '{"pl": {"question": "Jak się zalogować?", "answer": "Kontem uczelni."}}', $2, $3)`,
 		author, status, createdAt)
 	if err != nil {
 		t.Fatalf("insert faq entry: %v", err)
+	}
+}
+
+// allTexts is a question and answer in every interface language, each tagged with its language.
+func allTexts(question string) map[string]EntryText {
+	texts := make(map[string]EntryText, len(languages))
+	for _, lang := range languages {
+		texts[lang] = EntryText{Question: question + " (" + lang + ")", Answer: "Answer in " + lang + "."}
+	}
+	return texts
+}
+
+func (e *testEnv) setLanguage(t *testing.T, u testUser, lang string) {
+	t.Helper()
+	if _, err := e.pool.Exec(context.Background(), "UPDATE users SET language = $2 WHERE id = $1", u.id, lang); err != nil {
+		t.Fatalf("set language: %v", err)
 	}
 }
 

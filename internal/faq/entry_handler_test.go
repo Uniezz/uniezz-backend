@@ -80,18 +80,55 @@ func TestFAQ(t *testing.T) {
 		}
 	})
 
-	t.Run("only a configured publisher can publish", func(t *testing.T) {
-		body := map[string]any{"question": "Where is the dean?", "answer": "In the main building."}
+	t.Run("only a configured publisher can publish, in every language", func(t *testing.T) {
+		body := map[string]any{"texts": allTexts("Where is the dean?")}
 		expectError(t, e.api.Post("/faq", author.bearer, body), 403, "forbidden")
 
 		staff := e.userEmail(t, strings.ToLower(e.publisher))
+		partial := allTexts("Where is the dean?")
+		delete(partial, "es")
+		expectError(t, e.api.Post("/faq", staff.bearer, map[string]any{"texts": partial}), 400, "invalid_input")
+
 		published := decode[Entry](t, e.api.Post("/faq", staff.bearer, body), 201)
-		if published.Status != statusPublished {
+		if published.Status != statusPublished || published.Language != "pl" {
 			t.Fatalf("got %#v", published)
 		}
+		e.setLanguage(t, author, "en")
 		page := decode[entryPage](t, e.api.Get("/faq?limit=1", author.bearer), 200)
-		if len(page.Items) != 1 || page.Items[0].ID != published.ID {
+		if len(page.Items) != 1 || page.Items[0].Question != "Where is the dean? (en)" || page.Items[0].Language != "en" {
 			t.Fatalf("published list = %#v", page.Items)
+		}
+		page = decode[entryPage](t, e.api.Get("/faq?limit=1&lang=es", author.bearer), 200)
+		if len(page.Items) != 1 || page.Items[0].Question != "Where is the dean? (es)" || page.Items[0].Language != "es" {
+			t.Fatalf("lang=es list = %#v", page.Items)
+		}
+		expectError(t, e.api.Get("/faq?lang=fr", author.bearer), 400, "invalid_input")
+		e.setLanguage(t, author, "pl")
+	})
+
+	t.Run("a proposal keeps the language it was written in", func(t *testing.T) {
+		proposal := decode[Entry](t, e.api.Post("/faq/proposals", other.bearer, map[string]any{
+			"question": "Jak dostać akademik?",
+			"answer":   "Złóż wniosek w USOSweb.",
+			"language": "pl",
+		}), 201)
+		if proposal.Language != "pl" {
+			t.Fatalf("got %#v", proposal)
+		}
+		expectError(t, e.api.Post("/faq/proposals", other.bearer, map[string]any{
+			"question": "Jak dostać akademik?",
+			"answer":   "Złóż wniosek.",
+			"language": "fr",
+		}), 400, "invalid_input")
+	})
+
+	t.Run("an entry without the reader's language comes in its own", func(t *testing.T) {
+		e.setLanguage(t, other, "ru")
+		page := decode[entryPage](t, e.api.Get("/faq?limit=50", other.bearer), 200)
+		for _, item := range page.Items {
+			if item.Question == "Jak się zalogować?" && item.Language != "pl" {
+				t.Fatalf("legacy entry = %#v", item)
+			}
 		}
 	})
 }

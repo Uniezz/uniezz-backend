@@ -38,8 +38,9 @@ func TestBlockedText(t *testing.T) {
 
 	t.Run("a publisher's entry with blocked text is rejected too", func(t *testing.T) {
 		publisher := e.userEmail(t, e.publisher)
-		body := map[string]any{"question": "Where is the dean's office?", "answer": "In building A, sh1t."}
-		expectError(t, e.api.Post("/faq", publisher.bearer, body), http.StatusBadRequest, "content_not_allowed")
+		texts := allTexts("Where is the dean's office?")
+		texts["en"] = EntryText{Question: "Where is the dean's office?", Answer: "In building A, sh1t."}
+		expectError(t, e.api.Post("/faq", publisher.bearer, map[string]any{"texts": texts}), http.StatusBadRequest, "content_not_allowed")
 		if n := e.entriesBy(t, publisher.id); n != 0 {
 			t.Errorf("stored %d entries, want 0", n)
 		}
