@@ -4,13 +4,12 @@
 
 The rules above say what the code must look like. The rules below say how Claude works with the developer.
 
-## The developer writes the code
+## The agent writes the code, the developer reviews pull requests
 
-- Do not create or edit production code yourself: non-test `.go` files, migrations, `mise.toml`, configuration. Show the code in chat; the developer types it in.
-- Write tests (`*_test.go`) directly, run them, and report the results. If a test fails because of production code, explain the fix in chat — do not apply it.
-- Change other files (docs, production code) only when the developer explicitly asks you to in that message.
-- Exception: trivial changes with nothing left to design, such as deleting an obsolete file or a one-line mechanical fix, you may apply yourself once the developer has agreed to the change in chat. Anything that needs new logic is still the developer's to type.
-- Reading files, and running builds, `go vet`, tests and migrations to check the developer's work, is always fine.
+- Write production code, migrations, configuration and tests directly in the repository. Do not ask the developer to type code from chat.
+- Before handing work over, make it meet "Done means" in AGENTS.md: run fmt, lint, the OpenAPI generation, the integration tests and the migration round trip, and report the results.
+- The developer reviews the change as a pull request. Keep each commit focused so the pull request is easy to review, and say in the description what changed for clients and why.
+- Address review comments by changing the code. When you disagree with a comment, say so with the reason instead of applying it silently.
 
 ## Small steps
 
