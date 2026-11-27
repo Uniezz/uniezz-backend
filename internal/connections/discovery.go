@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -68,6 +69,14 @@ func (m Module) discover(ctx context.Context, q discoveryQuery) ([]Card, error) 
 	if err != nil {
 		return nil, err
 	}
+	summaries, err := m.profiles.Summaries(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	photos, err := m.profiles.Photos(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	cards := make([]Card, 0, len(rows))
 	for _, row := range rows {
@@ -75,8 +84,14 @@ func (m Module) discover(ctx context.Context, q discoveryQuery) ([]Card, error) 
 		if !ok {
 			continue
 		}
+		student, ok := summaries[row.UserID]
+		if !ok {
+			continue
+		}
 		cards = append(cards, Card{
 			CandidateID:     candidateID,
+			Student:         student,
+			Photos:          text.NonNil(photos[row.UserID]),
 			Intent:          row.Intent,
 			Bio:             row.Bio,
 			Interests:       text.NonNil(row.Interests),
@@ -137,7 +152,7 @@ func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode M
 				return err
 			}
 		}
-		return nil
+		return m.push.Notify(ctx, push.SendArgs{Event: push.EventMatch, RecipientIDs: []uuid.UUID{targetID}, ActorID: viewerID})
 	})
 	if err != nil {
 		return nil, err
@@ -147,6 +162,7 @@ func (m Module) act(ctx context.Context, viewerID, candidateID uuid.UUID, mode M
 	if match == nil {
 		return result, nil
 	}
+	m.push.Wake()
 	connections, err := m.withProfiles(ctx, []connectionRow{*match})
 	if err != nil {
 		return nil, err

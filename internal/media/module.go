@@ -30,6 +30,9 @@ type mediaStore interface {
 	markAbandonedDeleting(ctx context.Context, olderThan time.Duration) error
 	listDeleting(ctx context.Context, limit int) ([]uuid.UUID, error)
 	markOwnerDeleting(ctx context.Context, ownerUserID uuid.UUID) ([]uuid.UUID, error)
+	listUnreviewed(ctx context.Context, f imageFilter) ([]mediaRow, error)
+	markReviewed(ctx context.Context, id uuid.UUID, kinds []Kind) error
+	markRemoved(ctx context.Context, id uuid.UUID, kinds []Kind) (string, error)
 }
 
 var _ objectStore = (*objectStorage)(nil)
@@ -71,5 +74,9 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, runner *jo
 
 func (m Module) Register(api huma.API) {
 	uploads := &uploadHandler{media: m}
+	images := &imageHandler{media: m}
 	huma.Register(api, createUploadOperation, uploads.createUpload)
+	huma.Register(api, listUnreviewedImagesOperation, images.listUnreviewed)
+	huma.Register(api, markImageReviewedOperation, images.markReviewed)
+	huma.Register(api, removeImageOperation, images.removeImage)
 }

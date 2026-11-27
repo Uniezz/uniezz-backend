@@ -51,24 +51,17 @@ func (m Module) publicProfile(ctx context.Context, viewerID, userID uuid.UUID) (
 
 	photos := make([]string, 0)
 	avatarURL := m.mediaURL(ctx, p.Avatar)
+	if avatarURL != nil {
+		photos = append(photos, *avatarURL)
+	}
 
-	connected, err := m.connections.AreConnected(ctx, viewerID, userID)
+	refs, err := m.profiles.listProfilePhotos(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if connected {
-		if avatarURL != nil {
-			photos = append(photos, *avatarURL)
-		}
-
-		refs, err := m.profiles.listProfilePhotos(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		for i := range refs {
-			if photoURL := m.mediaURL(ctx, &refs[i].Ref); photoURL != nil {
-				photos = append(photos, *photoURL)
-			}
+	for i := range refs {
+		if photoURL := m.mediaURL(ctx, &refs[i].Ref); photoURL != nil {
+			photos = append(photos, *photoURL)
 		}
 	}
 
@@ -158,6 +151,24 @@ func (m Module) Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UU
 		summaries[p.ID] = m.summary(ctx, p)
 	}
 	return summaries, nil
+}
+
+func (m Module) Photos(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]string, error) {
+	refs, err := m.profiles.getManyPhotos(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	photos := make(map[uuid.UUID][]string, len(userIDs))
+	for _, id := range userIDs {
+		urls := make([]string, 0, len(refs[id]))
+		for i := range refs[id] {
+			if url := m.mediaURL(ctx, &refs[id][i]); url != nil {
+				urls = append(urls, *url)
+			}
+		}
+		photos[id] = urls
+	}
+	return photos, nil
 }
 
 func (m Module) summary(ctx context.Context, p profileRow) ProfileSummary {

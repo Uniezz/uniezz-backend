@@ -10,6 +10,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/profile"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/rewards"
 	"github.com/danielgtaylor/huma/v2"
@@ -27,6 +28,7 @@ var _ profiles = profile.Module{}
 
 type profiles interface {
 	Summaries(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]profile.ProfileSummary, error)
+	Photos(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]string, error)
 	LockFollowPair(ctx context.Context, firstID, secondID uuid.UUID) error
 	RemoveFollowsBetween(ctx context.Context, firstID, secondID uuid.UUID) error
 }
@@ -36,6 +38,13 @@ var _ rewardService = rewards.Module{}
 type rewardService interface {
 	Grant(ctx context.Context, userID uuid.UUID, reason rewards.Reason, refID, actorID *uuid.UUID) (int, error)
 	Track(ctx context.Context, userID uuid.UUID, action rewards.Action) (int, error)
+}
+
+var _ notifier = push.Module{}
+
+type notifier interface {
+	Notify(ctx context.Context, args push.SendArgs) error
+	Wake()
 }
 
 var _ limiter = (*ratelimit.Limiter)(nil)
@@ -52,11 +61,12 @@ type Module struct {
 	blocks      *blockRepository
 	profiles    profiles
 	rewards     rewardService
+	push        notifier
 	likes       limiter
 	now         func() time.Time
 }
 
-func New(pool *pgxpool.Pool, profileModule profiles, rewardsModule rewardService, runner *jobs.Runner) (Module, error) {
+func New(pool *pgxpool.Pool, profileModule profiles, rewardsModule rewardService, pushModule notifier, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
 	m := Module{
 		tx:          db,
@@ -66,6 +76,7 @@ func New(pool *pgxpool.Pool, profileModule profiles, rewardsModule rewardService
 		blocks:      newBlockRepository(db),
 		profiles:    profileModule,
 		rewards:     rewardsModule,
+		push:        pushModule,
 		likes:       ratelimit.New(pool, "connection-like", likeLimit, likeWindow),
 		now:         time.Now,
 	}

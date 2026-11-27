@@ -67,6 +67,28 @@ func TestCompleteOnboarding(t *testing.T) {
 		}
 	})
 
+	t.Run("the first call queues one newcomer announcement and a repeat queues none", func(t *testing.T) {
+		u := newcomer(t, "Wiśniewska")
+		announcements := func() int {
+			var n int
+			err := e.pool.QueryRow(ctx, "SELECT COUNT(*) FROM jobs WHERE kind = $1 AND payload->>'userId' = $2",
+				AnnounceNewcomerArgs{}.Kind(), u.id.String()).Scan(&n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+
+		for range 2 {
+			if rec := e.api.Put("/profile/onboarding", u.bearer); rec.Code != http.StatusNoContent {
+				t.Fatalf("expected 204, got %d", rec.Code)
+			}
+		}
+		if n := announcements(); n != 1 {
+			t.Errorf("got %d announcement jobs, want 1", n)
+		}
+	})
+
 	t.Run("needs a session", func(t *testing.T) {
 		expectError(t, e.api.Put("/profile/onboarding"), http.StatusUnauthorized, "unauthorized")
 	})

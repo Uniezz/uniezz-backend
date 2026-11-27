@@ -38,7 +38,7 @@ func (m Module) ForgetUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 	}
-	return nil
+	return m.settings.delete(ctx, userID)
 }
 
 func (m Module) forgetMessage(ctx context.Context, id uuid.UUID) error {

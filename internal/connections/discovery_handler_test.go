@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/google/uuid"
 )
 
@@ -31,6 +32,9 @@ func TestDiscoverCards(t *testing.T) {
 	if card.CandidateID == b.id || card.Age == nil || card.UniversityID != "umcs" ||
 		len(card.SharedInterests) != 1 || card.SharedInterests[0] != e.tag {
 		t.Errorf("card = %+v", card)
+	}
+	if card.Student.ID != b.id || card.Student.FirstName == nil || *card.Student.FirstName != "Jan" || card.Photos == nil {
+		t.Errorf("card does not show who the student is: %+v", card)
 	}
 	if again := e.discover(t, a, "mode=friends"); len(again) != 1 || again[0].CandidateID != card.CandidateID {
 		t.Errorf("candidateId changed between views: %+v", again)
@@ -135,6 +139,15 @@ func TestMatch(t *testing.T) {
 	second := decode[ActionResult](t, e.act(a, cardOfB.CandidateID, ModeFriends, "like"), http.StatusOK)
 	if !second.Matched || second.Connection == nil || second.Connection.Profile.ID != b.id {
 		t.Fatalf("match = %+v", second)
+	}
+	matches := 0
+	for _, n := range e.push.notices() {
+		if n.Event == push.EventMatch && n.ActorID == a.id && len(n.RecipientIDs) == 1 && n.RecipientIDs[0] == b.id {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Errorf("match pushes to b = %d, want 1", matches)
 	}
 
 	expectError(t, e.act(b, cardOfB.CandidateID, ModeFriends, "like"), http.StatusNotFound, "not_found")

@@ -151,15 +151,16 @@ func (r *messageRepository) get(ctx context.Context, id uuid.UUID) (*messageRow,
 }
 
 func (r *messageRepository) getVisible(ctx context.Context, viewerID, id uuid.UUID) (*messageRow, error) {
+	args := database.Args{viewerID, id}
 	query := `
 		SELECT ` + messageColumns + `
 		FROM chat_messages msg
 		JOIN chat_conversations c ON c.id = msg.conversation_id
 		JOIN chat_members m ON m.conversation_id = msg.conversation_id AND m.user_id = $1
 		WHERE msg.id = $2
-		  AND ` + directVisible("$1", "c.direct_user_low", "c.direct_user_high") + `
+		  AND ` + directVisible(args.Add, "$1", false) + `
 		  AND ` + messageVisible("$1", "msg.sender_id")
-	m, err := scanMessage(r.db.Conn(ctx).QueryRow(ctx, query, viewerID, id))
+	m, err := scanMessage(r.db.Conn(ctx).QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

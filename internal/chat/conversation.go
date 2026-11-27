@@ -13,6 +13,7 @@ import (
 
 type conversationQuery struct {
 	ViewerID uuid.UUID
+	Requests bool
 	Cursor   string
 	Limit    int
 }
@@ -41,7 +42,7 @@ func (m Module) getConversation(ctx context.Context, viewerID, id uuid.UUID) (*C
 }
 
 func (m Module) listConversations(ctx context.Context, q conversationQuery) ([]Conversation, *string, error) {
-	filter := conversationFilter{ViewerID: q.ViewerID, Limit: q.Limit + 1}
+	filter := conversationFilter{ViewerID: q.ViewerID, Requests: q.Requests, Limit: q.Limit + 1}
 	if q.Cursor != "" {
 		var after conversationCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &after); err != nil {
@@ -113,6 +114,14 @@ func (m Module) conversationViews(ctx context.Context, viewerID uuid.UUID, rows 
 		if row.Kind == KindDirect {
 			peer := studentOf(peers, row.PeerID)
 			item.Peer = &peer
+			status := row.Status
+			if row.Connected || status == StatusApproved {
+				status = StatusApproved
+			} else {
+				status = StatusPending
+			}
+			incoming := row.StartedBy != nil && *row.StartedBy != viewerID
+			item.Origin, item.Status, item.Incoming = row.Origin, &status, &incoming
 		} else {
 			count, role := row.MemberCount, row.MyRole
 			item.MemberCount = &count
@@ -131,18 +140,40 @@ func (m Module) openDirect(ctx context.Context, viewerID, otherID uuid.UUID) (*C
 	var id uuid.UUID
 	var created bool
 	err := m.tx.WithTx(ctx, func(ctx context.Context) error {
-		allowed, err := m.members.connected(ctx, viewerID, []uuid.UUID{otherID})
+		connected, err := m.members.connected(ctx, viewerID, []uuid.UUID{otherID})
 		if err != nil {
 			return err
 		}
-		if len(allowed) == 0 {
-			return ErrNotFound
+		if len(connected) > 0 {
+			id, created, err = m.conversations.openDirect(ctx, viewerID, otherID, OriginMatch, StatusApproved)
+			if err != nil {
+				return err
+			}
+			if !created {
+				return m.conversations.approve(ctx, id)
+			}
+			return m.members.insert(ctx, id, []uuid.UUID{viewerID, otherID}, RoleMember, 0)
 		}
-		id, created, err = m.conversations.openDirect(ctx, viewerID, otherID)
-		if err != nil || !created {
+
+		existingID, startedBy, err := m.conversations.findDirect(ctx, viewerID, otherID)
+		if err == nil {
+			id = existingID
+			if startedBy != viewerID {
+				return m.conversations.approve(ctx, id)
+			}
+			return nil
+		}
+		if !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		return m.members.insert(ctx, id, []uuid.UUID{viewerID, otherID}, RoleMember, 0)
+		allowed, err := m.requests.canStart(ctx, requestFilter{SenderID: viewerID, RecipientID: otherID, AdultAge: adultAge})
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return ErrNotFound
+		}
+		return ErrRequestRequired
 	})
 	if err != nil {
 		return nil, false, err

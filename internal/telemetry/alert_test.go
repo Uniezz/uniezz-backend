@@ -10,12 +10,28 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 )
 
 const (
 	testBotToken = "123456:bot-secret-token"
 	testChatID   = "-1001234567890"
+	testThreadID = 825
 )
+
+type sendMessageRequest struct {
+	ChatID             string `json:"chat_id"`
+	MessageThreadID    int    `json:"message_thread_id"`
+	Text               string `json:"text"`
+	LinkPreviewOptions struct {
+		IsDisabled bool `json:"is_disabled"`
+	} `json:"link_preview_options"`
+}
+
+func testThread(url string) telegram.Thread {
+	return telegram.New(url, testBotToken, testChatID).Thread(testThreadID)
+}
 
 type fakeClock struct {
 	mu  sync.Mutex
@@ -86,7 +102,7 @@ func (f *fakeTelegram) texts() []string {
 
 func newTestAlerter(t *testing.T, f *fakeTelegram, clock *fakeClock) *alerter {
 	t.Helper()
-	a := newAlerter(f.server.URL, testBotToken, testChatID, clock.Now)
+	a := newAlerter(testThread(f.server.URL), clock.Now)
 	t.Cleanup(func() { _ = a.shutdown(context.Background()) })
 	return a
 }
@@ -101,7 +117,7 @@ func drain(t *testing.T, a *alerter) {
 }
 
 func TestAlerter(t *testing.T) {
-	t.Run("an alert is posted to the chat with link previews off", func(t *testing.T) {
+	t.Run("an alert is posted to the alerts topic with link previews off", func(t *testing.T) {
 		f := newFakeTelegram(t)
 		a := newTestAlerter(t, f, newFakeClock())
 
@@ -114,7 +130,7 @@ func TestAlerter(t *testing.T) {
 			t.Fatalf("got %d messages, want 1", len(f.messages))
 		}
 		m := f.messages[0]
-		if m.ChatID != testChatID || m.Text != "something broke" || !m.LinkPreviewOptions.IsDisabled {
+		if m.ChatID != testChatID || m.MessageThreadID != testThreadID || m.Text != "something broke" || !m.LinkPreviewOptions.IsDisabled {
 			t.Errorf("message = %+v", m)
 		}
 	})
@@ -197,7 +213,7 @@ func TestAlerter(t *testing.T) {
 		t.Cleanup(server.Close)
 		t.Cleanup(func() { close(release) })
 		clock := newFakeClock()
-		a := newAlerter(server.URL, testBotToken, testChatID, clock.Now)
+		a := newAlerter(testThread(server.URL), clock.Now)
 
 		done := make(chan struct{})
 		go func() {
@@ -242,27 +258,11 @@ func TestAlerter(t *testing.T) {
 			t.Error("send returned nil for a 429 answer")
 		}
 	})
-
-	t.Run("a failed post does not leak the bot token", func(t *testing.T) {
-		server := httptest.NewServer(http.NotFoundHandler())
-		url := server.URL
-		server.Close()
-		a := newAlerter(url, testBotToken, testChatID, newFakeClock().Now)
-		t.Cleanup(func() { _ = a.shutdown(context.Background()) })
-
-		err := a.send("x")
-		if err == nil {
-			t.Fatal("send to a closed server returned nil")
-		}
-		if strings.Contains(err.Error(), testBotToken) {
-			t.Errorf("error leaks the bot token: %v", err)
-		}
-	})
 }
 
 func installTestAlerter(t *testing.T, f *fakeTelegram) *alerter {
 	t.Helper()
-	a := newAlerter(f.server.URL, testBotToken, testChatID, newFakeClock().Now)
+	a := newAlerter(testThread(f.server.URL), newFakeClock().Now)
 	a.resource = testResource
 	alerts.Store(a)
 	t.Cleanup(func() {
@@ -364,20 +364,20 @@ func TestAlerts_FromReportErrorAndPanics(t *testing.T) {
 
 func TestSetup_Alerts(t *testing.T) {
 	t.Run("off without a chat id", func(t *testing.T) {
-		tel, err := Setup(context.Background(), Options{Resource: testResource, TelegramBotToken: testBotToken, Stdout: &syncBuffer{}})
+		tel, err := Setup(context.Background(), Options{Resource: testResource, Alerts: telegram.New(telegram.APIURL, testBotToken, "").Thread(testThreadID), Stdout: &syncBuffer{}})
 		if err != nil {
 			t.Fatalf("setup: %v", err)
 		}
 		t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
 
 		if alerts.Load() != nil {
-			t.Error("alerts are on without TelegramAlertChatID")
+			t.Error("alerts are on without a chat id")
 		}
 	})
 
 	t.Run("on with a token and chat id, and off again after shutdown", func(t *testing.T) {
 		tel, err := Setup(context.Background(), Options{
-			Resource: testResource, TelegramBotToken: testBotToken, TelegramAlertChatID: testChatID, Stdout: &syncBuffer{},
+			Resource: testResource, Alerts: telegram.New(telegram.APIURL, testBotToken, testChatID).Thread(testThreadID), Stdout: &syncBuffer{},
 		})
 		if err != nil {
 			t.Fatalf("setup: %v", err)

@@ -197,22 +197,6 @@ func (f *fakeConnectionPreferences) UpdateConnectionPreferences(
 	return 0, nil
 }
 
-func (f *fakeConnectionPreferences) AreConnected(ctx context.Context, viewerID, ownerID uuid.UUID) (bool, error) {
-	const query = `
-		SELECT EXISTS (
-			SELECT 1
-			FROM connections
-			WHERE user_low = LEAST($1::uuid, $2::uuid)
-			  AND user_high = GREATEST($1::uuid, $2::uuid)
-		)
-	`
-	var connected bool
-	if err := f.pool.QueryRow(ctx, query, viewerID, ownerID).Scan(&connected); err != nil {
-		return false, err
-	}
-	return connected, nil
-}
-
 func insertMedia(ctx context.Context, pool *pgxpool.Pool, ownerID uuid.UUID, status string) uuid.UUID {
 	return insertMediaOf(ctx, pool, ownerID, media.KindAvatar, status)
 }
@@ -242,14 +226,37 @@ func mediaStatus(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) string {
 	return s
 }
 
+type fakeAnnouncer struct {
+	mu    sync.Mutex
+	texts []string
+	err   error
+}
+
+func (f *fakeAnnouncer) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.texts = append(f.texts, text)
+	return nil
+}
+
+func (f *fakeAnnouncer) sent() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.texts...)
+}
+
 type testEnv struct {
-	pool   *pgxpool.Pool
-	api    humatest.TestAPI
-	media  *fakeMedia
-	feed   *fakeForgetter
-	study  *fakeForgetter
-	chat   *fakeForgetter
-	module Module
+	pool      *pgxpool.Pool
+	api       humatest.TestAPI
+	media     *fakeMedia
+	feed      *fakeForgetter
+	study     *fakeForgetter
+	chat      *fakeForgetter
+	newcomers *fakeAnnouncer
+	module    Module
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -265,7 +272,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("rewards.New failed: %v", err)
 	}
-	m, err := New(pool, fm, feed, study, chat, rewardsModule, runner)
+	newcomers := &fakeAnnouncer{}
+	m, err := New(pool, fm, feed, study, chat, rewardsModule, newcomers, runner)
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
@@ -290,7 +298,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	api.UseMiddleware(authModule.Guard(api))
 	m.Register(api)
 
-	return &testEnv{pool: pool, api: api, media: fm, feed: feed, study: study, chat: chat, module: m}
+	return &testEnv{pool: pool, api: api, media: fm, feed: feed, study: study, chat: chat, newcomers: newcomers, module: m}
 }
 
 type testUser struct {

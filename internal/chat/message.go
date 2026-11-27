@@ -11,6 +11,7 @@ import (
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
 	"github.com/Uniezz/uniezz-backend/internal/media"
+	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -110,39 +111,8 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 	var created *messageRow
 	var notes []notification
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
-		if err := m.sends.Allow(ctx, senderID.String()); err != nil {
-			if errors.Is(err, ratelimit.ErrLimited) {
-				return errors.Join(ErrRateLimited, err)
-			}
-			return err
-		}
-		locked, err := m.conversations.bumpMessageAsMember(ctx, in.ConversationID, senderID)
-		if err != nil {
-			return err
-		}
-		a, err := m.conversations.access(ctx, senderID, in.ConversationID)
-		if err != nil {
-			return err
-		}
-		if err := a.viewable(); err != nil {
-			return err
-		}
-		if _, err := m.messages.byClient(ctx, senderID, in.Key); err == nil {
-			return errReplayed
-		} else if !errors.Is(err, ErrNotFound) {
-			return err
-		}
-
-		created, err = m.insertText(ctx, senderID, in, locked)
-		if err != nil {
-			return err
-		}
-		recipients, err := m.members.recipients(ctx, in.ConversationID, senderID)
-		if err != nil {
-			return err
-		}
-		notes = []notification{{Event: eventMessageCreated, Recipients: recipients, ConversationID: in.ConversationID, ChangeSeq: created.ChangeSeq, Message: created}}
-		return nil
+		created, notes, err = m.storeMessage(ctx, senderID, in)
+		return err
 	})
 	if errors.Is(err, errReplayed) || errors.Is(err, errClientTaken) {
 		message, err := m.replayMessage(ctx, senderID, in)
@@ -152,13 +122,77 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 		return nil, false, err
 	}
 
+	message, err = m.deliverMessage(ctx, created, notes)
+	return message, false, err
+}
+
+func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInput) (*messageRow, []notification, error) {
+	if err := m.sends.Allow(ctx, senderID.String()); err != nil {
+		if errors.Is(err, ratelimit.ErrLimited) {
+			return nil, nil, errors.Join(ErrRateLimited, err)
+		}
+		return nil, nil, err
+	}
+	locked, err := m.conversations.bumpMessageAsMember(ctx, in.ConversationID, senderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	a, err := m.conversations.access(ctx, senderID, in.ConversationID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := a.viewable(); err != nil {
+		return nil, nil, err
+	}
+	if _, err := m.messages.byClient(ctx, senderID, in.Key); err == nil {
+		return nil, nil, errReplayed
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, nil, err
+	}
+	if err := m.checkRequest(ctx, senderID, a, locked.LastSeq, in); err != nil {
+		return nil, nil, err
+	}
+
+	created, err := m.insertText(ctx, senderID, in, locked)
+	if err != nil {
+		return nil, nil, err
+	}
+	recipients, err := m.members.recipients(ctx, in.ConversationID, senderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	notes := []notification{{Event: eventMessageCreated, Recipients: recipients, ConversationID: in.ConversationID, ChangeSeq: created.ChangeSeq, Message: created}}
+	return created, notes, m.notifyMessage(ctx, senderID, a, locked, in, recipients)
+}
+
+func (m Module) deliverMessage(ctx context.Context, created *messageRow, notes []notification) (*Message, error) {
 	views, err := m.messageViews(ctx, []messageRow{*created})
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	notes[0].Hydrated = &views[0]
 	m.publish(ctx, notes)
-	return &views[0], false, nil
+	m.push.Wake()
+	return &views[0], nil
+}
+
+func (m Module) notifyMessage(ctx context.Context, senderID uuid.UUID, a *accessRow, conversation *lockedRow, in sendInput, recipients []uuid.UUID) error {
+	recipients = slices.DeleteFunc(slices.Clone(recipients), func(id uuid.UUID) bool { return id == senderID })
+	if len(recipients) == 0 {
+		return nil
+	}
+	event := push.EventMessage
+	if a.Kind == KindDirect && a.Status != StatusApproved && !a.Connected && a.StartedBy != nil && *a.StartedBy == senderID {
+		event = push.EventRequest
+	}
+	return m.push.Notify(ctx, push.SendArgs{
+		Event:          event,
+		RecipientIDs:   recipients,
+		ActorID:        senderID,
+		ConversationID: &in.ConversationID,
+		GroupName:      conversation.Name,
+		Preview:        in.Body,
+	})
 }
 
 func (m Module) insertText(ctx context.Context, senderID uuid.UUID, in sendInput, conversation *lockedRow) (*messageRow, error) {

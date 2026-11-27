@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
@@ -23,6 +24,22 @@ type mediaRow struct {
 }
 
 const mediaColumns = "id, owner_user_id, kind, object_key, content_type, size_bytes, status, created_at"
+
+type imageCursor struct {
+	CreatedAt time.Time `json:"c"`
+	ID        uuid.UUID `json:"i"`
+}
+
+type imageFilter struct {
+	Kinds []Kind
+	After *imageCursor
+	Limit int
+}
+
+const (
+	statusReady   = "ready"
+	statusRemoved = "removed"
+)
 
 type repository struct {
 	db database.DB
@@ -189,4 +206,71 @@ func (r *repository) markOwnerDeleting(ctx context.Context, ownerUserID uuid.UUI
 		return nil, fmt.Errorf("mark owner media deleting: %w", err)
 	}
 	return ids, nil
+}
+
+func (r *repository) listUnreviewed(ctx context.Context, f imageFilter) ([]mediaRow, error) {
+	var args database.Args
+	arg := args.Add
+
+	where := []string{"reviewed_at IS NULL", "status = " + arg(statusReady), "kind = ANY(" + arg(f.Kinds) + ")"}
+	if f.After != nil {
+		where = append(where, "(created_at, id) > ("+arg(f.After.CreatedAt)+", "+arg(f.After.ID)+")")
+	}
+	query := `
+        SELECT ` + mediaColumns + `
+        FROM media
+        WHERE ` + strings.Join(where, " AND ") + `
+        ORDER BY created_at, id
+        LIMIT ` + arg(f.Limit)
+
+	rows, err := r.db.Conn(ctx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list unreviewed media: %w", err)
+	}
+	defer rows.Close()
+
+	var items []mediaRow
+	for rows.Next() {
+		item, err := scanMedia(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan media: %w", err)
+		}
+		items = append(items, *item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list unreviewed media: %w", err)
+	}
+	return items, nil
+}
+
+func (r *repository) markReviewed(ctx context.Context, id uuid.UUID, kinds []Kind) error {
+	const query = `
+        UPDATE media SET reviewed_at = COALESCE(reviewed_at, NOW())
+        WHERE id = $1 AND status = $2 AND kind = ANY($3)`
+
+	result, err := r.db.Conn(ctx).Exec(ctx, query, id, statusReady, kinds)
+	if err != nil {
+		return fmt.Errorf("mark media reviewed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) markRemoved(ctx context.Context, id uuid.UUID, kinds []Kind) (string, error) {
+	const query = `
+        UPDATE media SET status = $2, reviewed_at = COALESCE(reviewed_at, NOW())
+        WHERE id = $1 AND status IN ($2, $3) AND kind = ANY($4)
+        RETURNING object_key`
+
+	var objectKey string
+	err := r.db.Conn(ctx).QueryRow(ctx, query, id, statusRemoved, statusReady, kinds).Scan(&objectKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("mark media removed: %w", err)
+	}
+	return objectKey, nil
 }

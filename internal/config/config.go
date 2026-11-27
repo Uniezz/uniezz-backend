@@ -34,14 +34,17 @@ type Config struct {
 	OTPHashKey         string
 	OTPTestEmails      []string
 	FAQPublisherEmails []string
+	ExpoAccessToken    string
 
 	ServiceName       string
 	SentryDSN         string
 	SentryEnvironment string
 	SentryRelease     string
 
-	TelegramBotToken    string
-	TelegramAlertChatID string
+	TelegramBotToken          string
+	TelegramChatID            string
+	TelegramAlertsThreadID    int
+	TelegramNewcomersThreadID int
 
 	S3Region          string
 	S3Bucket          string
@@ -73,32 +76,33 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
-		Env:                 getEnv("ENV", "development"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		BackendPublicURL:    getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
-		AppWebURL:           getEnv("APP_WEB_URL", "http://localhost:3000"),
-		AppMobileScheme:     getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
-		ResendAPIKey:        os.Getenv("RESEND_API_KEY"),
-		MailFrom:            getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
-		OTPEmailTemplateID:  os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
-		OTPHashKey:          os.Getenv("OTP_HASH_KEY"),
-		ServiceName:         getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
-		SentryDSN:           os.Getenv("SENTRY_DSN"),
-		SentryEnvironment:   os.Getenv("SENTRY_ENVIRONMENT"),
-		SentryRelease:       os.Getenv("SENTRY_RELEASE"),
-		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramAlertChatID: os.Getenv("TELEGRAM_ALERT_CHAT_ID"),
-		S3Region:            getEnv("S3_REGION", "us-east-1"),
-		S3Bucket:            getEnv("S3_BUCKET", "uniezz-media"),
-		S3AccessKeyID:       os.Getenv("S3_ACCESS_KEY_ID"),
-		S3SecretAccessKey:   os.Getenv("S3_SECRET_ACCESS_KEY"),
-		S3Endpoint:          os.Getenv("S3_ENDPOINT"),
-		S3PublicEndpoint:    os.Getenv("S3_PUBLIC_ENDPOINT"),
-		S3ForcePathStyle:    s3ForcePathStyle,
-		MediaPublicURL:      os.Getenv("MEDIA_PUBLIC_URL"),
-		JobWorkers:          jobWorkers,
-		JobPollInterval:     jobPollInterval,
+		Port:               getEnv("PORT", "8080"),
+		Env:                getEnv("ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		BackendPublicURL:   getEnv("BACKEND_PUBLIC_URL", "http://localhost:8080"),
+		AppWebURL:          getEnv("APP_WEB_URL", "http://localhost:3000"),
+		AppMobileScheme:    getEnv("APP_MOBILE_SCHEME", "uniezz://auth/callback"),
+		ResendAPIKey:       os.Getenv("RESEND_API_KEY"),
+		ExpoAccessToken:    os.Getenv("EXPO_ACCESS_TOKEN"),
+		MailFrom:           getEnv("MAIL_FROM", "Uniezz <no-reply@mail.uniezz.pl>"),
+		OTPEmailTemplateID: os.Getenv("OTP_EMAIL_TEMPLATE_ID"),
+		OTPHashKey:         os.Getenv("OTP_HASH_KEY"),
+		ServiceName:        getEnv("OTEL_SERVICE_NAME", DefaultServiceName),
+		SentryDSN:          os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:  os.Getenv("SENTRY_ENVIRONMENT"),
+		SentryRelease:      os.Getenv("SENTRY_RELEASE"),
+		TelegramBotToken:   os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramChatID:     os.Getenv("TELEGRAM_CHAT_ID"),
+		S3Region:           getEnv("S3_REGION", "us-east-1"),
+		S3Bucket:           getEnv("S3_BUCKET", "uniezz-media"),
+		S3AccessKeyID:      os.Getenv("S3_ACCESS_KEY_ID"),
+		S3SecretAccessKey:  os.Getenv("S3_SECRET_ACCESS_KEY"),
+		S3Endpoint:         os.Getenv("S3_ENDPOINT"),
+		S3PublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
+		S3ForcePathStyle:   s3ForcePathStyle,
+		MediaPublicURL:     os.Getenv("MEDIA_PUBLIC_URL"),
+		JobWorkers:         jobWorkers,
+		JobPollInterval:    jobPollInterval,
 		UsosConfigs: map[string]UsosCredentials{
 			"umcs": {
 				BaseURL:        "https://apps.umcs.pl",
@@ -132,6 +136,13 @@ func Load() (*Config, error) {
 	if cfg.S3AccessKeyID == "" || cfg.S3SecretAccessKey == "" {
 		return nil, fmt.Errorf("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY environment variables are required")
 	}
+
+	threads, err := parseThreads(os.Getenv("TELEGRAM_THREAD_ID"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.TelegramAlertsThreadID = threads["alerts"]
+	cfg.TelegramNewcomersThreadID = threads["newcomers"]
 
 	cfg.CORSAllowedOrigins = splitOrigins(getEnv("CORS_ALLOWED_ORIGINS", cfg.AppWebURL))
 
@@ -172,4 +183,21 @@ func splitEmails(s string) []string {
 		}
 	}
 	return emails
+}
+
+func parseThreads(s string) (map[string]int, error) {
+	threads := map[string]int{}
+	for pair := range strings.SplitSeq(s, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		name, value, ok := strings.Cut(pair, ":")
+		id, err := strconv.Atoi(strings.TrimSpace(value))
+		if !ok || strings.TrimSpace(name) == "" || err != nil || id <= 0 {
+			return nil, fmt.Errorf("TELEGRAM_THREAD_ID must be name:id pairs separated by commas, e.g. alerts:825,newcomers:825")
+		}
+		threads[strings.TrimSpace(name)] = id
+	}
+	return threads, nil
 }

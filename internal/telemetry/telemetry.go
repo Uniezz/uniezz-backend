@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Uniezz/uniezz-backend/internal/telegram"
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
@@ -31,8 +32,7 @@ type Options struct {
 	SentryEnvironment string
 	SentryRelease     string
 
-	TelegramBotToken    string
-	TelegramAlertChatID string
+	Alerts telegram.Thread
 
 	Stdout io.Writer
 }
@@ -96,8 +96,8 @@ func Setup(ctx context.Context, opts Options) (*Telemetry, error) {
 		})
 	}
 
-	if opts.TelegramBotToken != "" && opts.TelegramAlertChatID != "" {
-		a := newAlerter(telegramAPI, opts.TelegramBotToken, opts.TelegramAlertChatID, time.Now)
+	if opts.Alerts.Enabled() {
+		a := newAlerter(opts.Alerts, time.Now)
 		a.resource = opts.Resource
 		alerts.Store(a)
 		t.shutdowns = append(t.shutdowns, func(ctx context.Context) error {
