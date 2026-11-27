@@ -167,9 +167,9 @@ var searchChatMessagesOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/chat/conversations/{id}/messages/search",
 	Summary:     "Search the text of messages in a conversation",
-	Description: "Matches newest first by seq, without ranking; open a match with listChatMessages and aroundId. Deleted messages and messages from students blocked either way or banned are never returned.",
+	Description: "Matches newest first by seq, without ranking; open a match with listChatMessages and aroundId. Deleted messages and messages from students blocked either way or banned are never returned. At most 20 searches per minute; a search that takes over 2 seconds answers 422 search_too_broad.",
 	Tags:        []string{"chat"},
-	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 })
 
 func (h *messageHandler) searchMessages(ctx context.Context, in *searchChatMessagesInput) (*searchChatMessagesOutput, error) {

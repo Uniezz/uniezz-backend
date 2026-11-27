@@ -2,10 +2,19 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
 	"github.com/Uniezz/uniezz-backend/internal/text"
 	"github.com/google/uuid"
+)
+
+const (
+	searchLimit   = 20
+	searchWindow  = time.Minute
+	searchTimeout = 2 * time.Second
 )
 
 type searchQuery struct {
@@ -45,7 +54,21 @@ func (m Module) searchMessages(ctx context.Context, q searchQuery) ([]Message, *
 		return nil, nil, err
 	}
 
-	rows, err := m.messages.search(ctx, filter)
+	if err := m.searches.Allow(ctx, q.ViewerID.String()); err != nil {
+		if errors.Is(err, ratelimit.ErrLimited) {
+			return nil, nil, errors.Join(ErrRateLimited, err)
+		}
+		return nil, nil, err
+	}
+
+	var rows []messageRow
+	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := m.messages.limitTime(ctx, searchTimeout); err != nil {
+			return err
+		}
+		rows, err = m.messages.search(ctx, filter)
+		return err
+	})
 	if err != nil {
 		return nil, nil, err
 	}

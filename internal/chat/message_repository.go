@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 const (
 	uniqueViolation  = "23505"
+	queryCanceled    = "57014"
 	clientConstraint = "uq_chat_messages_client"
 )
 
@@ -214,6 +216,14 @@ func (r *messageRepository) list(ctx context.Context, f messageFilter) ([]messag
 	return r.scanMessages(ctx, "list messages", query, args...)
 }
 
+func (r *messageRepository) limitTime(ctx context.Context, limit time.Duration) error {
+	const query = `SELECT set_config('statement_timeout', $1, true)`
+	if _, err := r.db.Conn(ctx).Exec(ctx, query, strconv.FormatInt(limit.Milliseconds(), 10)); err != nil {
+		return fmt.Errorf("set search timeout: %w", err)
+	}
+	return nil
+}
+
 func (r *messageRepository) search(ctx context.Context, f searchFilter) ([]messageRow, error) {
 	args := database.Args{f.ConversationID, f.ViewerID}
 	arg := args.Add
@@ -232,7 +242,12 @@ func (r *messageRepository) search(ctx context.Context, f searchFilter) ([]messa
 	}
 	query := `SELECT ` + messageColumns + ` FROM chat_messages msg WHERE ` + strings.Join(where, " AND ") +
 		` ORDER BY msg.seq DESC LIMIT ` + arg(f.Limit)
-	return r.scanMessages(ctx, "search messages", query, args...)
+	rows, err := r.scanMessages(ctx, "search messages", query, args...)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == queryCanceled {
+		return nil, ErrSearchTooBroad
+	}
+	return rows, err
 }
 
 func (r *messageRepository) lastVisible(ctx context.Context, viewerID uuid.UUID, conversationIDs []uuid.UUID) ([]messageRow, error) {

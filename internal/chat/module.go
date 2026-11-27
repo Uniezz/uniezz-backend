@@ -112,6 +112,7 @@ type Module struct {
 	sends         limiter
 	groups        limiter
 	requestLimit  limiter
+	searches      limiter
 	hub           *hub
 	heartbeat     time.Duration
 	sessionCheck  time.Duration
@@ -143,6 +144,7 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, feedModule postCards, stu
 		sends:         ratelimit.New(pool, "chat-send", sendLimit, sendWindow),
 		groups:        ratelimit.New(pool, "chat-group", groupLimit, groupWindow),
 		requestLimit:  ratelimit.New(pool, "chat-request", requestLimit, requestWindow),
+		searches:      ratelimit.New(pool, "chat-search", searchLimit, searchWindow),
 		hub:           newHub(),
 		heartbeat:     heartbeatInterval,
 		sessionCheck:  sessionCheckEvery,

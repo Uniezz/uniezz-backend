@@ -5748,7 +5748,7 @@ paths:
         - chat
   /chat/conversations/{id}/messages/search:
     get:
-      description: Matches newest first by seq, without ranking; open a match with listChatMessages and aroundId. Deleted messages and messages from students blocked either way or banned are never returned.
+      description: Matches newest first by seq, without ranking; open a match with listChatMessages and aroundId. Deleted messages and messages from students blocked either way or banned are never returned. At most 20 searches per minute; a search that takes over 2 seconds answers 422 search_too_broad.
       operationId: searchChatMessages
       parameters:
         - in: path
@@ -5819,6 +5819,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
           description: Unprocessable Entity
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Too Many Requests
         "500":
           content:
             application/json:

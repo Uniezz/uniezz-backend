@@ -89,6 +89,16 @@ func TestSearchMessages(t *testing.T) {
 		expectError(t, rec, http.StatusNotFound, "not_found")
 	})
 
+	t.Run("the 21st search within a minute is rate limited", func(t *testing.T) {
+		a, b := e.friends(t)
+		conversation := e.direct(t, a, b)
+		for range searchLimit {
+			e.search(t, a, conversation.ID, "hello", "")
+		}
+		rec := e.api.Get("/chat/conversations/"+conversation.ID.String()+"/messages/search?q=hello", a.bearer)
+		expectError(t, rec, http.StatusTooManyRequests, "rate_limited")
+	})
+
 	t.Run("searching without a session returns 401", func(t *testing.T) {
 		rec := e.api.Get("/chat/conversations/" + uuid.NewString() + "/messages/search?q=hello")
 		if rec.Code != http.StatusUnauthorized {
