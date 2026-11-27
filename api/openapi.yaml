@@ -1436,6 +1436,10 @@ components:
           examples:
             - pl. Marii Curie-Skłodowskiej 2
           type: string
+        id:
+          description: Stable identifier of the faculty; courses refer to it
+          format: uuid
+          type: string
         location:
           $ref: "#/components/schemas/GeoPoint"
           description: Geographic location of the faculty building
@@ -1445,6 +1449,7 @@ components:
             - Wydział Chemii
           type: string
       required:
+        - id
         - name
         - address
         - location
@@ -1458,6 +1463,10 @@ components:
             - pl. Marii Curie-Skłodowskiej 2
           maxLength: 500
           minLength: 1
+          type: string
+        id:
+          description: On replace, an existing faculty of this university to keep and update; omit to add a new faculty
+          format: uuid
           type: string
         latitude:
           description: Latitude in decimal degrees (WGS 84)
@@ -4849,7 +4858,7 @@ paths:
       tags:
         - auth
     put:
-      description: Every field is replaced, so send the full lists of domains and faculties. Students who already signed up keep their accounts. Admins only.
+      description: Every field is replaced, so send the full lists of domains and faculties. A faculty sent with its id keeps the id; one left out is removed, which fails with 409 faculty_in_use while courses refer to it. Admins only.
       operationId: replaceUniversity
       parameters:
         - in: path

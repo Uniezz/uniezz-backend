@@ -18,9 +18,10 @@ type GeoPoint struct {
 }
 
 type Faculty struct {
-	Name     string   `json:"name" doc:"Display name of the faculty" example:"Wydział Chemii"`
-	Address  string   `json:"address" doc:"Street address of the faculty building" example:"pl. Marii Curie-Skłodowskiej 2"`
-	Location GeoPoint `json:"location" doc:"Geographic location of the faculty building"`
+	ID       uuid.UUID `json:"id" format:"uuid" doc:"Stable identifier of the faculty; courses refer to it"`
+	Name     string    `json:"name" doc:"Display name of the faculty" example:"Wydział Chemii"`
+	Address  string    `json:"address" doc:"Street address of the faculty building" example:"pl. Marii Curie-Skłodowskiej 2"`
+	Location GeoPoint  `json:"location" doc:"Geographic location of the faculty building"`
 }
 
 type University struct {
@@ -34,10 +35,11 @@ type University struct {
 }
 
 type facultyRequest struct {
-	Name      string  `json:"name" minLength:"1" maxLength:"500" doc:"3 to 200 characters after cleaning" example:"Wydział Chemii"`
-	Address   string  `json:"address" minLength:"1" maxLength:"500" doc:"Up to 200 characters after cleaning" example:"pl. Marii Curie-Skłodowskiej 2"`
-	Latitude  float64 `json:"latitude" minimum:"-90" maximum:"90" doc:"Latitude in decimal degrees (WGS 84)" example:"51.24513"`
-	Longitude float64 `json:"longitude" minimum:"-180" maximum:"180" doc:"Longitude in decimal degrees (WGS 84)" example:"22.54247"`
+	ID        *uuid.UUID `json:"id,omitempty" format:"uuid" doc:"On replace, an existing faculty of this university to keep and update; omit to add a new faculty"`
+	Name      string     `json:"name" minLength:"1" maxLength:"500" doc:"3 to 200 characters after cleaning" example:"Wydział Chemii"`
+	Address   string     `json:"address" minLength:"1" maxLength:"500" doc:"Up to 200 characters after cleaning" example:"pl. Marii Curie-Skłodowskiej 2"`
+	Latitude  float64    `json:"latitude" minimum:"-90" maximum:"90" doc:"Latitude in decimal degrees (WGS 84)" example:"51.24513"`
+	Longitude float64    `json:"longitude" minimum:"-180" maximum:"180" doc:"Longitude in decimal degrees (WGS 84)" example:"22.54247"`
 }
 
 type universityRequest struct {
@@ -160,7 +162,7 @@ var replaceUniversityOperation = Authorized(huma.Operation{
 	Method:      http.MethodPut,
 	Path:        "/auth/universities/{id}",
 	Summary:     "Replace a supported university's name, login method, domains and faculties",
-	Description: "Every field is replaced, so send the full lists of domains and faculties. Students who already signed up keep their accounts. Admins only.",
+	Description: "Every field is replaced, so send the full lists of domains and faculties. A faculty sent with its id keeps the id; one left out is removed, which fails with 409 faculty_in_use while courses refer to it. Admins only.",
 	Tags:        []string{"auth"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
 }, RoleAdmin)

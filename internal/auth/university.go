@@ -28,6 +28,7 @@ type universityChange struct {
 }
 
 type facultyChange struct {
+	ID        *uuid.UUID
 	Name      string
 	Address   string
 	Latitude  float64
@@ -58,9 +59,16 @@ func (c universityChange) fields() (universityFields, error) {
 	if len(c.Faculties) > maxFaculties {
 		return universityFields{}, ErrInvalidInput
 	}
-	f.Faculties = make([]facultyRow, 0, len(c.Faculties))
-	for _, fc := range c.Faculties {
-		var fr facultyRow
+	f.Faculties = make([]facultyFields, 0, len(c.Faculties))
+	seen := make(map[uuid.UUID]bool, len(c.Faculties))
+	for i, fc := range c.Faculties {
+		fr := facultyFields{ID: fc.ID, Position: i + 1}
+		if fc.ID != nil {
+			if seen[*fc.ID] {
+				return universityFields{}, ErrInvalidInput
+			}
+			seen[*fc.ID] = true
+		}
 		if fr.Name, err = cleanFacultyName(fc.Name); err != nil {
 			return universityFields{}, err
 		}
@@ -105,6 +113,9 @@ func (m Module) createUniversity(ctx context.Context, c universityChange) (*Univ
 	if err != nil {
 		return nil, err
 	}
+	if len(f.keptFaculties()) > 0 {
+		return nil, ErrInvalidInput
+	}
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := m.universities.create(ctx, f); err != nil {
 			return err
@@ -135,8 +146,16 @@ func (m Module) replaceUniversity(ctx context.Context, c universityChange) (*Uni
 		if err := m.universities.addDomains(ctx, f.ID, f.Domains); err != nil {
 			return err
 		}
-		if err := m.universities.clearFaculties(ctx, f.ID); err != nil {
+		kept := f.keptFaculties()
+		if err := m.universities.deleteFacultiesExcept(ctx, f.ID, kept); err != nil {
 			return err
+		}
+		updated, err := m.universities.updateFaculties(ctx, f.ID, f.Faculties)
+		if err != nil {
+			return err
+		}
+		if updated != int64(len(kept)) {
+			return ErrInvalidInput
 		}
 		return m.universities.addFaculties(ctx, f.ID, f.Faculties)
 	})
@@ -146,10 +165,21 @@ func (m Module) replaceUniversity(ctx context.Context, c universityChange) (*Uni
 	return m.university(ctx, f.ID)
 }
 
+func (f universityFields) keptFaculties() []uuid.UUID {
+	ids := []uuid.UUID{}
+	for _, faculty := range f.Faculties {
+		if faculty.ID != nil {
+			ids = append(ids, *faculty.ID)
+		}
+	}
+	return ids
+}
+
 func (r universityRow) university() University {
 	faculties := make([]Faculty, 0, len(r.Faculties))
 	for _, f := range r.Faculties {
 		faculties = append(faculties, Faculty{
+			ID:       f.ID,
 			Name:     f.Name,
 			Address:  f.Address,
 			Location: GeoPoint{Latitude: f.Latitude, Longitude: f.Longitude},

@@ -188,6 +188,12 @@ func TestCreateUniversity(t *testing.T) {
 		}
 	})
 
+	t.Run("a new university cannot name faculty ids", func(t *testing.T) {
+		body := universityBody(e.newID(t), newDomain())
+		body["faculties"] = []map[string]any{{"id": uuid.New(), "name": "Wydział Pierwszy", "address": "ul. Testowa 1", "latitude": 51.2, "longitude": 22.5}}
+		expectUniversityError(t, e.api.Post("/auth/universities", e.bearer(t, RoleAdmin), body), http.StatusBadRequest, "invalid_input")
+	})
+
 	t.Run("an OTP university without domains is invalid", func(t *testing.T) {
 		body := universityBody(e.newID(t), newDomain())
 		body["domains"] = []string{}
@@ -252,6 +258,52 @@ func TestReplaceUniversity(t *testing.T) {
 			got.RadonInstitutionID == nil || *got.RadonInstitutionID != radon {
 			t.Errorf("replaced = %+v", got)
 		}
+	})
+
+	t.Run("a faculty sent with its id keeps the id and takes the new fields and order", func(t *testing.T) {
+		id, domain := create(t)
+		before := decodeUniversity[University](t, e.api.Get("/auth/universities/"+id), http.StatusOK)
+		body := universityBody(id, domain)
+		delete(body, "id")
+		body["faculties"] = []map[string]any{
+			{"name": "Wydział Nowy", "address": "ul. Nowa 1", "latitude": 51.0, "longitude": 22.0},
+			{"id": before.Faculties[1].ID, "name": "Wydział Drugi Inny", "address": "ul. Inna 2", "latitude": 51.4, "longitude": 22.7},
+		}
+
+		got := decodeUniversity[University](t, e.api.Put("/auth/universities/"+id, e.bearer(t, RoleAdmin), body), http.StatusOK)
+		if len(got.Faculties) != 2 || got.Faculties[0].Name != "Wydział Nowy" ||
+			got.Faculties[1].ID != before.Faculties[1].ID || got.Faculties[1].Name != "Wydział Drugi Inny" {
+			t.Errorf("faculties = %+v, kept id %s", got.Faculties, before.Faculties[1].ID)
+		}
+		if got.Faculties[0].ID == before.Faculties[0].ID {
+			t.Errorf("the left out faculty %s was kept", before.Faculties[0].ID)
+		}
+	})
+
+	t.Run("a faculty id of another university is invalid and changes nothing", func(t *testing.T) {
+		id, domain := create(t)
+		other, _ := create(t)
+		foreign := decodeUniversity[University](t, e.api.Get("/auth/universities/"+other), http.StatusOK).Faculties[0].ID
+		body := universityBody(id, domain)
+		delete(body, "id")
+		body["faculties"] = []map[string]any{{"id": foreign, "name": "Wydział Cudzy", "address": "ul. Obca 1", "latitude": 51.0, "longitude": 22.0}}
+
+		expectUniversityError(t, e.api.Put("/auth/universities/"+id, e.bearer(t, RoleAdmin), body), http.StatusBadRequest, "invalid_input")
+		if got := decodeUniversity[University](t, e.api.Get("/auth/universities/"+id), http.StatusOK); len(got.Faculties) != 2 {
+			t.Errorf("faculties = %+v", got.Faculties)
+		}
+	})
+
+	t.Run("the same faculty id twice is invalid", func(t *testing.T) {
+		id, domain := create(t)
+		kept := decodeUniversity[University](t, e.api.Get("/auth/universities/"+id), http.StatusOK).Faculties[0].ID
+		body := universityBody(id, domain)
+		delete(body, "id")
+		body["faculties"] = []map[string]any{
+			{"id": kept, "name": "Wydział Raz", "address": "ul. Testowa 1", "latitude": 51.0, "longitude": 22.0},
+			{"id": kept, "name": "Wydział Dwa", "address": "ul. Testowa 2", "latitude": 51.0, "longitude": 22.0},
+		}
+		expectUniversityError(t, e.api.Put("/auth/universities/"+id, e.bearer(t, RoleAdmin), body), http.StatusBadRequest, "invalid_input")
 	})
 
 	t.Run("sending the current university again changes nothing", func(t *testing.T) {
