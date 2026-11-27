@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
@@ -52,7 +53,8 @@ type attachmentRow struct {
 }
 
 type messageCursor struct {
-	Seq int64 `json:"s"`
+	Seq   int64 `json:"s"`
+	Newer bool  `json:"n,omitempty"`
 }
 
 type changeCursor struct {
@@ -63,7 +65,16 @@ type messageFilter struct {
 	ConversationID uuid.UUID
 	ViewerID       uuid.UUID
 	BeforeSeq      *int64
+	AfterSeq       *int64
 	AfterChange    *int64
+	Limit          int
+}
+
+type searchFilter struct {
+	ConversationID uuid.UUID
+	ViewerID       uuid.UUID
+	Words          []string
+	BeforeSeq      *int64
 	Limit          int
 }
 
@@ -191,12 +202,37 @@ func (r *messageRepository) list(ctx context.Context, f messageFilter) ([]messag
 	if f.BeforeSeq != nil {
 		where += " AND msg.seq < " + arg(*f.BeforeSeq)
 	}
+	if f.AfterSeq != nil {
+		where += " AND msg.seq > " + arg(*f.AfterSeq)
+		order = "msg.seq ASC"
+	}
 	if f.AfterChange != nil {
 		where += " AND msg.change_seq > " + arg(*f.AfterChange)
 		order = "msg.change_seq ASC"
 	}
 	query := `SELECT ` + messageColumns + ` FROM chat_messages msg WHERE ` + where + ` ORDER BY ` + order + ` LIMIT ` + arg(f.Limit)
 	return r.scanMessages(ctx, "list messages", query, args...)
+}
+
+func (r *messageRepository) search(ctx context.Context, f searchFilter) ([]messageRow, error) {
+	args := database.Args{f.ConversationID, f.ViewerID}
+	arg := args.Add
+
+	where := []string{
+		"msg.conversation_id = $1",
+		"msg.body IS NOT NULL",
+		"msg.deleted_at IS NULL",
+		messageVisible("$2", "msg.sender_id"),
+	}
+	for _, word := range f.Words {
+		where = append(where, "public.search_text(msg.body) LIKE "+database.SearchPattern(arg(word)))
+	}
+	if f.BeforeSeq != nil {
+		where = append(where, "msg.seq < "+arg(*f.BeforeSeq))
+	}
+	query := `SELECT ` + messageColumns + ` FROM chat_messages msg WHERE ` + strings.Join(where, " AND ") +
+		` ORDER BY msg.seq DESC LIMIT ` + arg(f.Limit)
+	return r.scanMessages(ctx, "search messages", query, args...)
 }
 
 func (r *messageRepository) lastVisible(ctx context.Context, viewerID uuid.UUID, conversationIDs []uuid.UUID) ([]messageRow, error) {

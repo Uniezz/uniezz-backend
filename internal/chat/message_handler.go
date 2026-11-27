@@ -60,12 +60,14 @@ type listChatMessagesInput struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 	httpapi.PageQuery
 	ChangedAfter string `query:"changedAfter" pattern:"^[0-9]{1,18}$" maxLength:"18" doc:"Catch-up mode: list messages created or changed after this changeSeq, oldest change first. Pass nextCursor as cursor to continue. Without it, messages are listed newest first by seq"`
+	AroundID     string `query:"aroundId" format:"uuid" doc:"Jump mode: a page around this message (it and older ones, then newer ones), newest first. Not allowed with cursor or changedAfter. Pass nextCursor for older pages and newerCursor for newer pages"`
 }
 
 type listChatMessagesOutput struct {
 	Body struct {
-		Items      []Message `json:"items"`
-		NextCursor *string   `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get the next page; null on the last page"`
+		Items       []Message `json:"items"`
+		NextCursor  *string   `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get older messages (or the next catch-up page); null when there are none"`
+		NewerCursor *string   `json:"newerCursor" nullable:"true" doc:"Pass as cursor to get newer messages after a jump (aroundId); null when there are none or outside jump mode. Every page is still newest first"`
 	}
 }
 
@@ -74,7 +76,7 @@ var listChatMessagesOperation = auth.Authenticated(huma.Operation{
 	Method:      http.MethodGet,
 	Path:        "/chat/conversations/{id}/messages",
 	Summary:     "List messages of a conversation, or the ones that changed",
-	Description: "History mode lists newest first by seq. Catch-up mode (changedAfter) lists what was created or changed after a changeSeq, oldest change first, including deleted messages. Messages from students blocked either way or banned are left out.",
+	Description: "History mode lists newest first by seq; aroundId jumps to a message, for example a search result. Catch-up mode (changedAfter) lists what was created or changed after a changeSeq, oldest change first, including deleted messages. Messages from students blocked either way or banned are left out.",
 	Tags:        []string{"chat"},
 	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
 })
@@ -85,11 +87,12 @@ func (h *messageHandler) listMessages(ctx context.Context, in *listChatMessagesI
 		return nil, httpapi.Unauthorized()
 	}
 
-	items, next, err := h.chat.listMessages(ctx, messageQuery{
+	items, next, newer, err := h.chat.listMessages(ctx, messageQuery{
 		ViewerID:       viewerID,
 		ConversationID: in.ID,
 		Cursor:         in.Cursor,
 		ChangedAfter:   in.ChangedAfter,
+		AroundID:       in.AroundID,
 		Limit:          in.Limit,
 	})
 	if err != nil {
@@ -97,6 +100,53 @@ func (h *messageHandler) listMessages(ctx context.Context, in *listChatMessagesI
 	}
 
 	out := &listChatMessagesOutput{}
+	out.Body.Items = items
+	out.Body.NextCursor = next
+	out.Body.NewerCursor = newer
+	return out, nil
+}
+
+type searchChatMessagesInput struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
+	Q  string    `query:"q" required:"true" minLength:"3" maxLength:"200" example:"exam room" doc:"1 to 5 words of at least 3 characters each; every word must appear in the message, case and accents ignored"`
+	httpapi.PageQuery
+}
+
+type searchChatMessagesOutput struct {
+	Body struct {
+		Items      []Message `json:"items"`
+		NextCursor *string   `json:"nextCursor" nullable:"true" doc:"Pass as cursor to get older matches; null on the last page"`
+	}
+}
+
+var searchChatMessagesOperation = auth.Authenticated(huma.Operation{
+	OperationID: "searchChatMessages",
+	Method:      http.MethodGet,
+	Path:        "/chat/conversations/{id}/messages/search",
+	Summary:     "Search the text of messages in a conversation",
+	Description: "Matches newest first by seq, without ranking; open a match with listChatMessages and aroundId. Deleted messages and messages from students blocked either way or banned are never returned.",
+	Tags:        []string{"chat"},
+	Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+})
+
+func (h *messageHandler) searchMessages(ctx context.Context, in *searchChatMessagesInput) (*searchChatMessagesOutput, error) {
+	viewerID, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, httpapi.Unauthorized()
+	}
+
+	items, next, err := h.chat.searchMessages(ctx, searchQuery{
+		ViewerID:       viewerID,
+		ConversationID: in.ID,
+		Q:              in.Q,
+		Cursor:         in.Cursor,
+		Limit:          in.Limit,
+	})
+	if err != nil {
+		return nil, errorResponses.Error(err)
+	}
+
+	out := &searchChatMessagesOutput{}
 	out.Body.Items = items
 	out.Body.NextCursor = next
 	return out, nil

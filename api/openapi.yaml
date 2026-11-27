@@ -1619,14 +1619,20 @@ components:
           type:
             - array
             - "null"
+        newerCursor:
+          description: Pass as cursor to get newer messages after a jump (aroundId); null when there are none or outside jump mode. Every page is still newest first
+          type:
+            - string
+            - "null"
         nextCursor:
-          description: Pass as cursor to get the next page; null on the last page
+          description: Pass as cursor to get older messages (or the next catch-up page); null when there are none
           type:
             - string
             - "null"
       required:
         - items
         - nextCursor
+        - newerCursor
       type: object
     ListChatRequestsOutputBody:
       additionalProperties: false
@@ -3333,6 +3339,24 @@ components:
           type: boolean
       required:
         - saved
+      type: object
+    SearchChatMessagesOutputBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Message"
+          type:
+            - array
+            - "null"
+        nextCursor:
+          description: Pass as cursor to get older matches; null on the last page
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
       type: object
     SearchFilesOutputBody:
       additionalProperties: false
@@ -5047,7 +5071,7 @@ paths:
         - chat
   /chat/conversations/{id}/messages:
     get:
-      description: History mode lists newest first by seq. Catch-up mode (changedAfter) lists what was created or changed after a changeSeq, oldest change first, including deleted messages. Messages from students blocked either way or banned are left out.
+      description: History mode lists newest first by seq; aroundId jumps to a message, for example a search result. Catch-up mode (changedAfter) lists what was created or changed after a changeSeq, oldest change first, including deleted messages. Messages from students blocked either way or banned are left out.
       operationId: listChatMessages
       parameters:
         - in: path
@@ -5083,6 +5107,14 @@ paths:
             description: "Catch-up mode: list messages created or changed after this changeSeq, oldest change first. Pass nextCursor as cursor to continue. Without it, messages are listed newest first by seq"
             maxLength: 18
             pattern: ^[0-9]{1,18}$
+            type: string
+        - description: "Jump mode: a page around this message (it and older ones, then newer ones), newest first. Not allowed with cursor or changedAfter. Pass nextCursor for older pages and newerCursor for newer pages"
+          explode: false
+          in: query
+          name: aroundId
+          schema:
+            description: "Jump mode: a page around this message (it and older ones, then newer ones), newest first. Not allowed with cursor or changedAfter. Pass nextCursor for older pages and newerCursor for newer pages"
+            format: uuid
             type: string
       responses:
         "200":
@@ -5208,6 +5240,90 @@ paths:
       security:
         - bearer: []
       summary: Send a message with up to 5 images
+      tags:
+        - chat
+  /chat/conversations/{id}/messages/search:
+    get:
+      description: Matches newest first by seq, without ranking; open a match with listChatMessages and aroundId. Deleted messages and messages from students blocked either way or banned are never returned.
+      operationId: searchChatMessages
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: 1 to 5 words of at least 3 characters each; every word must appear in the message, case and accents ignored
+          explode: false
+          in: query
+          name: q
+          required: true
+          schema:
+            description: 1 to 5 words of at least 3 characters each; every word must appear in the message, case and accents ignored
+            examples:
+              - exam room
+            maxLength: 200
+            minLength: 3
+            type: string
+        - description: nextCursor from the previous page; omit for the first page
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: nextCursor from the previous page; omit for the first page
+            maxLength: 512
+            type: string
+        - description: Maximum number of items in the page
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of items in the page
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchChatMessagesOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Search the text of messages in a conversation
       tags:
         - chat
   /chat/conversations/{id}/read:

@@ -24,6 +24,7 @@ type messageQuery struct {
 	ConversationID uuid.UUID
 	Cursor         string
 	ChangedAfter   string
+	AroundID       string
 	Limit          int
 }
 
@@ -267,27 +268,34 @@ func (m Module) replayMessage(ctx context.Context, senderID uuid.UUID, in sendIn
 	return &views[0], nil
 }
 
-func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *string, error) {
+func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *string, *string, error) {
+	if q.AroundID != "" && (q.Cursor != "" || q.ChangedAfter != "") {
+		return nil, nil, nil, ErrInvalidInput
+	}
 	a, err := m.conversations.access(ctx, q.ViewerID, q.ConversationID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := a.viewable(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if q.AroundID != "" {
+		return m.listAround(ctx, q)
 	}
 
 	filter := messageFilter{ConversationID: q.ConversationID, ViewerID: q.ViewerID, Limit: q.Limit + 1}
 	catchUp := q.ChangedAfter != ""
+	newer := false
 	switch {
 	case catchUp:
 		after, err := strconv.ParseInt(q.ChangedAfter, 10, 64)
 		if err != nil {
-			return nil, nil, ErrInvalidInput
+			return nil, nil, nil, ErrInvalidInput
 		}
 		if q.Cursor != "" {
 			var cursor changeCursor
 			if err := httpapi.DecodeCursor(q.Cursor, &cursor); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			after = cursor.ChangeSeq
 		}
@@ -295,30 +303,97 @@ func (m Module) listMessages(ctx context.Context, q messageQuery) ([]Message, *s
 	case q.Cursor != "":
 		var cursor messageCursor
 		if err := httpapi.DecodeCursor(q.Cursor, &cursor); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		filter.BeforeSeq = &cursor.Seq
+		if cursor.Newer {
+			newer = true
+			filter.AfterSeq = &cursor.Seq
+		} else {
+			filter.BeforeSeq = &cursor.Seq
+		}
 	}
 
 	rows, err := m.messages.list(ctx, filter)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rows, next, err := httpapi.Page(rows, q.Limit, func(last messageRow) any {
-		if catchUp {
+		switch {
+		case catchUp:
 			return changeCursor{ChangeSeq: last.ChangeSeq}
+		case newer:
+			return messageCursor{Seq: last.Seq, Newer: true}
 		}
 		return messageCursor{Seq: last.Seq}
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if newer {
+		slices.Reverse(rows)
 	}
 
 	items, err := m.messageViews(ctx, rows)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return items, next, nil
+	if newer {
+		return items, nil, next, nil
+	}
+	return items, next, nil, nil
+}
+
+func (m Module) listAround(ctx context.Context, q messageQuery) ([]Message, *string, *string, error) {
+	id, err := uuid.Parse(q.AroundID)
+	if err != nil {
+		return nil, nil, nil, ErrInvalidInput
+	}
+	anchor, err := m.messages.getVisible(ctx, q.ViewerID, id)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if anchor.ConversationID != q.ConversationID {
+		return nil, nil, nil, ErrNotFound
+	}
+
+	olderLimit := (q.Limit + 1) / 2
+	newerLimit := q.Limit - olderLimit
+	through := anchor.Seq + 1
+	older, err := m.messages.list(ctx, messageFilter{ConversationID: q.ConversationID, ViewerID: q.ViewerID, BeforeSeq: &through, Limit: olderLimit + 1})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	older, next, err := httpapi.Page(older, olderLimit, func(last messageRow) any {
+		return messageCursor{Seq: last.Seq}
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	newerRows, err := m.messages.list(ctx, messageFilter{ConversationID: q.ConversationID, ViewerID: q.ViewerID, AfterSeq: &anchor.Seq, Limit: newerLimit + 1})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var newer *string
+	if len(newerRows) > newerLimit {
+		newerRows = newerRows[:newerLimit]
+		top := anchor.Seq
+		if len(newerRows) > 0 {
+			top = newerRows[len(newerRows)-1].Seq
+		}
+		cursor, err := httpapi.EncodeCursor(messageCursor{Seq: top, Newer: true})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		newer = &cursor
+	}
+	slices.Reverse(newerRows)
+
+	items, err := m.messageViews(ctx, append(newerRows, older...))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return items, next, newer, nil
 }
 
 func (m Module) getMessage(ctx context.Context, viewerID, id uuid.UUID) (*Message, error) {
