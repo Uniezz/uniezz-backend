@@ -3204,9 +3204,12 @@ components:
       additionalProperties: false
       properties:
         faculty:
+          description: Null when the faculty is unknown
           examples:
             - Wydział Matematyki, Fizyki i Informatyki
-          type: string
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -3233,6 +3236,12 @@ components:
           examples:
             - Informatyka
           type: string
+        programmeId:
+          description: The programme from listProgrammes; null for a programme imported from USOS that the catalogue does not have, or typed before the catalogue existed
+          format: uuid
+          type:
+            - string
+            - "null"
         status:
           enum:
             - active
@@ -3251,6 +3260,7 @@ components:
             - "null"
       required:
         - id
+        - programmeId
         - faculty
         - programme
         - level
@@ -3262,29 +3272,17 @@ components:
     ProgrammeRequest:
       additionalProperties: false
       properties:
-        faculty:
-          maxLength: 255
-          minLength: 1
-          type: string
         isPrimary:
           description: "Making a programme primary clears the flag on the others. A student with programmes always has one primary: when none is marked, the oldest becomes primary"
           type: boolean
-        level:
-          enum:
-            - first_cycle
-            - second_cycle
-            - long_cycle
-            - third_cycle
-            - phd_school
-          type: string
         modeOfStudies:
           enum:
             - full_time
             - part_time
           type: string
-        programme:
-          maxLength: 255
-          minLength: 1
+        programmeId:
+          description: A programme of the student's university from listProgrammes; its name, faculty and level are copied
+          format: uuid
           type: string
         status:
           default: active
@@ -3300,8 +3298,7 @@ components:
           minimum: 1
           type: integer
       required:
-        - faculty
-        - programme
+        - programmeId
       type: object
     ProposalRequest:
       additionalProperties: false
@@ -10352,6 +10349,7 @@ paths:
       tags:
         - profile
     post:
+      description: The programme must be one of the student's university in listProgrammes; any other id is invalid input.
       operationId: createMyProgramme
       requestBody:
         content:
@@ -10439,7 +10437,7 @@ paths:
       tags:
         - profile
     put:
-      description: Overwrites every field; omitted optional fields become null.
+      description: Overwrites every field; omitted optional fields become null. The programme must be one of the student's university in listProgrammes.
       operationId: replaceMyProgramme
       parameters:
         - in: path
