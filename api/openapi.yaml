@@ -2064,10 +2064,15 @@ components:
           format: uuid
           type: string
         kind:
-          enum:
+          description: More kinds may be added; show an unknown kind as its body text
+          type: string
+          x-extensible-enum:
             - text
             - system
-          type: string
+            - poll
+            - event
+            - location
+            - post
         payload:
           additionalProperties: {}
           description: "System messages: {event, actorId, params}; empty for others. Clients translate the event code"

@@ -18,9 +18,22 @@ type messageHandler struct {
 type MessageKind string
 
 const (
-	MessageText   MessageKind = "text"
-	MessageSystem MessageKind = "system"
+	MessageText     MessageKind = "text"
+	MessageSystem   MessageKind = "system"
+	MessagePoll     MessageKind = "poll"
+	MessageEvent    MessageKind = "event"
+	MessageLocation MessageKind = "location"
+	MessagePost     MessageKind = "post"
 )
+
+func (MessageKind) TransformSchema(_ huma.Registry, schema *huma.Schema) *huma.Schema {
+	schema.Enum = nil
+	if schema.Extensions == nil {
+		schema.Extensions = map[string]any{}
+	}
+	schema.Extensions["x-extensible-enum"] = []any{MessageText, MessageSystem, MessagePoll, MessageEvent, MessageLocation, MessagePost}
+	return schema
+}
 
 type Attachment struct {
 	MediaID   uuid.UUID `json:"mediaId" format:"uuid"`
@@ -33,7 +46,7 @@ type Message struct {
 	ConversationID uuid.UUID      `json:"conversationId" format:"uuid"`
 	Seq            int64          `json:"seq" doc:"Position in the conversation; display order"`
 	ChangeSeq      int64          `json:"changeSeq" doc:"Sync cursor value of the message's latest change"`
-	Kind           MessageKind    `json:"kind" enum:"text,system"`
+	Kind           MessageKind    `json:"kind" doc:"More kinds may be added; show an unknown kind as its body text"`
 	Sender         Student        `json:"sender"`
 	Body           *string        `json:"body" nullable:"true" doc:"Null for system messages, image-only messages and deleted messages"`
 	Payload        map[string]any `json:"payload" doc:"System messages: {event, actorId, params}; empty for others. Clients translate the event code"`
