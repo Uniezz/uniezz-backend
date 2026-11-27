@@ -19,6 +19,7 @@ var (
 	ErrReauthRequired        = errors.New("sign in again to delete the account")
 	ErrInvalidProfilePhoto   = errors.New("profile photo is missing, not owned by the user or not uploaded")
 	ErrProfilePhotoLimit     = errors.New("profile photo limit reached")
+	ErrContentNotAllowed     = errors.New("content not allowed")
 )
 
 var errorResponses = httpapi.ErrorResponses{
@@ -34,4 +35,5 @@ var errorResponses = httpapi.ErrorResponses{
 	{Err: httpapi.ErrInvalidCursor, Status: http.StatusBadRequest, Code: "invalid_cursor"},
 	{Err: ErrInvalidProfilePhoto, Status: http.StatusBadRequest, Code: "invalid_profile_photo"},
 	{Err: ErrProfilePhotoLimit, Status: http.StatusBadRequest, Code: "profile_photo_limit"},
+	{Err: ErrContentNotAllowed, Status: http.StatusBadRequest, Code: "content_not_allowed"},
 }

@@ -230,6 +230,9 @@ func (m Module) createGroup(ctx context.Context, creatorID uuid.UUID, c groupCha
 			return conversation, err == nil, err
 		}
 	}
+	if err := allowedText("name", name); err != nil {
+		return nil, false, err
+	}
 
 	connected, err := m.members.connected(ctx, creatorID, memberIDs)
 	if err != nil {
@@ -337,6 +340,9 @@ func (m Module) renameConversation(ctx context.Context, userID uuid.UUID, c rena
 		}
 		if locked.Name != nil && *locked.Name == name {
 			return nil
+		}
+		if err := allowedText("name", name); err != nil {
+			return err
 		}
 
 		if err := m.conversations.rename(ctx, c.ConversationID, name); err != nil {

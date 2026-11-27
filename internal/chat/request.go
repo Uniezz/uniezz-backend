@@ -34,6 +34,9 @@ func (m Module) createRequest(ctx context.Context, senderID uuid.UUID, c request
 	if !errors.Is(err, ErrNotFound) {
 		return conversation, err == nil, err
 	}
+	if err := allowedText("body", in.Body); err != nil {
+		return nil, false, err
+	}
 
 	var created *messageRow
 	var notes []notification

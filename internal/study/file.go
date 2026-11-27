@@ -38,7 +38,7 @@ type fileChange struct {
 }
 
 func (c fileChange) fields() (fileFields, error) {
-	title, err := cleanName(c.Title)
+	title, err := cleanName("title", c.Title)
 	if err != nil {
 		return fileFields{}, err
 	}

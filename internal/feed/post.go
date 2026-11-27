@@ -60,6 +60,16 @@ func (in postInput) clean() (postInput, error) {
 	return in, nil
 }
 
+func (in postInput) allowed() error {
+	if err := allowedText("title", in.Title); err != nil {
+		return err
+	}
+	if err := allowedText("content", in.Content); err != nil {
+		return err
+	}
+	return allowedTags(in.Tags)
+}
+
 func sortedIDs(ids []uuid.UUID) []uuid.UUID {
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
@@ -92,6 +102,9 @@ func (m Module) createPost(ctx context.Context, userID uuid.UUID, in postInput, 
 		if !errors.Is(err, ErrNotFound) {
 			return post, 0, err == nil, err
 		}
+	}
+	if err := in.allowed(); err != nil {
+		return nil, 0, false, err
 	}
 
 	if err := m.checkUniversity(ctx, userID, in.University); err != nil {
@@ -414,6 +427,9 @@ func (e postEdit) clean() (postChange, error) {
 		if err != nil {
 			return postChange{}, err
 		}
+		if err := allowedText("title", title); err != nil {
+			return postChange{}, err
+		}
 		c.Title = &title
 	}
 	if e.Content != nil {
@@ -421,11 +437,17 @@ func (e postEdit) clean() (postChange, error) {
 		if err != nil {
 			return postChange{}, err
 		}
+		if err := allowedText("content", content); err != nil {
+			return postChange{}, err
+		}
 		c.Content = &content
 	}
 	if e.Tags != nil {
 		tags, err := cleanTags(*e.Tags)
 		if err != nil {
+			return postChange{}, err
+		}
+		if err := allowedTags(tags); err != nil {
 			return postChange{}, err
 		}
 		c.Tags = tags

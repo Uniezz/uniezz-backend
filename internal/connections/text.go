@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"fmt"
 	"time"
 	"unicode/utf8"
 
@@ -26,6 +27,16 @@ func cleanIntent(intent *string) (*string, error) {
 		return nil, nil
 	}
 	return &clean, nil
+}
+
+func allowedIntent(intent, current *string) error {
+	if intent == nil || (current != nil && *intent == *current) {
+		return nil
+	}
+	if err := text.Allowed("intent", *intent); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
 }
 
 func parseBirthDate(value string, today time.Time) (*time.Time, error) {

@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"fmt"
 	"unicode/utf8"
 
 	"github.com/Uniezz/uniezz-backend/internal/text"
@@ -31,4 +32,20 @@ func cleanTags(tags []string) ([]string, error) {
 		return nil, ErrInvalidInput
 	}
 	return clean, nil
+}
+
+func allowedText(field, s string) error {
+	if err := text.Allowed(field, s); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
+}
+
+func allowedTags(tags []string) error {
+	for _, tag := range tags {
+		if err := allowedText("tags", tag); err != nil {
+			return err
+		}
+	}
+	return nil
 }

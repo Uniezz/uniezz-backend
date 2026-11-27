@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"regexp"
 	"unicode/utf8"
 
@@ -37,4 +38,11 @@ func cleanName(name string) (string, error) {
 		return "", ErrInvalidInput
 	}
 	return clean, nil
+}
+
+func allowedText(field, s string) error {
+	if err := text.Allowed(field, s); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
 }

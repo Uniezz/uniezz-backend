@@ -32,6 +32,9 @@ func (m Module) createComment(ctx context.Context, userID uuid.UUID, in commentI
 			return comment, 0, err == nil, err
 		}
 	}
+	if err := allowedText("content", in.Content); err != nil {
+		return nil, 0, false, err
+	}
 
 	if err := m.posts.visible(ctx, userID, in.PostID); err != nil {
 		return nil, 0, false, err
@@ -198,6 +201,9 @@ func (m Module) toComment(ctx context.Context, row commentRow) Comment {
 func (m Module) updateComment(ctx context.Context, userID, commentID uuid.UUID, content string) (*Comment, error) {
 	content, err := cleanText(content, true, 1, maxCommentLength)
 	if err != nil {
+		return nil, err
+	}
+	if err := allowedText("content", content); err != nil {
 		return nil, err
 	}
 

@@ -2,6 +2,8 @@ package profile
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/auth"
@@ -141,6 +143,9 @@ func (m Module) updateProfile(ctx context.Context, userID uuid.UUID, change prof
 	if err != nil {
 		return 0, err
 	}
+	if err := m.checkText(ctx, userID, change, fields); err != nil {
+		return 0, err
+	}
 
 	var avatarID, bannerID *uuid.UUID
 	var previousAvatar, previousBanner *uuid.UUID
@@ -222,4 +227,47 @@ func trimmedName(name *string) (*string, error) {
 		return nil, ErrInvalidInput
 	}
 	return &trimmed, nil
+}
+
+func (m Module) checkText(ctx context.Context, userID uuid.UUID, change profileChange, f profileFields) error {
+	current, err := m.profiles.get(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if err := allowedChange("firstName", f.FirstName, current.FirstName); err != nil {
+		return err
+	}
+	if err := allowedChange("lastName", f.LastName, current.LastName); err != nil {
+		return err
+	}
+	if err := allowedChange("bio", f.Bio, current.Bio); err != nil {
+		return err
+	}
+	for _, interest := range f.Interests {
+		if slices.Contains(current.Interests, interest) {
+			continue
+		}
+		if err := allowedChange("interests", &interest, nil); err != nil {
+			return err
+		}
+	}
+	if change.Intent == nil {
+		return nil
+	}
+	preferences, err := m.profiles.getConnectionPreferences(ctx, userID)
+	if err != nil {
+		return err
+	}
+	intent := text.Plain(*change.Intent, false)
+	return allowedChange("intent", &intent, preferences.Intent)
+}
+
+func allowedChange(field string, value, current *string) error {
+	if value == nil || *value == "" || (current != nil && *value == *current) {
+		return nil
+	}
+	if err := text.Allowed(field, *value); err != nil {
+		return fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
+	return nil
 }

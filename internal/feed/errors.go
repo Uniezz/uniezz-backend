@@ -15,11 +15,13 @@ var (
 	ErrKeyReused         = errors.New("idempotency key was used with a different request")
 	ErrResourceDeleted   = errors.New("the resource created with this idempotency key was deleted")
 	ErrRateLimited       = errors.New("too many requests")
+	ErrContentNotAllowed = errors.New("content not allowed")
 )
 
 var errorResponses = httpapi.ErrorResponses{
 	{Err: ErrNotFound, Status: http.StatusNotFound, Code: "not_found"},
 	{Err: ErrInvalidInput, Status: http.StatusBadRequest, Code: "invalid_input"},
+	{Err: ErrContentNotAllowed, Status: http.StatusBadRequest, Code: "content_not_allowed"},
 	{Err: ErrInvalidUniversity, Status: http.StatusBadRequest, Code: "invalid_university"},
 	{Err: ErrInvalidMedia, Status: http.StatusBadRequest, Code: "invalid_media"},
 	{Err: ErrKeyReused, Status: http.StatusUnprocessableEntity, Code: "idempotency_key_reused"},

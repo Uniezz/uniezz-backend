@@ -74,6 +74,8 @@ func (m Module) UpdateConnectionPreferences(ctx context.Context, userID uuid.UUI
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrContentNotAllowed):
+			return 0, profile.ErrContentNotAllowed
 		case errors.Is(err, ErrInvalidInput):
 			return 0, profile.ErrInvalidInput
 		case errors.Is(err, ErrBirthDateImmutable):
@@ -101,6 +103,9 @@ func (m Module) savePreferences(ctx context.Context, userID uuid.UUID, c prefere
 	err = m.tx.WithTx(ctx, func(ctx context.Context) error {
 		current, err := m.preferences.lockOrCreate(ctx, userID)
 		if err != nil {
+			return err
+		}
+		if err := allowedIntent(f.Intent, current.Intent); err != nil {
 			return err
 		}
 		if c.BirthDatePresent && c.BirthDate == nil && current.BirthDate != nil {

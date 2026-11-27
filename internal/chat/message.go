@@ -104,6 +104,9 @@ func (m Module) sendMessage(ctx context.Context, senderID uuid.UUID, c sendChang
 	if !errors.Is(err, ErrNotFound) {
 		return message, err == nil, err
 	}
+	if err := allowedText("body", in.Body); err != nil {
+		return nil, false, err
+	}
 	if err := m.checkUploads(ctx, senderID, in.MediaIDs); err != nil {
 		return nil, false, err
 	}

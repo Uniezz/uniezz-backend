@@ -1,6 +1,7 @@
 package study
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -16,10 +17,13 @@ const (
 	maxDegreeLength        = 100
 )
 
-func cleanName(s string) (string, error) {
+func cleanName(field, s string) (string, error) {
 	clean := text.Plain(s, false)
 	if n := utf8.RuneCountInString(clean); n < minNameLength || n > maxNameLength {
 		return "", ErrInvalidInput
+	}
+	if err := text.Allowed(field, clean); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return clean, nil
 }
@@ -29,6 +33,9 @@ func cleanDescription(s string) (string, error) {
 	if n := utf8.RuneCountInString(clean); n == 0 || n > maxDescriptionLength {
 		return "", ErrInvalidInput
 	}
+	if err := text.Allowed("description", clean); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
+	}
 	return clean, nil
 }
 
@@ -36,6 +43,9 @@ func cleanComment(s string) (string, error) {
 	clean := text.Plain(s, true)
 	if n := utf8.RuneCountInString(clean); n == 0 || n > maxCommentLength {
 		return "", ErrInvalidInput
+	}
+	if err := text.Allowed("content", clean); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrContentNotAllowed, err)
 	}
 	return clean, nil
 }
