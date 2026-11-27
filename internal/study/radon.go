@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	radonEmployeesURL   = "https://radon.nauka.gov.pl/opendata/polon/employees"
+	radonURL            = "https://radon.nauka.gov.pl/opendata/polon"
 	radonRequestTimeout = 20 * time.Second
 	radonPageSize       = 100
 	radonMaxPages       = 200
@@ -22,16 +22,16 @@ const (
 )
 
 type radonClient struct {
-	http     *http.Client
-	endpoint string
+	http    *http.Client
+	baseURL string
 }
 
-func newRadonClient(endpoint string) *radonClient {
-	return &radonClient{http: &http.Client{Timeout: radonRequestTimeout}, endpoint: endpoint}
+func newRadonClient(baseURL string) *radonClient {
+	return &radonClient{http: &http.Client{Timeout: radonRequestTimeout}, baseURL: baseURL}
 }
 
-type radonPage struct {
-	Results    []radonEmployee `json:"results"`
+type radonPage[T any] struct {
+	Results    []T `json:"results"`
 	Pagination struct {
 		MaxCount int    `json:"maxCount"`
 		Token    string `json:"token"`
@@ -52,11 +52,29 @@ type radonEmployee struct {
 	} `json:"employeeInInstitutionUuids"`
 }
 
+type radonCourse struct {
+	ID                string `json:"courseUuid"`
+	Name              string `json:"courseName"`
+	LevelCode         string `json:"levelCode"`
+	StatusCode        string `json:"currentStatusCode"`
+	OrganizationUnits []struct {
+		FullName string `json:"organizationalUnitFullName"`
+	} `json:"organizationalUnits"`
+}
+
 func (c *radonClient) employees(ctx context.Context, institutionID uuid.UUID) ([]radonEmployee, error) {
-	var all []radonEmployee
+	return radonList[radonEmployee](ctx, c, "employees", "employingInstitutionUuid", institutionID)
+}
+
+func (c *radonClient) courses(ctx context.Context, institutionID uuid.UUID) ([]radonCourse, error) {
+	return radonList[radonCourse](ctx, c, "courses", "leadingInstitutionUuid", institutionID)
+}
+
+func radonList[T any](ctx context.Context, c *radonClient, collection, institutionParam string, institutionID uuid.UUID) ([]T, error) {
+	var all []T
 	token := ""
 	for range radonMaxPages {
-		page, err := c.page(ctx, institutionID, token)
+		page, err := radonGet[T](ctx, c, collection, institutionParam, institutionID, token)
 		if err != nil {
 			return nil, err
 		}
@@ -67,39 +85,39 @@ func (c *radonClient) employees(ctx context.Context, institutionID uuid.UUID) ([
 		}
 		token = next
 	}
-	return nil, fmt.Errorf("radon employees of %s: more than %d pages", institutionID, radonMaxPages)
+	return nil, fmt.Errorf("radon %s of %s: more than %d pages", collection, institutionID, radonMaxPages)
 }
 
-func (c *radonClient) page(ctx context.Context, institutionID uuid.UUID, token string) (radonPage, error) {
+func radonGet[T any](ctx context.Context, c *radonClient, collection, institutionParam string, institutionID uuid.UUID, token string) (radonPage[T], error) {
 	query := url.Values{}
-	query.Set("employingInstitutionUuid", institutionID.String())
+	query.Set(institutionParam, institutionID.String())
 	query.Set("resultNumbers", strconv.Itoa(radonPageSize))
 	if token != "" {
 		query.Set("token", token)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+"?"+query.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/"+collection+"?"+query.Encode(), nil)
 	if err != nil {
-		return radonPage{}, fmt.Errorf("build radon request: %w", err)
+		return radonPage[T]{}, fmt.Errorf("build radon request: %w", err)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return radonPage{}, fmt.Errorf("get radon employees: %w", err)
+		return radonPage[T]{}, fmt.Errorf("get radon %s: %w", collection, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return radonPage{}, fmt.Errorf("get radon employees: status %d", resp.StatusCode)
+		return radonPage[T]{}, fmt.Errorf("get radon %s: status %d", collection, resp.StatusCode)
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, radonMaxPageBytes+1))
 	if err != nil {
-		return radonPage{}, fmt.Errorf("read radon employees: %w", err)
+		return radonPage[T]{}, fmt.Errorf("read radon %s: %w", collection, err)
 	}
 	if len(payload) > radonMaxPageBytes {
-		return radonPage{}, fmt.Errorf("read radon employees: page over %d bytes", radonMaxPageBytes)
+		return radonPage[T]{}, fmt.Errorf("read radon %s: page over %d bytes", collection, radonMaxPageBytes)
 	}
-	var page radonPage
+	var page radonPage[T]
 	if err := json.Unmarshal(payload, &page); err != nil {
-		return radonPage{}, fmt.Errorf("decode radon employees: %w", err)
+		return radonPage[T]{}, fmt.Errorf("decode radon %s: %w", collection, err)
 	}
 	return page, nil
 }
