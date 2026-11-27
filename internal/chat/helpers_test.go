@@ -14,6 +14,7 @@ import (
 	"github.com/Uniezz/uniezz-backend/internal/config"
 	"github.com/Uniezz/uniezz-backend/internal/database"
 	"github.com/Uniezz/uniezz-backend/internal/httpapi"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/danielgtaylor/huma/v2/humatest"
@@ -43,9 +44,10 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 }
 
 type fakeMedia struct {
-	pool    *pgxpool.Pool
-	mu      sync.Mutex
-	deleted []uuid.UUID
+	pool     *pgxpool.Pool
+	mu       sync.Mutex
+	deleted  []uuid.UUID
+	imported []string
 }
 
 func (f *fakeMedia) CheckUpload(ctx context.Context, mediaID, ownerUserID uuid.UUID, kind media.Kind) error {
@@ -92,6 +94,17 @@ func (f *fakeMedia) URLOf(_ context.Context, ref media.Ref) (string, error) {
 	return "https://media.test/" + ref.ObjectKey, nil
 }
 
+func (f *fakeMedia) Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error) {
+	f.mu.Lock()
+	f.imported = append(f.imported, sourceURL)
+	f.mu.Unlock()
+	id := uuid.New()
+	_, err := f.pool.Exec(ctx, `
+		INSERT INTO media (id, owner_user_id, kind, object_key, content_type, size_bytes, status)
+		VALUES ($1, $2, $3, $4, 'image/png', 10, 'ready')`, id, ownerUserID, kind, string(kind)+"/"+id.String()+".png")
+	return id, err
+}
+
 func (f *fakeMedia) wasDeleted(id uuid.UUID) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -118,7 +131,11 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	pool := setupTestDB(t)
 	e := &testEnv{pool: pool, media: &fakeMedia{pool: pool}, push: &fakePush{}, now: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)}
-	e.module = New(pool, e.media, e.push)
+	module, err := New(pool, e.media, e.push, jobs.NewRunner(pool, 1, 0))
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	e.module = module
 	e.module.now = func() time.Time { return e.now }
 
 	authModule, err := auth.New(pool, &config.Config{}, nil, nil, nil)

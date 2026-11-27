@@ -32,6 +32,7 @@ type sendChange struct {
 	ConversationID uuid.UUID
 	Body           string
 	AttachmentIDs  []uuid.UUID
+	NoPreview      bool
 	Key            string
 }
 
@@ -39,6 +40,7 @@ type sendInput struct {
 	ConversationID uuid.UUID
 	Body           string
 	MediaIDs       []uuid.UUID
+	Link           *messageLink
 	Key            uuid.UUID
 }
 
@@ -58,7 +60,11 @@ func (c sendChange) clean() (sendInput, error) {
 	if mediaIDs == nil {
 		mediaIDs = []uuid.UUID{}
 	}
-	return sendInput{ConversationID: c.ConversationID, Body: body, MediaIDs: mediaIDs, Key: *key}, nil
+	in := sendInput{ConversationID: c.ConversationID, Body: body, MediaIDs: mediaIDs, Key: *key}
+	if !c.NoPreview {
+		in.Link = firstLink(body)
+	}
+	return in, nil
 }
 
 func hasDuplicates(ids []uuid.UUID) bool {
@@ -161,6 +167,9 @@ func (m Module) storeMessage(ctx context.Context, senderID uuid.UUID, in sendInp
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := m.queuePreview(ctx, created.ID, in.Link); err != nil {
+		return nil, nil, err
+	}
 	recipients, err := m.members.recipients(ctx, in.ConversationID, senderID)
 	if err != nil {
 		return nil, nil, err
@@ -177,6 +186,7 @@ func (m Module) deliverMessage(ctx context.Context, created *messageRow, notes [
 	notes[0].Hydrated = &views[0]
 	m.publish(ctx, notes)
 	m.push.Wake()
+	m.jobs.Wake()
 	return &views[0], nil
 }
 
@@ -458,6 +468,9 @@ func (m Module) tombstone(ctx context.Context, id uuid.UUID, owner *uuid.UUID) (
 	if err := m.messages.tombstone(ctx, id, changeSeq); err != nil {
 		return nil, nil, err
 	}
+	if err := m.previews.deleteLink(ctx, id); err != nil {
+		return nil, nil, err
+	}
 	released, err := m.messages.detachMedia(ctx, id)
 	if err != nil {
 		return nil, nil, err
@@ -515,6 +528,10 @@ func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message,
 	if err != nil {
 		return nil, err
 	}
+	previews, err := m.previewViews(ctx, messageIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	expiresAt := m.now().Add(media.PrivateURLTTL)
 	attachments := make(map[uuid.UUID][]Attachment, len(rows))
@@ -542,6 +559,7 @@ func (m Module) messageViews(ctx context.Context, rows []messageRow) ([]Message,
 			Payload:        payload,
 			ClientID:       row.ClientID,
 			Attachments:    nonNilAttachments(attachments[row.ID]),
+			LinkPreview:    previews[row.ID],
 			CreatedAt:      row.CreatedAt,
 			DeletedAt:      row.DeletedAt,
 		})

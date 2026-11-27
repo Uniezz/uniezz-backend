@@ -7,12 +7,15 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Uniezz/uniezz-backend/internal/database"
+	"github.com/Uniezz/uniezz-backend/internal/jobs"
 	"github.com/Uniezz/uniezz-backend/internal/media"
 	"github.com/Uniezz/uniezz-backend/internal/push"
 	"github.com/Uniezz/uniezz-backend/internal/ratelimit"
+	"github.com/Uniezz/uniezz-backend/internal/safehttp"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,6 +33,13 @@ const (
 	closeGrace        = 2 * time.Second
 	sessionCheckEvery = 5 * time.Minute
 	publishTimeout    = 10 * time.Second
+
+	previewUserAgent   = "UniezzLinkPreview/1.0"
+	previewFetchTime   = 15 * time.Second
+	previewAttempts    = 3
+	previewPruneTime   = time.Minute
+	previewPruneEvery  = 24 * time.Hour
+	previewPruneTrials = 3
 )
 
 var _ mediaService = media.Module{}
@@ -40,6 +50,13 @@ type mediaService interface {
 	MarkDeletingMany(ctx context.Context, mediaIDs []uuid.UUID) error
 	Delete(ctx context.Context, mediaID uuid.UUID) error
 	URLOf(ctx context.Context, ref media.Ref) (string, error)
+	Import(ctx context.Context, ownerUserID uuid.UUID, kind media.Kind, sourceURL string) (uuid.UUID, error)
+}
+
+var _ pageFetcher = safehttp.Client{}
+
+type pageFetcher interface {
+	Get(ctx context.Context, rawURL string, l safehttp.Limits) (*safehttp.Response, error)
 }
 
 var _ notifier = push.Module{}
@@ -64,7 +81,10 @@ type Module struct {
 	requests      *requestRepository
 	settings      *settingsRepository
 	sessions      *sessionRepository
+	previews      *linkPreviewRepository
 	media         mediaService
+	pages         pageFetcher
+	jobs          *jobs.Runner
 	push          notifier
 	sends         limiter
 	groups        limiter
@@ -76,9 +96,9 @@ type Module struct {
 	now           func() time.Time
 }
 
-func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier) Module {
+func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier, runner *jobs.Runner) (Module, error) {
 	db := database.New(pool)
-	return Module{
+	m := Module{
 		tx:            db,
 		conversations: newConversationRepository(db),
 		members:       newMemberRepository(db),
@@ -87,7 +107,10 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier) Modu
 		requests:      newRequestRepository(db),
 		settings:      newSettingsRepository(db),
 		sessions:      newSessionRepository(db),
+		previews:      newLinkPreviewRepository(db),
 		media:         mediaModule,
+		pages:         safehttp.New(safehttp.Config{UserAgent: previewUserAgent}),
+		jobs:          runner,
 		push:          pushModule,
 		sends:         ratelimit.New(pool, "chat-send", sendLimit, sendWindow),
 		groups:        ratelimit.New(pool, "chat-group", groupLimit, groupWindow),
@@ -98,6 +121,17 @@ func New(pool *pgxpool.Pool, mediaModule mediaService, pushModule notifier) Modu
 		closeWait:     closeGrace,
 		now:           time.Now,
 	}
+
+	if err := jobs.Register(runner, m.fetchLinkPreview, jobs.Options{Timeout: previewFetchTime, MaxAttempts: previewAttempts}); err != nil {
+		return Module{}, fmt.Errorf("chat: %w", err)
+	}
+	if err := jobs.Register(runner, m.pruneLinkPreviews, jobs.Options{Timeout: previewPruneTime, MaxAttempts: previewPruneTrials}); err != nil {
+		return Module{}, fmt.Errorf("chat: %w", err)
+	}
+	if err := jobs.Schedule(runner, "chat-prune-link-previews", PruneLinkPreviewsArgs{}, previewPruneEvery); err != nil {
+		return Module{}, fmt.Errorf("chat: %w", err)
+	}
+	return m, nil
 }
 
 func (m Module) Register(api huma.API) {

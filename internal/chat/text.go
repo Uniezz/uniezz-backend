@@ -14,6 +14,11 @@ const (
 	minNameLength   = 1
 	maxNameLength   = 80
 	maxGroupMembers = 50
+
+	maxLinkLength         = 2048
+	maxPreviewTitle       = 200
+	maxPreviewDescription = 300
+	maxPreviewSiteName    = 100
 )
 
 func cleanBody(body string, attachments int) (string, error) {

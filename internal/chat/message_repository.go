@@ -306,6 +306,18 @@ func (r *messageRepository) tombstone(ctx context.Context, id uuid.UUID, changeS
 	return nil
 }
 
+func (r *messageRepository) setChange(ctx context.Context, id uuid.UUID, changeSeq int64) error {
+	const query = `UPDATE chat_messages SET change_seq = $2 WHERE id = $1`
+	result, err := r.db.Conn(ctx).Exec(ctx, query, id, changeSeq)
+	if err != nil {
+		return fmt.Errorf("touch message: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *messageRepository) liveIDsBySender(ctx context.Context, senderID uuid.UUID) ([]uuid.UUID, error) {
 	const query = `
 		SELECT id FROM chat_messages

@@ -1538,6 +1538,45 @@ components:
         - liked
         - likesCount
       type: object
+    LinkPreview:
+      additionalProperties: false
+      properties:
+        description:
+          description: Null when the page has none
+          type:
+            - string
+            - "null"
+        imageUrl:
+          description: A copy stored by Uniezz, presigned like attachments; null when the page has no usable image
+          type:
+            - string
+            - "null"
+        siteName:
+          description: Null when the page has none
+          examples:
+            - UMCS
+          type:
+            - string
+            - "null"
+        title:
+          description: Null when the page has none
+          examples:
+            - Maria Curie-Skłodowska University
+          type:
+            - string
+            - "null"
+        url:
+          description: The previewed link as found in the body
+          examples:
+            - https://www.umcs.pl/en/
+          type: string
+      required:
+        - url
+        - title
+        - description
+        - siteName
+        - imageUrl
+      type: object
     ListActionsOutputBody:
       additionalProperties: false
       properties:
@@ -2079,6 +2118,9 @@ components:
             - event
             - location
             - post
+        linkPreview:
+          $ref: "#/components/schemas/LinkPreview"
+          description: Preview of the first https link in the body. Omitted while it is being fetched (a message.updated event follows), when fetching failed, and when the message has no link
         payload:
           additionalProperties: {}
           description: "System messages: {event, actorId, params}; empty for others. Clients translate the event code"
@@ -3392,6 +3434,9 @@ components:
           description: Up to 4000 characters after HTML is stripped; may be empty only with attachments
           maxLength: 16000
           type: string
+        noPreview:
+          description: Do not preview the first link of the body
+          type: boolean
       type: object
     Settings:
       additionalProperties: false

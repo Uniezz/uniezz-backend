@@ -41,6 +41,14 @@ type Attachment struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+type LinkPreview struct {
+	URL         string  `json:"url" example:"https://www.umcs.pl/en/" doc:"The previewed link as found in the body"`
+	Title       *string `json:"title" nullable:"true" example:"Maria Curie-Skłodowska University" doc:"Null when the page has none"`
+	Description *string `json:"description" nullable:"true" doc:"Null when the page has none"`
+	SiteName    *string `json:"siteName" nullable:"true" example:"UMCS" doc:"Null when the page has none"`
+	ImageURL    *string `json:"imageUrl" nullable:"true" doc:"A copy stored by Uniezz, presigned like attachments; null when the page has no usable image"`
+}
+
 type Message struct {
 	ID             uuid.UUID      `json:"id" format:"uuid"`
 	ConversationID uuid.UUID      `json:"conversationId" format:"uuid"`
@@ -52,6 +60,7 @@ type Message struct {
 	Payload        map[string]any `json:"payload" doc:"System messages: {event, actorId, params}; empty for others. Clients translate the event code"`
 	ClientID       *uuid.UUID     `json:"clientId" format:"uuid" nullable:"true" doc:"The Idempotency-Key the sender used; null for system messages"`
 	Attachments    []Attachment   `json:"attachments"`
+	LinkPreview    *LinkPreview   `json:"linkPreview,omitempty" doc:"Preview of the first https link in the body. Omitted while it is being fetched (a message.updated event follows), when fetching failed, and when the message has no link"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	DeletedAt      *time.Time     `json:"deletedAt" nullable:"true" doc:"Set when the sender deleted the message; body, payload and attachments are then empty"`
 }
@@ -158,6 +167,7 @@ type sendChatMessageInput struct {
 	Body           struct {
 		Body          string      `json:"body,omitempty" maxLength:"16000" doc:"Up to 4000 characters after HTML is stripped; may be empty only with attachments"`
 		AttachmentIDs []uuid.UUID `json:"attachmentIds,omitempty" maxItems:"5" uniqueItems:"true" doc:"Uploads of kind chat, shown in this order; images only"`
+		NoPreview     bool        `json:"noPreview,omitempty" doc:"Do not preview the first link of the body"`
 	}
 }
 
@@ -187,6 +197,7 @@ func (h *messageHandler) sendMessage(ctx context.Context, in *sendChatMessageInp
 		ConversationID: in.ID,
 		Body:           in.Body.Body,
 		AttachmentIDs:  in.Body.AttachmentIDs,
+		NoPreview:      in.Body.NoPreview,
 		Key:            in.IdempotencyKey,
 	})
 	if err != nil {

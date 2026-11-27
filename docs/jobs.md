@@ -129,6 +129,8 @@ Every finished attempt also sends two Sentry metrics tagged with `kind`: `jobs.f
 | `feed.prune-request-keys.v1` (daily) | feed | Deletes idempotency keys older than 24 hours, so a key is honoured for 24 to 48 hours. |
 | `jobs.prune.v1` (daily) | jobs | Deletes `succeeded` jobs older than 7 days and `failed` jobs older than 30 days. |
 | `moderation.prune-actions.v1` (daily) | moderation | Deletes moderation log entries older than 365 days. |
+| `chat.fetch-link-preview.v1` | chat | Fetches the first https link of a new message through `safehttp` (public addresses on port 443 only, 3 redirects, 3 s, 512 KiB of HTML), stores title, description, site name and a copy of the image, then publishes `message.updated`. A refused or empty page is stored as `failed` and not retried for a day. |
+| `chat.prune-link-previews.v1` (daily) | chat | Deletes `failed` previews older than a day and previews older than 30 days that no live message shows, with their images. |
 
 ## Operations
 
